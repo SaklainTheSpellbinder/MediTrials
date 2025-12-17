@@ -1,0 +1,90 @@
+.stat-card {
+    background-color: var(--bg-surface);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-6);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.2s, box-shadow 0.2s;
+    border: 1px solid var(--gray-200);
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.stat-content {
+    display: flex;
+    flex-direction: column;
+}
+
+.stat-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--gray-500);
+    margin-bottom: var(--spacing-1);
+}
+
+.stat-value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--gray-900);
+    line-height: 1.2;
+}
+
+.stat-sub {
+    font-size: 0.75rem;
+    color: var(--gray-400);
+    margin-top: var(--spacing-1);
+}
+
+.stat-icon {
+    padding: 12px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Color variants classes based on props */
+.text-primary {
+    color: var(--color-primary);
+}
+
+.bg-primary-light {
+    background-color: var(--color-primary-light);
+}
+
+.text-success {
+    color: var(--color-success);
+}
+
+.bg-success-light {
+    background-color: var(--color-success-bg);
+}
+
+.text-warning {
+    color: var(--color-warning);
+}
+
+.bg-warning-light {
+    background-color: var(--color-warning-bg);
+}
+
+.text-danger {
+    color: var(--color-danger);
+}
+
+.bg-danger-light {
+    background-color: var(--color-danger-bg);
+}
+
+.text-info {
+    color: var(--color-info);
+}
+
+.bg-info-light {
+    background-color: var(--color-info-bg);
+}

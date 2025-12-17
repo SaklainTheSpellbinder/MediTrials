@@ -1,0 +1,233 @@
+.dashboard-container {
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: var(--spacing-6);
+}
+
+.page-title {
+    font-size: 1.5rem;
+    color: var(--gray-900);
+    margin-bottom: var(--spacing-1);
+}
+
+.btn-primary {
+    background-color: var(--color-primary);
+    color: white;
+    padding: 8px 16px;
+    border-radius: var(--radius-md);
+    font-weight: 500;
+    transition: all 0.2s;
+    font-size: 0.875rem;
+}
+
+.btn-primary:hover {
+    background-color: var(--color-primary-hover);
+}
+
+.btn-secondary {
+    background-color: white;
+    color: var(--gray-700);
+    border: 1px solid var(--gray-300);
+    padding: 8px 16px;
+    border-radius: var(--radius-md);
+    font-weight: 500;
+    transition: all 0.2s;
+    font-size: 0.875rem;
+}
+
+.btn-secondary:hover {
+    background-color: var(--gray-50);
+    border-color: var(--gray-400);
+}
+
+/* Stats Grid */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: var(--spacing-6);
+    margin-bottom: var(--spacing-6);
+}
+
+/* Dashboard Layout */
+.dashboard-layout {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: var(--spacing-6);
+}
+
+@media (max-width: 1024px) {
+    .dashboard-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+.dash-col-left {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-6);
+}
+
+.dash-col-right {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Card Styles */
+.card {
+    background-color: var(--bg-surface);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--gray-200);
+    overflow: hidden;
+}
+
+.card-header {
+    padding: var(--spacing-4) var(--spacing-6);
+    border-bottom: 1px solid var(--gray-100);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.card-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--gray-800);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    margin: 0;
+}
+
+/* Alerts */
+.alert-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.alert-item {
+    padding: var(--spacing-4) var(--spacing-6);
+    border-bottom: 1px solid var(--gray-100);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    transition: background 0.2s;
+}
+
+.alert-item:last-child {
+    border-bottom: none;
+}
+
+.alert-item:hover {
+    background-color: var(--gray-50);
+}
+
+.alert-item.urgent {
+    border-left: 4px solid var(--color-danger);
+    background-color: #FEF2F2;
+}
+
+.alert-item.high {
+    border-left: 4px solid var(--color-warning);
+}
+
+.alert-content p {
+    font-size: 0.875rem;
+    color: var(--gray-600);
+    margin-top: 2px;
+}
+
+.alert-patient {
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: var(--gray-900);
+}
+
+.btn-xs {
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    border-radius: var(--radius-sm);
+    background: white;
+    border: 1px solid var(--gray-300);
+    color: var(--gray-700);
+}
+
+.btn-danger-outline {
+    color: var(--color-danger);
+    border-color: var(--color-danger);
+    background: transparent;
+}
+
+.btn-danger-outline:hover {
+    background: var(--color-danger);
+    color: white;
+}
+
+/* Progress Bar */
+.progress-bar-bg {
+    height: 8px;
+    background-color: var(--gray-200);
+    border-radius: var(--radius-full);
+    margin-top: var(--spacing-2);
+    overflow: hidden;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background-color: var(--color-primary);
+    border-radius: var(--radius-full);
+}
+
+/* Schedule */
+.schedule-item {
+    display: flex;
+    align-items: center;
+    padding: var(--spacing-4) var(--spacing-6);
+    border-bottom: 1px solid var(--gray-100);
+}
+
+.time-col {
+    width: 60px;
+    font-weight: 600;
+    color: var(--gray-500);
+    font-size: 0.875rem;
+}
+
+.event-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.event-type {
+    font-size: 0.8rem;
+    color: var(--gray-500);
+}
+
+.status-badge {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+}
+
+.status-badge.done {
+    background-color: var(--gray-100);
+    color: var(--gray-500);
+}
+
+.status-badge.active {
+    background-color: var(--color-success-bg);
+    color: var(--color-success);
+}
+
+.status-badge.pending {
+    background-color: var(--color-warning-bg);
+    color: var(--color-warning);
+}
