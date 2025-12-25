@@ -1,16 +1,10 @@
 import React from 'react';
 import { Bell, Search, User } from 'lucide-react';
 import './Header.css';
+import { useAuth } from '../../contexts/AuthContext';
 
-interface HeaderProps {
-    userRole?: string;
-    userName?: string;
-}
-
-export const Header: React.FC<HeaderProps> = ({
-    userRole = 'Investigator',
-    userName = 'Dr. Smith'
-}) => {
+export const Header: React.FC = ()=>{
+    const {user} = useAuth();
     return (
         <header className="header">
             <div className="header-search">
@@ -24,7 +18,7 @@ export const Header: React.FC<HeaderProps> = ({
 
             <div className="header-actions">
                 <div className="role-badge">
-                    {userRole}
+                    {user?.role || 'User'}
                 </div>
 
                 <button className="icon-btn relative">
@@ -36,8 +30,9 @@ export const Header: React.FC<HeaderProps> = ({
                     <div className="avatar">
                         <User size={18} />
                     </div>
-                    <span className="user-name">{userName}</span>
+                    <span className="user-name">{user?.username|| 'Guest'}</span>
                 </div>
+                
             </div>
         </header>
     );

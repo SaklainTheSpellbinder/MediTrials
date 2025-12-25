@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Users,
     UserCheck,
@@ -12,11 +12,18 @@ import { StatCard } from '../components/dashboard/StatCard';
 import './Dashboard.css';
 
 export const Dashboard: React.FC = () => {
+    const [stats, setStats] = useState<any>(null);
+
+useEffect(() => {
+  fetch('http://localhost:5000/api/dashboard/stats')
+    .then(res => res.json())
+    .then(data => setStats(data));
+}, []);
     return (
         <div className="dashboard-container">
             <div className="section-header">
                 <div>
-                    <h1 className="page-title">Site 101 Dashboard</h1>
+                    <h1 className="page-title">MediTrials Dashboard</h1>
                     <p className="text-gray-500 text-sm">Last updated: Today, 09:30 AM</p>
                 </div>
                 <div className="flex gap-2">
@@ -24,31 +31,30 @@ export const Dashboard: React.FC = () => {
                     <button className="btn-primary">+ Register Subject</button>
                 </div>
             </div>
-
             {/* Stats Grid */}
             <div className="stats-grid">
                 <StatCard
                     label="Total Patients"
-                    value="142"
+                    value={stats?.total_patients || 0}
                     icon={Users}
                     color="primary"
                 />
                 <StatCard
                     label="Active Patients"
-                    value="89"
+                    value={stats?.active_patients || 0}
                     icon={UserCheck}
                     color="success"
                 />
                 <StatCard
                     label="Screen Failures"
-                    value="12"
+                    value={stats?.screen_failures || 0}
                     subValue="8% failure rate"
                     icon={UserX}
                     color="warning"
                 />
                 <StatCard
                     label="Retention Rate"
-                    value="95%"
+                    value={`${stats?.retention_rate || 0}%`}
                     subValue="+2% vs target"
                     icon={TrendingUp}
                     color="info"

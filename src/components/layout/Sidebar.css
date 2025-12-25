@@ -63,3 +63,51 @@
     padding: var(--spacing-4) 0;
     border-top: 1px solid var(--gray-800);
 }
+
+
+
+.user-profile-summary {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    margin-bottom: 8px;
+}
+
+.user-avatar {
+    width: 36px;
+    height: 36px;
+    background-color: #3b82f6; /* Blue-500 */
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+}
+
+.user-info .user-name {
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.user-info .user-role {
+    font-size: 0.75rem;
+    color: #6b7280; /* Gray-500 */
+    margin: 0;
+}
+
+.logout-button {
+    width: 100%;
+    background: none;
+    border: none;
+    color: #dc2626; /* Red-600 */
+    cursor: pointer;
+    text-align: left;
+}
+
+.logout-button:hover {
+    background-color: #fee2e2; /* A slightly darker light-red */
+    color: #dc2626;            /* Keeps the text red so it doesn't disappear */
+}

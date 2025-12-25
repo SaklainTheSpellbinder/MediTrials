@@ -1,0 +1,103 @@
+import axios from 'axios';
+
+// Create axios instance with base URL
+const API = axios.create({
+  baseURL: 'http://localhost:5000/api', // Your backend URL
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  timeout: 10000, // 10 second timeout
+});
+
+// Add request interceptor for auth tokens (if needed later)
+API.interceptors.request.use(
+  (config) => {
+    // You can add auth token here when you implement login
+    // const token = localStorage.getItem('token');
+    // if (token) {
+    //   config.headers.Authorization = `Bearer ${token}`;
+    // }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Add response interceptor for error handling
+API.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    console.error('API Error:', error.response?.data || error.message);
+    return Promise.reject(error);
+  }
+);
+
+// Patient API functions
+export const patientAPI = {
+  // Get all patients
+  getAll: async () => {
+    const response = await API.get('/patients');
+    return response.data;
+  },
+  
+  // Get single patient
+  getById: async (id: number) => {
+    const response = await API.get(`/patients/${id}`);
+    return response.data;
+  },
+  
+  // Create new patient
+  create: async (patientData: any) => {
+    const response = await API.post('/patients', patientData);
+    return response.data;
+  },
+  
+  // Update patient
+  update: async (id: number, patientData: any) => {
+    const response = await API.put(`/patients/${id}`, patientData);
+    return response.data;
+  },
+  
+  // Delete patient
+  delete: async (id: number) => {
+    const response = await API.delete(`/patients/${id}`);
+    return response.data;
+  },
+};
+
+// Visit API functions
+export const visitAPI = {
+  getAll: async () => {
+    const response = await API.get('/visits');
+    return response.data;
+  },
+  
+  getByPatientId: async (patientId: number) => {
+    const response = await API.get(`/patients/${patientId}/visits`);
+    return response.data;
+  },
+};
+
+// Lab API functions
+export const labAPI = {
+  getAll: async () => {
+    const response = await API.get('/labs');
+    return response.data;
+  },
+  
+  getByPatientId: async (patientId: number) => {
+    const response = await API.get(`/patients/${patientId}/labs`);
+    return response.data;
+  },
+};
+
+// Test API connection
+export const testAPI = {
+  testConnection: async () => {
+    const response = await API.get('/test');
+    return response.data;
+  },
+};
+
+export default API;

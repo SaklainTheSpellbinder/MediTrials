@@ -5,10 +5,11 @@ import { Login } from './pages/Login';
 import { PatientRegistry } from './pages/PatientRegistry';
 import { PatientProfile } from './pages/PatientProfile';
 import { ECRFEntry } from './pages/ECRFEntry';
-
+import { AuthProvider } from './contexts/AuthContext'; // Add this import
 function App() {
   return (
-    <BrowserRouter>
+    
+    
       <Routes>
         <Route path="/login" element={<Login />} />
 
@@ -74,7 +75,7 @@ function App() {
           </MainLayout>
         } />
       </Routes>
-    </BrowserRouter>
+    
   );
 }
 

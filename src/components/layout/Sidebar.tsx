@@ -6,11 +6,11 @@ import {
     AlertTriangle,
     TestTube,
     BarChart2,
-    Lock,
-    Settings
+    Lock
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import './Sidebar.css';
+import { SidebarUserSection } from './SidebarUserSection';
 
 const navItems = [
     { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
@@ -50,10 +50,7 @@ export const Sidebar: React.FC = () => {
             </nav>
 
             <div className="sidebar-footer">
-                <Link to="/settings" className="nav-item">
-                    <Settings size={20} />
-                    <span>Settings</span>
-                </Link>
+                <SidebarUserSection/>
             </div>
         </aside>
     );
