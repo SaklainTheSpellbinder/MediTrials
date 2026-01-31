@@ -4,7 +4,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Login } from './pages/Login';
 import { PatientRegistry } from './pages/PatientRegistry';
 import { PatientProfile } from './pages/PatientProfile';
-import { ECRFEntry } from './pages/ECRFEntry';
+import { ECRFEntry } from './pages/ECRFEntry/ECRFEntry';
 import { AuthProvider } from './contexts/AuthContext'; // Add this import
 function App() {
   return (

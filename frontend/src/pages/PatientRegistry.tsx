@@ -1,18 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Filter, Download, Plus, MoreHorizontal } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { patientAPI } from '../services/api'; // Add this import
+import { patientAPI } from '../services/api';
 import './PatientRegistry.css';
 
-// Define TypeScript interface
 interface Patient {
-  patient_id: number;
-  trial_patient_id: string;
-  date_of_birth: string;
-  gender: string;
-  patient_status: string;
-  enrollment_date: string;
-  institution_name?: string;
+    id: number;              // Database Primary Key
+    trial_patient_id: string; // The "Readable" ID (e.g., PT-001)
+    date_of_birth: string;
+    gender: string;
+    patient_status: string;
+    enrollment_date: string;
+    institution_name?: string;
 }
 
 export const PatientRegistry: React.FC = () => {
@@ -30,41 +29,56 @@ export const PatientRegistry: React.FC = () => {
         try {
             setLoading(true);
             setError(null);
+            
+            // CORRECTION 2: Handle the specific response structure { success: true, patients: [] }
             const data = await patientAPI.getAll();
-            // Use real data from backend
-            setPatients(data.patients || []);
+            
+            if (data.success && Array.isArray(data.patients)) {
+                setPatients(data.patients);
+            } else {
+                // Fallback if data format is unexpected
+                setPatients([]); 
+            }
         } catch (err: any) {
             console.error('Error fetching patients:', err);
             setError('Failed to load patients from server. Using sample data.');
-            // Fallback to sample data
             setPatients(getSamplePatients());
         } finally {
             setLoading(false);
         }
     };
 
-    // Sample data fallback (similar to your original)
+    // CORRECTION 3: Updated sample data to match new Interface (id)
     const getSamplePatients = (): Patient[] => [
-        { patient_id: 1, trial_patient_id: 'PT-00123', date_of_birth: '1979-03-15', gender: 'M', patient_status: 'Active', enrollment_date: '2024-01-10', institution_name: 'Site 101' },
-        { patient_id: 2, trial_patient_id: 'PT-00124', date_of_birth: '1992-07-22', gender: 'F', patient_status: 'Completed', enrollment_date: '2024-01-05', institution_name: 'Site 101' },
-        { patient_id: 3, trial_patient_id: 'PT-00125', date_of_birth: '1966-11-05', gender: 'M', patient_status: 'Active', enrollment_date: '2024-01-09', institution_name: 'Site 203' },
-        { patient_id: 4, trial_patient_id: 'PT-00126', date_of_birth: '1983-09-30', gender: 'F', patient_status: 'Withdrawn', enrollment_date: '2023-12-15', institution_name: 'Site 101' },
-        { patient_id: 5, trial_patient_id: 'PT-00127', date_of_birth: '1957-12-14', gender: 'M', patient_status: 'Active', enrollment_date: '2024-01-12', institution_name: 'Site 203' },
-        { patient_id: 6, trial_patient_id: 'PT-00128', date_of_birth: '1995-01-17', gender: 'F', patient_status: 'Screening', enrollment_date: '2024-01-16', institution_name: 'Site 102' },
+        { id: 1, trial_patient_id: 'PT-00123', date_of_birth: '1979-03-15', gender: 'M', patient_status: 'Active', enrollment_date: '2024-01-10', institution_name: 'Site 101' },
+        { id: 2, trial_patient_id: 'PT-00124', date_of_birth: '1992-07-22', gender: 'F', patient_status: 'Completed', enrollment_date: '2024-01-05', institution_name: 'Site 101' },
+        { id: 3, trial_patient_id: 'PT-00125', date_of_birth: '1966-11-05', gender: 'M', patient_status: 'Active', enrollment_date: '2024-01-09', institution_name: 'Site 203' },
+        { id: 4, trial_patient_id: 'PT-00126', date_of_birth: '1983-09-30', gender: 'F', patient_status: 'Withdrawn', enrollment_date: '2023-12-15', institution_name: 'Site 101' },
+        { id: 5, trial_patient_id: 'PT-00127', date_of_birth: '1957-12-14', gender: 'M', patient_status: 'Active', enrollment_date: '2024-01-12', institution_name: 'Site 203' },
+        { id: 6, trial_patient_id: 'PT-00128', date_of_birth: '1995-01-17', gender: 'F', patient_status: 'Screening', enrollment_date: '2024-01-16', institution_name: 'Site 102' },
     ];
 
-    const filteredPatients = patients.filter(p =>
-        p.trial_patient_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (p.institution_name?.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        p.patient_status.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredPatients = patients.filter(p => {
+    const term = searchTerm.toLowerCase();
+    
+    // safe access: use optional chaining (?) and fallback to empty string ('')
+    const idMatch = p.trial_patient_id?.toLowerCase().includes(term) || false;
+    const siteMatch = p.institution_name?.toLowerCase().includes(term) || false;
+    const statusMatch = p.patient_status?.toLowerCase().includes(term) || false;
+
+    return idMatch || siteMatch || statusMatch;
+});
 
     const getStatusColor = (status: string) => {
-        switch (status) {
-            case 'Active': return 'success';
-            case 'Completed': return 'primary';
-            case 'Withdrawn': return 'danger';
-            case 'Screening': return 'warning';
+        // Safe check in case status is null/undefined from DB
+        const safeStatus = status ? status.toLowerCase() : '';
+        switch (safeStatus) {
+            case 'active treatment': return 'success';
+            case 'completed': return 'primary';
+            case 'screen failure': return 'danger';
+            case 'enrolled': return 'warning';
+            case 'withdrawn': return 'danger';
+            case 'lost to follow-up': return 'danger';
             default: return 'gray';
         }
     };
@@ -148,7 +162,8 @@ export const PatientRegistry: React.FC = () => {
                         {error ? (
                             <span className="text-amber-600">⚠️ {error}</span>
                         ) : (
-                            `Total Patients: ${patients.length} (${patients.length > 0 && patients[0].patient_id > 6 ? 'Live Database' : 'Sample Data'})`
+                            /* CORRECTION 4: Check p.id > 6 to detect live DB data */
+                            `Total Patients: ${patients.length} (${patients.length > 0 && patients[0].id > 6 ? 'Live Database' : 'Sample Data'})`
                         )}
                     </p>
                 </div>
@@ -204,7 +219,8 @@ export const PatientRegistry: React.FC = () => {
                         </thead>
                         <tbody>
                             {filteredPatients.map((patient) => (
-                                <tr key={patient.patient_id}>
+                                /* CORRECTION 5: Use patient.id for key */
+                                <tr key={patient.id}>
                                     <td className="font-mono font-medium">
                                         {patient.trial_patient_id}
                                     </td>
@@ -219,8 +235,9 @@ export const PatientRegistry: React.FC = () => {
                                     </td>
                                     <td>{formatDate(patient.enrollment_date)}</td>
                                     <td>
+                                        {/* CORRECTION 6: Link uses patient.id */}
                                         <Link 
-                                            to={`/patients/${patient.patient_id}`} 
+                                            to={`/patients/${patient.id}`} 
                                             className="btn-icon"
                                             title="View Details"
                                         >

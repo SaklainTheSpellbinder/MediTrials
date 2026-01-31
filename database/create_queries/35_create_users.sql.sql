@@ -13,3 +13,5 @@ CREATE TABLE users (
 
 --
 ALTER TABLE users ADD COLUMN full_name VARCHAR;
+
+ALTER TABLE users ADD FOREIGN KEY (site_id) REFERENCES study_sites (id);

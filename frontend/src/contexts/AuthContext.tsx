@@ -1,13 +1,15 @@
 import { createContext, useState, useContext, useEffect } from 'react';
 import type { ReactNode } from 'react';
 
+// 1. UPDATED INTERFACE to match PostgreSQL columns
 interface User {
-    user_id: number;
+    id: number;           //Changed from user_id to match DB 'id'
     username: string;
+    full_name: string;    //Added this field
     role: string;
     email: string;
     site_id?: number;
-    institution_name?: string;
+    institution_name?: string; // Optional, if you JOIN table in backend
 }
 
 interface AuthContextType {
@@ -37,7 +39,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Check if user is logged in on app load
         const storedUser = localStorage.getItem('user');
         if (storedUser) {
             setUser(JSON.parse(storedUser));
@@ -55,13 +56,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
             const data = await response.json();
 
-            if (data.success) {
+            // 2. BETTER ERROR HANDLING
+            // fetch() doesn't throw on 401/500, so we must check response.ok
+            if (!response.ok) {
+                throw new Error(data.message || 'Login failed');
+            }
+
+            // 3. DATA STRUCTURE MATCHING
+            // Our backend sends { user: {...} }, not { success: true }
+            if (data.user) {
                 localStorage.setItem('user', JSON.stringify(data.user));
-                localStorage.setItem('token', data.token || 'mock-token');
-                localStorage.setItem('user_id', data.user.user_id);
+                // Note: If you implement JWT later, ensure backend sends 'token'
+                localStorage.setItem('token', data.token || 'mock-session-token'); 
+                localStorage.setItem('user_id', String(data.user.id));
                 setUser(data.user);
-            } else {
-                throw new Error(data.error);
             }
         } catch (error) {
             throw error;
@@ -71,9 +79,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const logout = () => {
         localStorage.removeItem('user');
         localStorage.removeItem('token');
+        localStorage.removeItem('user_id');
         setUser(null);
-        // Optional: Call backend logout endpoint
-        fetch('http://localhost:5000/api/auth/logout');
+        // Optional: Call backend logout to log the exit event
+        // Use POST for actions like logout
+        fetch('http://localhost:5000/api/auth/logout', { method: 'POST' }).catch(err => console.log('Logout log failed', err));
     };
 
     return (
