@@ -9,72 +9,68 @@ INSERT INTO study_sites (
   updated_at
 )
 VALUES
--- SITES FOR TRIAL 1: mRNA Vaccine (Recruiting)
--- Needs high volume, currently active.
+-- SITES FOR TRIAL 1: mRNA Vaccine
 (
   1, -- "mRNA Vaccine Trial"
   'Massachusetts General Hospital',
   'USA',
-  'Recruiting',
+  'Active',  -- Schema constraint: mapped from 'Recruiting'
   1000, 
   450,
   '2024-04-01',
   CURRENT_TIMESTAMP
 ),
 (
-  1, --  "mRNA Vaccine Trial"
+  1, -- "mRNA Vaccine Trial"
   'St. Marys Hospital London',
   'UK',
-  'Recruiting',
+  'Active',  -- Schema constraint: mapped from 'Recruiting'
   800,
   320,
   '2024-04-15',
   CURRENT_TIMESTAMP
 ),
 (
-  1, --"mRNA Vaccine Trial"
+  1, -- "mRNA Vaccine Trial"
   'Charité University Hospital',
   'Germany',
-  'Recruiting',
+  'Active',  -- Schema constraint: mapped from 'Recruiting'
   800,
   110,
   '2024-05-01',
   CURRENT_TIMESTAMP
 ),
 
--- SITES FOR TRIAL 2: Cancer Drug (Active, Not Recruiting)
--- Specialized centers. Enrollment is full, just monitoring now.
+-- SITES FOR TRIAL 2: Cancer Drug
 (
-  2, --"Keytruda Cancer Trial"
+  2, -- "Keytruda Cancer Trial"
   'MD Anderson Cancer Center',
   'USA',
-  'Active, Not Recruiting',
+  'Active', -- Schema constraint: mapped from 'Active, Not Recruiting'
   100,
   100, 
   '2023-11-15',
   CURRENT_TIMESTAMP
 ),
 (
-  2, --"Keytruda Cancer Trial"
+  2, -- "Keytruda Cancer Trial"
   'Tokyo University Hospital',
   'Japan',
-  'Active, Not Recruiting',
+  'Active', -- Schema constraint: mapped from 'Active, Not Recruiting'
   100,
   98,
   '2023-12-01',
   CURRENT_TIMESTAMP
 ),
 
-
--- SITES FOR TRIAL 3: Diabetes Drug (Completed)
--- The trial is over. Site status is "Closed".
+-- SITES FOR TRIAL 3: Diabetes Drug
 (
-  3, --"Ozempic Diabetes Trial"
+  3, -- "Ozempic Diabetes Trial"
   'Mayo Clinic Rochester',
   'USA',
-  'Completed',
+  'Closed', -- Schema constraint: mapped from 'Completed'
   750,
-  750, -- Fully enrolled and finished
+  750,
   '2022-02-01',
   CURRENT_TIMESTAMP
 ),
@@ -82,9 +78,9 @@ VALUES
   3, -- "Ozempic Diabetes Trial"
   'Toronto General Hospital',
   'Canada',
-  'Completed',
+  'Closed', -- Schema constraint: mapped from 'Completed'
   750,
-  745, -- Finished with slightly less than target (okay)
+  745,
   '2022-02-10',
   CURRENT_TIMESTAMP
 );

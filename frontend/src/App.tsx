@@ -3,79 +3,86 @@ import { MainLayout } from './components/layout/MainLayout';
 import { Dashboard } from './pages/Dashboard';
 import { Login } from './pages/Login';
 import { PatientRegistry } from './pages/PatientRegistry';
+import { CreatePatient } from './pages/CreatePatient';
 import { PatientProfile } from './pages/PatientProfile';
 import { ECRFEntry } from './pages/ECRFEntry/ECRFEntry';
 import { AuthProvider } from './contexts/AuthContext'; // Add this import
 function App() {
   return (
-    
-    
-      <Routes>
-        <Route path="/login" element={<Login />} />
 
-        {/* Protected Routes */}
-        <Route path="/" element={
-          <MainLayout>
-            <Navigate to="/dashboard" replace />
-          </MainLayout>
-        } />
 
-        <Route path="/dashboard" element={
-          <MainLayout>
-            <Dashboard />
-          </MainLayout>
-        } />
+    <Routes>
+      <Route path="/login" element={<Login />} />
 
-        <Route path="/patients" element={
-          <MainLayout>
-            <PatientRegistry />
-          </MainLayout>
-        } />
+      {/* Protected Routes */}
+      <Route path="/" element={
+        <MainLayout>
+          <Navigate to="/dashboard" replace />
+        </MainLayout>
+      } />
 
-        <Route path="/patients/:id" element={
-          <MainLayout>
-            <PatientProfile />
-          </MainLayout>
-        } />
+      <Route path="/dashboard" element={
+        <MainLayout>
+          <Dashboard />
+        </MainLayout>
+      } />
 
-        <Route path="/ecrf" element={
-          <MainLayout>
-            <ECRFEntry />
-          </MainLayout>
-        } />
+      <Route path="/patients" element={
+        <MainLayout>
+          <PatientRegistry />
+        </MainLayout>
+      } />
 
-        <Route path="/safety" element={
-          <MainLayout>
-            <div className="p-8"><h1>Safety Monitoring (Coming Soon)</h1></div>
-          </MainLayout>
-        } />
+      <Route path="/patients/new" element={
+        <MainLayout>
+          <CreatePatient />
+        </MainLayout>
+      } />
 
-        <Route path="/labs" element={
-          <MainLayout>
-            <div className="p-8"><h1>Lab Results (Coming Soon)</h1></div>
-          </MainLayout>
-        } />
+      <Route path="/patients/:patient_id" element={
+        <MainLayout>
+          <PatientProfile />
+        </MainLayout>
+      } />
 
-        <Route path="/stats" element={
-          <MainLayout>
-            <div className="p-8"><h1>Statistics (Coming Soon)</h1></div>
-          </MainLayout>
-        } />
+      <Route path="/ecrf" element={
+        <MainLayout>
+          <ECRFEntry />
+        </MainLayout>
+      } />
 
-        <Route path="/compliance" element={
-          <MainLayout>
-            <div className="p-8"><h1>Compliance (Coming Soon)</h1></div>
-          </MainLayout>
-        } />
+      <Route path="/safety" element={
+        <MainLayout>
+          <div className="p-8"><h1>Safety Monitoring (Coming Soon)</h1></div>
+        </MainLayout>
+      } />
 
-        <Route path="*" element={
-          <MainLayout>
-            {/* Fallback for now */}
-            <div className="p-8">Page Not Found</div>
-          </MainLayout>
-        } />
-      </Routes>
-    
+      <Route path="/labs" element={
+        <MainLayout>
+          <div className="p-8"><h1>Lab Results (Coming Soon)</h1></div>
+        </MainLayout>
+      } />
+
+      <Route path="/stats" element={
+        <MainLayout>
+          <div className="p-8"><h1>Statistics (Coming Soon)</h1></div>
+        </MainLayout>
+      } />
+
+      <Route path="/compliance" element={
+        <MainLayout>
+          <div className="p-8"><h1>Compliance (Coming Soon)</h1></div>
+        </MainLayout>
+      } />
+
+      <Route path="*" element={
+        <MainLayout>
+          {/* Fallback for now */}
+          <div className="p-8">Page Not Found</div>
+        </MainLayout>
+      } />
+    </Routes>
+
   );
 }
 

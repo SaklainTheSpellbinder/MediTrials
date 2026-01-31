@@ -17,19 +17,19 @@ import { patientAPI, visitAPI, labAPI } from '../services/api'; // Add this impo
 import './PatientProfile.css';
 
 interface Patient {
-  patient_id: number;
-  trial_patient_id: string;
-  date_of_birth: string;
-  gender: string;
-  patient_status: string;
-  enrollment_date: string;
-  institution_name?: string;
-  medical_history_summary?: any;
-  site_id?: number;
+    patient_id: number;
+    trial_patient_id: string;
+    date_of_birth: string;
+    gender: string;
+    patient_status: string;
+    enrollment_date: string;
+    institution_name?: string;
+    medical_history_summary?: any;
+    site_id?: number;
 }
 
 export const PatientProfile: React.FC = () => {
-    const { id } = useParams<{ id: string }>();
+    const { patient_id } = useParams<{ patient_id: string }>();
     const [activeTab, setActiveTab] = useState('timeline');
     const [patient, setPatient] = useState<Patient | null>(null);
     const [loading, setLoading] = useState(true);
@@ -38,34 +38,34 @@ export const PatientProfile: React.FC = () => {
 
     // Fetch patient data on component mount
     useEffect(() => {
-        if (id) {
+        if (patient_id) {
             fetchPatientData();
         }
-    }, [id]);
+    }, [patient_id]);
 
     const fetchPatientData = async () => {
         try {
             setLoading(true);
-            
+
             // Fetch patient details from backend
-            const patientData = await patientAPI.getById(parseInt(id!));
+            const patientData = await patientAPI.getById(parseInt(patient_id!));
             setPatient(patientData.patient || getSamplePatient());
-            
-           // You can uncomment these when you create visit and lab endpoints
+
+            // You can uncomment these when you create visit and lab endpoints
             // try {
-            //     const visitsData = await visitAPI.getByPatientId(parseInt(id!));
+            //     const visitsData = await visitAPI.getByPatientId(parseInt(patient_id!));
             //     setVisits(visitsData.visits || []);
             // } catch (err) {
             //     console.log('Visit data not available yet');
             // }
-            
+
             // try {
-            //     const labsData = await labAPI.getByPatientId(parseInt(id!));
+            //     const labsData = await labAPI.getByPatientId(parseInt(patient_id!));
             //     setLabs(labsData.labResults || []);
             // } catch (err) {
             //     console.log('Lab data not available yet');
             // }
-            
+
         } catch (error) {
             console.error('Error fetching patient data:', error);
             // Fallback to sample data
@@ -77,8 +77,8 @@ export const PatientProfile: React.FC = () => {
 
     // Sample data fallback
     const getSamplePatient = (): Patient => ({
-        patient_id: parseInt(id || '1'),
-        trial_patient_id: id || 'PT-00123',
+        patient_id: parseInt(patient_id || '1'),
+        trial_patient_id: patient_id || 'PT-00123',
         date_of_birth: '1979-05-12',
         gender: 'M',
         patient_status: 'Active',
@@ -184,7 +184,7 @@ export const PatientProfile: React.FC = () => {
                     </div>
                     <div>
                         <h1 className="ph-name">
-                            {patientName} 
+                            {patientName}
                             <span className="text-gray-500 font-normal">
                                 ({patientAge}/{currentPatient.gender})
                             </span>
@@ -199,10 +199,10 @@ export const PatientProfile: React.FC = () => {
                             </span>
                             {patient && patient.patient_id && patient.patient_id > 6 && (
                                 <>
-                                <span className="divider">•</span>
-                                <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded">
-                                    Live Data
-                                </span>
+                                    <span className="divider">•</span>
+                                    <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded">
+                                        Live Data
+                                    </span>
                                 </>
                             )}
                         </div>
@@ -263,15 +263,15 @@ export const PatientProfile: React.FC = () => {
                                     <div className="tl-body">
                                         <ul>
                                             <li>
-                                                <Activity size={14} className="inline mr-2 text-success" /> 
+                                                <Activity size={14} className="inline mr-2 text-success" />
                                                 Vitals collected: BP 120/80
                                             </li>
                                             <li>
-                                                <FileText size={14} className="inline mr-2 text-primary" /> 
+                                                <FileText size={14} className="inline mr-2 text-primary" />
                                                 Labs drawn: Chem-7, CBC
                                             </li>
                                             <li>
-                                                <AlertTriangle size={14} className="inline mr-2 text-warning" /> 
+                                                <AlertTriangle size={14} className="inline mr-2 text-warning" />
                                                 AE Reported: Mild Headache (Grade 1)
                                             </li>
                                         </ul>
@@ -435,7 +435,7 @@ export const PatientProfile: React.FC = () => {
                                         'Sample data will be replaced with real data from database.'
                                     )}
                                 </p>
-                                <button 
+                                <button
                                     className="btn-secondary"
                                     onClick={fetchPatientData}
                                 >

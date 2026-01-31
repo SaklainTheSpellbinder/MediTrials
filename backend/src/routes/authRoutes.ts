@@ -19,28 +19,28 @@ router.post('/login', async (req: Request, res: Response) => {
 
     // 2. CHECK PASSWORD (Simple check for your current data)
     // Note: In production, you would use bcrypt.compare() here.
-    if (!user || user.password !== password) {
-       // Optional: Log failed attempt to DB
-       await pool.query(
-         `INSERT INTO user_access_log (access_type, details) VALUES ('LOGIN_FAILED', $1)`,
-         [`Failed login: ${username}`]
-       );
-       
-       return res.status(401).json({ 
-         success: false, 
-         message: 'Invalid credentials or role' 
-       });
+    if (!user || user.password_hash !== password) {
+      // Optional: Log failed attempt to DB
+      await pool.query(
+        `INSERT INTO user_access_log (user_id, access_type) VALUES ($1, 'LOGIN_FAILED')`,
+        [user?.user_id || null]
+      );
+
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials or role'
+      });
     }
 
     // 3. SUCCESS: UPDATE LAST LOGIN TIME
-    await pool.query('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1', [user.id]);
+    await pool.query('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE user_id = $1', [user.user_id]);
 
     // 4. REMOVE PASSWORD BEFORE SENDING
-    const { password: _, ...userSafe } = user;
+    const { password_hash: _, ...userSafe } = user;
 
     res.json({
       success: true,
-      user: userSafe, 
+      user: userSafe,
       token: 'mock-jwt-token-for-now' // You can add real JWT later
     });
 

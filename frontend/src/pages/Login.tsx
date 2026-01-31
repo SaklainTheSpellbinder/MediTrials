@@ -7,19 +7,20 @@ import './Login.css';
 export const Login: React.FC = () => {
     const navigate = useNavigate();
     const { login: authLogin } = useAuth();
-    const [role, setRole] = useState('Principal Investigator'); // Default full string to match DB
+    const [role, setRole] = useState('Principal_Investigator'); // Default to match DB schema
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
-    // Matches the 'role' column in your DB exactly
+    // Matches the 'role' column in your DB exactly (with underscores)
     const roleOptions = [
-        { value: 'Principal Investigator', label: 'Principal Investigator' },
-        { value: 'Study Nurse', label: 'Study Nurse' },
-        { value: 'Safety Monitor', label: 'Safety Monitor' },
-        { value: 'Data Manager', label: 'Data Manager' },
-        { value: 'System Admin', label: 'System Admin' }
+        { value: 'Principal_Investigator', label: 'Principal Investigator' },
+        { value: 'Study_Coordinator', label: 'Study Coordinator' },
+        { value: 'Safety_Monitor', label: 'Safety Monitor' },
+        { value: 'Data_Manager', label: 'Data Manager' },
+        { value: 'Statistician', label: 'Statistician' },
+        { value: 'System_Admin', label: 'System Admin' }
     ];
 
     const handleLogin = async (e: React.FormEvent) => {
@@ -46,20 +47,20 @@ export const Login: React.FC = () => {
     // ✅ UPDATED: Uses the REAL data we inserted into PostgreSQL
     const fillTestCredentials = (testUser: string) => {
         const credentials: Record<string, { user: string, pass: string, role: string }> = {
-            'investigator': { 
+            'investigator': {
                 user: 'dr_connor', // From Site 1 (Mass General)
-                pass: 'hashed_pass_123', 
-                role: 'Principal Investigator' 
+                pass: 'hashed_pass_123',
+                role: 'Principal_Investigator' // Fixed: underscore to match DB
             },
-            'nurse': { 
+            'nurse': {
                 user: 'nurse_joy', // From Site 1
-                pass: 'hashed_pass_123', 
-                role: 'Study Nurse' 
+                pass: 'hashed_pass_123',
+                role: 'Study_Coordinator' // Fixed: underscore to match DB
             },
-            'monitor': { 
+            'monitor': {
                 user: 'dr_watson', // Using a PI as monitor for testing
-                pass: 'hashed_pass_123', 
-                role: 'Principal Investigator' 
+                pass: 'hashed_pass_123',
+                role: 'Principal_Investigator' // Fixed: underscore to match DB
             }
         };
 
@@ -91,8 +92,8 @@ export const Login: React.FC = () => {
                     <div className="form-group">
                         <label>Role</label>
                         <div className="select-wrapper">
-                            <select 
-                                value={role} 
+                            <select
+                                value={role}
                                 onChange={(e) => setRole(e.target.value)}
                                 disabled={loading}
                             >

@@ -3,9 +3,9 @@ import type { ReactNode } from 'react';
 
 // 1. UPDATED INTERFACE to match PostgreSQL columns
 interface User {
-    id: number;           //Changed from user_id to match DB 'id'
+    user_id: number;      // Changed to user_id to match new DB schema
     username: string;
-    full_name: string;    //Added this field
+    full_name: string;    // Added this field
     role: string;
     email: string;
     site_id?: number;
@@ -67,8 +67,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             if (data.user) {
                 localStorage.setItem('user', JSON.stringify(data.user));
                 // Note: If you implement JWT later, ensure backend sends 'token'
-                localStorage.setItem('token', data.token || 'mock-session-token'); 
-                localStorage.setItem('user_id', String(data.user.id));
+                localStorage.setItem('token', data.token || 'mock-session-token');
+                localStorage.setItem('user_id', String(data.user.user_id));
                 setUser(data.user);
             }
         } catch (error) {

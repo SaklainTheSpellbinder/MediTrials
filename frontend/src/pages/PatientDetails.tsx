@@ -4,20 +4,20 @@ import { ArrowLeft, Edit, Printer, Mail, Phone } from 'lucide-react';
 import { patientAPI } from '../services/api';
 
 export const PatientDetails: React.FC = () => {
-    const { id } = useParams<{ id: string }>();
+    const { patient_id } = useParams<{ patient_id: string }>();
     const navigate = useNavigate();
     const [patient, setPatient] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (id) {
+        if (patient_id) {
             fetchPatientDetails();
         }
-    }, [id]);
+    }, [patient_id]);
 
     const fetchPatientDetails = async () => {
         try {
-            const data = await patientAPI.getById(parseInt(id!));
+            const data = await patientAPI.getById(parseInt(patient_id!));
             setPatient(data.patient);
         } catch (error) {
             console.error('Error fetching patient details:', error);
@@ -38,7 +38,7 @@ export const PatientDetails: React.FC = () => {
         <div className="p-6">
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
-                <button 
+                <button
                     onClick={() => navigate('/patients')}
                     className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
                 >
@@ -60,11 +60,10 @@ export const PatientDetails: React.FC = () => {
                     <div>
                         <h1 className="text-2xl font-bold">{patient.trial_patient_id}</h1>
                         <div className="flex items-center gap-4 mt-2">
-                            <span className={`px-3 py-1 rounded-full ${
-                                patient.patient_status === 'Active' 
-                                    ? 'bg-green-100 text-green-800' 
+                            <span className={`px-3 py-1 rounded-full ${patient.patient_status === 'Active'
+                                    ? 'bg-green-100 text-green-800'
                                     : 'bg-yellow-100 text-yellow-800'
-                            }`}>
+                                }`}>
                                 {patient.patient_status}
                             </span>
                             <span className="text-gray-600">Site: {patient.institution_name}</span>
@@ -97,7 +96,7 @@ export const PatientDetails: React.FC = () => {
                     <div>
                         <label className="text-sm text-gray-500">Medical History</label>
                         <p className="font-medium">
-                            {patient.medical_history_summary 
+                            {patient.medical_history_summary
                                 ? JSON.stringify(patient.medical_history_summary)
                                 : 'None recorded'}
                         </p>
