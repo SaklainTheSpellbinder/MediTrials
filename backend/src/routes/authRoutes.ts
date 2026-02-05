@@ -18,9 +18,7 @@ router.post('/login', async (req: Request, res: Response) => {
     const user = result.rows[0];
 
     // 2. CHECK PASSWORD (Simple check for your current data)
-    // Note: In production, you would use bcrypt.compare() here.
     if (!user || user.password_hash !== password) {
-      // Optional: Log failed attempt to DB
       await pool.query(
         `INSERT INTO user_access_log (user_id, access_type) VALUES ($1, 'LOGIN_FAILED')`,
         [user?.user_id || null]
@@ -41,12 +39,12 @@ router.post('/login', async (req: Request, res: Response) => {
     res.json({
       success: true,
       user: userSafe,
-      token: 'mock-jwt-token-for-now' // You can add real JWT later
+      token: 'mock-jwt-token-for-now' 
     });
 
   } catch (err: any) {
     console.error('Login Error:', err);
-    res.status(500).json({ success: false, message: 'Server error' });
+    res.status(500).json({ success: false, message: 'Invalid Credentials' });
   }
 });
 

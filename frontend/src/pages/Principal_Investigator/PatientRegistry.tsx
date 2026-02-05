@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Filter, Download, Plus, MoreHorizontal } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { patientAPI } from '../services/api';
+import { patientAPI } from '../../services/api';
 import './PatientRegistry.css';
 
 interface Patient {
     patient_id: number;      // Database Primary Key
-    trial_patient_id: string; // The "Readable" ID (e.g., PT-001)
+    trial_patient_id: string;
     full_name?: string;       // Patient's full name
     date_of_birth: string;
     gender: string;
@@ -49,7 +49,6 @@ export const PatientRegistry: React.FC = () => {
         }
     };
 
-    // CORRECTION 3: Updated sample data to match new Interface (id)
     const getSamplePatients = (): Patient[] => [
         { patient_id: 1, trial_patient_id: 'PT-00123', date_of_birth: '1979-03-15', gender: 'M', patient_status: 'Active', enrollment_date: '2024-01-10', institution_name: 'Site 101' },
         { patient_id: 2, trial_patient_id: 'PT-00124', date_of_birth: '1992-07-22', gender: 'F', patient_status: 'Completed', enrollment_date: '2024-01-05', institution_name: 'Site 101' },
@@ -62,7 +61,6 @@ export const PatientRegistry: React.FC = () => {
     const filteredPatients = patients.filter(p => {
         const term = searchTerm.toLowerCase();
 
-        // safe access: use optional chaining (?) and fallback to empty string ('')
         const idMatch = p.trial_patient_id?.toLowerCase().includes(term) || false;
         const siteMatch = p.institution_name?.toLowerCase().includes(term) || false;
         const statusMatch = p.patient_status?.toLowerCase().includes(term) || false;
@@ -163,7 +161,6 @@ export const PatientRegistry: React.FC = () => {
                         {error ? (
                             <span className="text-amber-600">⚠️ {error}</span>
                         ) : (
-                            /* CORRECTION 4: Check p.id > 6 to detect live DB data */
                             `Total Patients: ${patients.length} (${patients.length > 0 && patients[0].patient_id > 6 ? 'Live Database' : 'Sample Data'})`
                         )}
                     </p>

@@ -1,12 +1,15 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { MainLayout } from './components/layout/MainLayout';
 import { Dashboard } from './pages/Dashboard';
 import { Login } from './pages/Login';
-import { PatientRegistry } from './pages/PatientRegistry';
-import { CreatePatient } from './pages/CreatePatient';
-import { PatientProfile } from './pages/PatientProfile';
-import { ECRFEntry } from './pages/ECRFEntry/ECRFEntry';
-import { AuthProvider } from './contexts/AuthContext'; // Add this import
+import { PatientRegistry } from './pages/Principal_Investigator/PatientRegistry';
+import { CreatePatient } from './pages/Principal_Investigator/CreatePatient';
+import { PatientProfile } from './pages/Principal_Investigator/PatientProfile';
+import { ECRFEntry } from './pages/study_coordinator/ECRFEntry/ECRFEntry';
+import { PatientCheckIn } from './pages/study_coordinator/PatientCheckIn';
+import { VisitScheduler } from './pages/study_coordinator/VisitScheduler';
+import { LabResultsEntry } from './pages/study_coordinator/LabResultsEntry';
+
 function App() {
   return (
 
@@ -66,6 +69,25 @@ function App() {
       <Route path="/stats" element={
         <MainLayout>
           <div className="p-8"><h1>Statistics (Coming Soon)</h1></div>
+        </MainLayout>
+      } />
+
+      {/* Coordinator Routes */}
+      <Route path="/checkin" element={
+        <MainLayout>
+          <PatientCheckIn />
+        </MainLayout>
+      } />
+
+      <Route path="/schedule" element={
+        <MainLayout>
+          <VisitScheduler />
+        </MainLayout>
+      } />
+
+      <Route path="/labs/entry" element={
+        <MainLayout>
+          <LabResultsEntry />
         </MainLayout>
       } />
 

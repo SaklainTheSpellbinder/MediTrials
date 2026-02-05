@@ -1,15 +1,13 @@
 import axios from 'axios';
 
-// Create axios instance with base URL
 const API = axios.create({
   baseURL: 'http://localhost:5000/api',
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 10000, // 10 second timeout
+  timeout: 10000, 
 });
 
-// Add request interceptor for auth tokens (if needed later)
 API.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
@@ -23,7 +21,6 @@ API.interceptors.request.use(
   }
 );
 
-// Add response interceptor for error handling
 API.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -57,7 +54,6 @@ export const patientAPI = {
     const userStr = localStorage.getItem('user');
     const user = userStr ? JSON.parse(userStr) : null;
 
-    // Auto-set site_id from logged-in user
     if (user?.site_id) {
       patientData.site_id = user.site_id;
     }
@@ -79,7 +75,6 @@ export const patientAPI = {
   },
 };
 
-// Visit API functions
 export const visitAPI = {
   getAll: async () => {
     const response = await API.get('/visits');

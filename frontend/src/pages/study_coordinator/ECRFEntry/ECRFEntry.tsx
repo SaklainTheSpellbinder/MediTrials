@@ -11,9 +11,9 @@ export const ECRFEntry: React.FC = () => {
       {!selectedPatient ? (
         <PatientList onSelectPatient={setSelectedPatient} />
       ) : (
-        <ClinicalForm 
-          patient={selectedPatient} 
-          onBack={() => setSelectedPatient(null)} 
+        <ClinicalForm
+          patient={selectedPatient}
+          onBack={() => setSelectedPatient(null)}
         />
       )}
     </div>

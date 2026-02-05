@@ -48,7 +48,6 @@ router.post('/', async (req: Request, res: Response) => {
     res.status(201).json({ success: true, patient: result.rows[0] });
   } catch (err: any) {
     console.error('Error creating patient:', err);
-    // Check for duplicate key error (Postgres code 23505)
     if (err.code === '23505') {
       return res.status(400).json({ success: false, message: 'Patient ID already exists' });
     }

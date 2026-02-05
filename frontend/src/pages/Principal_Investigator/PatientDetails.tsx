@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Edit, Printer, Mail, Phone } from 'lucide-react';
-import { patientAPI } from '../services/api';
+import { patientAPI } from '../../services/api';
 
 export const PatientDetails: React.FC = () => {
     const { patient_id } = useParams<{ patient_id: string }>();
@@ -61,8 +61,8 @@ export const PatientDetails: React.FC = () => {
                         <h1 className="text-2xl font-bold">{patient.trial_patient_id}</h1>
                         <div className="flex items-center gap-4 mt-2">
                             <span className={`px-3 py-1 rounded-full ${patient.patient_status === 'Active'
-                                    ? 'bg-green-100 text-green-800'
-                                    : 'bg-yellow-100 text-yellow-800'
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-yellow-100 text-yellow-800'
                                 }`}>
                                 {patient.patient_status}
                             </span>

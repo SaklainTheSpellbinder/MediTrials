@@ -1,10 +1,8 @@
 
 import dotenv from 'dotenv';
 const { Pool } = require('pg');
-// 1. Load the .env file
 dotenv.config();
 
-// 2. Create the connection pool configuration
 const pool = new Pool({
   user: process.env.DB_USER,
   host: process.env.DB_HOST,
@@ -15,11 +13,11 @@ const pool = new Pool({
 
 // 3. Optional: Add a listener to confirm connection in console
 pool.on('connect', () => {
-  console.log('🐘 PostgreSQL connected successfully');
+  console.log('PostgreSQL connected successfully');
 });
 
 pool.on('error', (err:Error) => {
-  console.error('❌ Unexpected error on idle client', err);
+  console.error('Unexpected error on idle client', err);
   process.exit(-1);
 });
 

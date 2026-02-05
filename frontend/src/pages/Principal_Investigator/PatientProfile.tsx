@@ -2,18 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import {
     Activity,
-    AlertTriangle,
     FileText,
     Clock,
     Clipboard,
     Calendar,
     AlertCircle,
+    PenTool,
+    AlertTriangle,
     User,
     Heart,
-    Weight,
     Ruler
 } from 'lucide-react';
-import { patientAPI, visitAPI, labAPI } from '../services/api'; // Add this import
+import { patientAPI } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 import './PatientProfile.css';
 
 interface Patient {
@@ -29,12 +30,11 @@ interface Patient {
 }
 
 export const PatientProfile: React.FC = () => {
+    const { user } = useAuth();
     const { patient_id } = useParams<{ patient_id: string }>();
     const [activeTab, setActiveTab] = useState('timeline');
     const [patient, setPatient] = useState<Patient | null>(null);
     const [loading, setLoading] = useState(true);
-    const [visits, setVisits] = useState<any[]>([]);
-    const [labs, setLabs] = useState<any[]>([]);
 
     // Fetch patient data on component mount
     useEffect(() => {
@@ -212,11 +212,20 @@ export const PatientProfile: React.FC = () => {
                     <button className="btn-secondary flex items-center gap-2">
                         <Calendar size={16} /> Schedule Visit
                     </button>
+
+                    {/* Role-Based Actions */}
+                    {user?.role === 'Principal_Investigator' ? (
+                        <button className="btn-primary flex items-center gap-2">
+                            <PenTool size={16} /> Sign eCRF
+                        </button>
+                    ) : (
+                        <button className="btn-primary flex items-center gap-2">
+                            <Activity size={16} /> Enter Vitals
+                        </button>
+                    )}
+
                     <button className="btn-secondary text-danger border-danger flex items-center gap-2">
                         <AlertCircle size={16} /> Report AE
-                    </button>
-                    <button className="btn-primary flex items-center gap-2">
-                        <FileText size={16} /> View eCRF
                     </button>
                 </div>
             </div>

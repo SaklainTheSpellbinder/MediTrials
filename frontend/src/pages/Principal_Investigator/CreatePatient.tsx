@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save, AlertCircle } from 'lucide-react';
-import { patientAPI } from '../services/api';
+import { patientAPI } from '../../services/api';
 import './CreatePatient.css';
 
 export const CreatePatient: React.FC = () => {
