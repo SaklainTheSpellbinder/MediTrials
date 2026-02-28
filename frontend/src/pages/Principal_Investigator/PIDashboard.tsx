@@ -15,7 +15,7 @@ import '../Dashboard.css';
 export const PIDashboard: React.FC = () => {
     const { user } = useAuth();
     const [stats, setStats] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
+    const [, setLoading] = useState(true);
 
     useEffect(() => {
         const fetchDashboardStats = async () => {

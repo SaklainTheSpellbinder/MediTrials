@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Save, ArrowLeft, Activity } from 'lucide-react';
+import { Save, ArrowLeft } from 'lucide-react';
 import type { Patient } from './PatientList';
 import './ClinicalForm.css';
 

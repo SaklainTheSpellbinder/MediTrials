@@ -8,7 +8,7 @@ export const CoordinatorDashboard: React.FC = () => {
     const { user } = useAuth();
     const [stats, setStats] = useState<any>(null);
     const [todaysVisits, setTodaysVisits] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [, setLoading] = useState(true);
 
     useEffect(() => {
         const fetchCoordinatorData = async () => {

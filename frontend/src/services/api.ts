@@ -102,6 +102,40 @@ export const patientProfileAPI = {
   },
 };
 
+export const screeningAPI = {
+  // Fetch eligibility criteria for a site's trial
+  getCriteria: async (siteId: number) => {
+    const response = await API.get(`/screening/criteria?site_id=${siteId}`);
+    return response.data;
+  },
+
+  // Fetch available consent/protocol versions for a site's trial
+  getProtocolVersions: async (siteId: number) => {
+    const response = await API.get(`/screening/protocol-versions?site_id=${siteId}`);
+    return response.data;
+  },
+
+  // Submit the complete screening + consent record
+  submit: async (payload: {
+    full_name: string;
+    date_of_birth: string;
+    gender: string;
+    site_id: number;
+    screening_status: string;
+    eligibility_score: number;
+    manual_override: boolean;
+    override_reason: string;
+    failures: Array<{ criterion_id: number; failure_reason: string; override_approved: boolean }>;
+    consent_version: string;
+    consent_date: string;
+    e_signature_password: string;
+    submitted_by_user_id: number;
+  }) => {
+    const response = await API.post('/screening/submit', payload);
+    return response.data;
+  },
+};
+
 export const visitAPI = {
   getAll: async () => {
     const response = await API.get('/visits');

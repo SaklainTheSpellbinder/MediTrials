@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import authRoutes from './routes/authRoutes';
 import patientRoutes from './routes/patientRoutes';
 import patientProfileRoutes from './routes/patientProfileRoutes';
+import screeningRoutes from './routes/screeningRoutes';
 dotenv.config();
 
 const app = express();
@@ -22,6 +23,7 @@ app.use('/api/patients', patientProfileRoutes); // Detail routes e.g., /api/pati
 app.use('/api/auth', authRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/coordinator', coordinatorRoutes);
+app.use('/api/screening', screeningRoutes);
 
 // Root Check
 app.get('/', (req, res) => {

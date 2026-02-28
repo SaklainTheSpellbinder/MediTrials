@@ -20,7 +20,7 @@ router.post('/login', async (req: Request, res: Response) => {
     // 2. CHECK PASSWORD (Simple check for your current data)
     if (!user || user.password_hash !== password) {
       await pool.query(
-        `INSERT INTO user_access_log (user_id, access_type) VALUES ($1, 'LOGIN_FAILED')`,
+        `INSERT INTO user_access_log (user_id, access_type, accessed_table) VALUES ($1, 'LOGIN_FAILED', 'users')`,
         [user?.user_id || null]
       );
 
@@ -39,7 +39,7 @@ router.post('/login', async (req: Request, res: Response) => {
     res.json({
       success: true,
       user: userSafe,
-      token: 'mock-jwt-token-for-now' 
+      token: 'mock-jwt-token-for-now'
     });
 
   } catch (err: any) {

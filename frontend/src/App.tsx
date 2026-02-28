@@ -5,12 +5,16 @@ import { Login } from './pages/Login';
 import { PatientRegistry } from './pages/Principal_Investigator/PatientRegistry';
 import { CreatePatient } from './pages/Principal_Investigator/CreatePatient';
 import { PatientProfile } from './pages/Principal_Investigator/PatientProfile';
+import { Screening } from './pages/Principal_Investigator/Screening';
 import { ECRFEntry } from './pages/study_coordinator/ECRFEntry/ECRFEntry';
-import { PatientCheckIn } from './pages/study_coordinator/PatientCheckIn';
-import { VisitScheduler } from './pages/study_coordinator/VisitScheduler';
+import { VisitManagement } from './pages/study_coordinator/VisitManagement';
 import { LabResultsEntry } from './pages/study_coordinator/LabResultsEntry';
+import { CoordinatorDashboard } from './pages/study_coordinator/CoordinatorDashboard';
+import { useAuth } from './contexts/AuthContext';
 
 function App() {
+  const { user } = useAuth();
+
   return (
 
 
@@ -26,7 +30,7 @@ function App() {
 
       <Route path="/dashboard" element={
         <MainLayout>
-          <Dashboard />
+          {user?.role === 'Study Coordinator' ? <CoordinatorDashboard /> : <Dashboard />}
         </MainLayout>
       } />
 
@@ -39,6 +43,12 @@ function App() {
       <Route path="/patients/new" element={
         <MainLayout>
           <CreatePatient />
+        </MainLayout>
+      } />
+
+      <Route path="/patients/screening" element={
+        <MainLayout>
+          <Screening />
         </MainLayout>
       } />
 
@@ -73,19 +83,13 @@ function App() {
       } />
 
       {/* Coordinator Routes */}
-      <Route path="/checkin" element={
+      <Route path="/visits" element={
         <MainLayout>
-          <PatientCheckIn />
+          <VisitManagement />
         </MainLayout>
       } />
 
-      <Route path="/schedule" element={
-        <MainLayout>
-          <VisitScheduler />
-        </MainLayout>
-      } />
-
-      <Route path="/labs/entry" element={
+      <Route path="/labs/tracking" element={
         <MainLayout>
           <LabResultsEntry />
         </MainLayout>

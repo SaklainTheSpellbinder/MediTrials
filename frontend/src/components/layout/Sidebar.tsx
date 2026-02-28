@@ -7,24 +7,32 @@ import {
     TestTube,
     BarChart2,
     Lock,
-    CalendarCheck
+    CalendarCheck,
+    ClipboardCheck
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 import './Sidebar.css';
 import { SidebarUserSection } from './SidebarUserSection';
-import { useAuth } from '../../contexts/AuthContext';
 
 // Define nav items with their allowed roles (if restricted) or default availability
 // We'll separate them into logic inside the component or specific lists
 
-export const Sidebar: React.FC = () => {
+interface SidebarProps {
+    isCollapsed?: boolean;
+}
+
+export const Sidebar: React.FC<SidebarProps> = () => {
     const location = useLocation();
     const { user } = useAuth();
+
+    const isCoordinator = user?.role === 'Study Coordinator';
 
     // Default PI / Everyone else items
     const piNavItems = [
         { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
         { label: 'Patient Registry', icon: Users, path: '/patients' },
+        { label: 'Screening & Consent', icon: ClipboardCheck, path: '/patients/screening' },
         { label: 'eCRF Entry', icon: ClipboardList, path: '/ecrf' },
         { label: 'Safety Monitoring', icon: AlertTriangle, path: '/safety' },
         { label: 'Lab Results', icon: TestTube, path: '/labs' },
@@ -32,20 +40,17 @@ export const Sidebar: React.FC = () => {
         { label: 'Compliance', icon: Lock, path: '/compliance' },
     ];
 
-    // Study Coordinator specific items
     const coordinatorNavItems = [
         { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
-        { label: 'Patient Check-In', icon: CalendarCheck, path: '/checkin' },
-        { label: 'Visit Scheduler', icon: Users, path: '/schedule' },
+        { label: 'Patient Registry', icon: Users, path: '/patients' },
+        { label: 'Screening & Consent', icon: ClipboardCheck, path: '/patients/screening' },
+        { label: 'Visit Management', icon: CalendarCheck, path: '/visits' },
         { label: 'eCRF Entry', icon: ClipboardList, path: '/ecrf' },
-        { label: 'Lab Entry', icon: TestTube, path: '/labs/entry' },
-        // Removed Mobile AE as requested
+        { label: 'Lab Tracking', icon: TestTube, path: '/labs/tracking' },
+        { label: 'Safety Reporting', icon: AlertTriangle, path: '/safety' },
     ];
 
-    // Determine which items to show
-    const navItems = user?.role === 'Study_Coordinator'
-        ? coordinatorNavItems
-        : piNavItems;
+    const navItems = isCoordinator ? coordinatorNavItems : piNavItems;
 
     return (
         <aside className="sidebar">

@@ -38,7 +38,14 @@ router.get('/stats', requireSiteId, async (req, res) => {
         `;
 
         const result = await pool.query(query, [siteId]);
-        res.json(result.rows[0]);
+        const stats = result.rows[0] || {};
+        // node-postgres returns COUNT() as strings, convert to numbers
+        res.json({
+            today_visits: parseInt(stats.today_visits || '0'),
+            pending_labs: parseInt(stats.pending_labs || '0'),
+            incomplete_ecrfs: parseInt(stats.incomplete_ecrfs || '0'),
+            open_queries: parseInt(stats.open_queries || '0')
+        });
     } catch (err: any) {
         console.error('Coordinator Stats Error:', err);
         res.status(500).json({ error: 'Server Error' });

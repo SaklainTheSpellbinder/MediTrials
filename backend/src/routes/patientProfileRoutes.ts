@@ -20,6 +20,7 @@ router.get('/:patientId/profile', requirePatientId, async (req: any, res: any) =
             SELECT 
                 p.patient_id,
                 p.trial_patient_id,
+                p.full_name,
                 p.date_of_birth,
                 p.gender,
                 p.patient_status,
