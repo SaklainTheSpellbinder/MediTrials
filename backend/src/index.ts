@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/authRoutes';
 import patientRoutes from './routes/patientRoutes';
+import patientProfileRoutes from './routes/patientProfileRoutes';
 dotenv.config();
 
 const app = express();
@@ -16,7 +17,8 @@ app.use(express.json());
 import dashboardRoutes from './routes/dashboardRoutes';
 import coordinatorRoutes from './routes/coordinatorRoutes';
 
-app.use('/api/patients', patientRoutes);
+app.use('/api/patients', patientRoutes); // Standard /api/patients routes
+app.use('/api/patients', patientProfileRoutes); // Detail routes e.g., /api/patients/:patientId/profile
 app.use('/api/auth', authRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/coordinator', coordinatorRoutes);

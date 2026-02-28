@@ -5,7 +5,7 @@ const API = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 10000, 
+  timeout: 10000,
 });
 
 API.interceptors.request.use(
@@ -71,6 +71,33 @@ export const patientAPI = {
   // Delete patient
   delete: async (id: number) => {
     const response = await API.delete(`/patients/${id}`);
+    return response.data;
+  },
+};
+
+export const patientProfileAPI = {
+  getHeader: async (patientId: number) => {
+    const response = await API.get(`/patients/${patientId}/profile`);
+    return response.data;
+  },
+  getTimeline: async (patientId: number) => {
+    const response = await API.get(`/patients/${patientId}/timeline`);
+    return response.data;
+  },
+  getClinical: async (patientId: number) => {
+    const response = await API.get(`/patients/${patientId}/clinical`);
+    return response.data;
+  },
+  getSafety: async (patientId: number) => {
+    const response = await API.get(`/patients/${patientId}/safety`);
+    return response.data;
+  },
+  getLabs: async (patientId: number) => {
+    const response = await API.get(`/patients/${patientId}/labs`);
+    return response.data;
+  },
+  getDocuments: async (patientId: number) => {
+    const response = await API.get(`/patients/${patientId}/documents`);
     return response.data;
   },
 };
