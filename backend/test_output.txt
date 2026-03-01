@@ -1,0 +1,42 @@
+
+=== TESTING PI ROUTES ===
+[FAILED 500] Dashboard Stats                               http://localhost:5000/api/dashboard/stats?site_id=1
+[SUCCESS	] Patient List                                  http://localhost:5000/api/patients?site_id=1
+
+=== TESTING COORDINATOR ROUTES ===
+[SUCCESS	] Coord Stats                                   http://localhost:5000/api/coordinator/stats?site_id=1
+[FAILED 500] Coord Visits Today                            http://localhost:5000/api/coordinator/visits/today?site_id=1
+[FAILED 500] Coord Pending Labs                            http://localhost:5000/api/coordinator/labs/pending?site_id=1
+
+=== TESTING SAFETY MONITOR ROUTES ===
+[SUCCESS	] Safety Dashboard                              http://localhost:5000/api/dashboard/safety-monitor
+[SUCCESS	] Safety Alerts                                 http://localhost:5000/api/safety/alerts
+[FAILED 500] Safety AEs                                    http://localhost:5000/api/safety/ae
+[FAILED 500] Safety SAEs                                   http://localhost:5000/api/safety/sae
+[FAILED 500] Safety Signals                                http://localhost:5000/api/safety/signals?trial_id=1
+[FAILED 500] Safety Reports                                http://localhost:5000/api/safety/reports/generate?trial_id=1
+
+=== TESTING DATA MANAGER ROUTES ===
+[SUCCESS	] DM Dashboard                                  http://localhost:5000/api/dashboard/data-manager
+[FAILED 500] DM Queries                                    http://localhost:5000/api/data-management/queries
+[FAILED 500] DM Completeness                               http://localhost:5000/api/data-management/completeness?trial_id=1
+[FAILED 500] DM Locks                                      http://localhost:5000/api/data-management/locks
+[FAILED 500] DM Export SDTM                                http://localhost:5000/api/data-management/export/sdtm?trial_id=1
+
+=== TESTING STATISTICIAN ROUTES ===
+[SUCCESS	] Stat Dashboard                                http://localhost:5000/api/dashboard/statistician
+[SUCCESS	] Stat Datasets                                 http://localhost:5000/api/statistics/datasets
+[SUCCESS	] Stat Survival                                 http://localhost:5000/api/statistics/survival?trial_id=1
+[SUCCESS	] Stat Balance                                  http://localhost:5000/api/statistics/balance?trial_id=1
+[SUCCESS	] Stat AE Incidence                             http://localhost:5000/api/statistics/ae-incidence?trial_id=1
+[FAILED 404] Stat Export SDTM                              http://localhost:5000/api/export/sdtm?trial_id=1
+
+=== TESTING ADMIN ROUTES ===
+[SUCCESS	] Admin Dashboard                               http://localhost:5000/api/dashboard/admin
+[SUCCESS	] Admin Trials                                  http://localhost:5000/api/admin/trials
+[SUCCESS	] Admin Sites                                   http://localhost:5000/api/admin/sites
+[SUCCESS	] Admin Users                                   http://localhost:5000/api/admin/users
+[SUCCESS	] Admin Locks                                   http://localhost:5000/api/admin/locks
+[SUCCESS	] Admin Audit                                   http://localhost:5000/api/admin/audit
+[FAILED 404] Root Audit                                    http://localhost:5000/api/audit
+[SUCCESS	] Admin Settings                                http://localhost:5000/api/admin/settings
