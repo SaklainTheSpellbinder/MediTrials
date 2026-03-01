@@ -6,13 +6,17 @@ import {
     Search, TrendingUp, GitBranch, BookOpen, FlaskConical, Settings, Globe, UserCog,
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
-import './Sidebar.css';
-import { SidebarUserSection } from './SidebarUserSection';
 import { useAuth } from '../../contexts/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
+import './Sidebar.css';
+import { SidebarUserSection } from './SidebarUserSection';
 
-export const Sidebar: React.FC = () => {
+interface SidebarProps {
+    isCollapsed?: boolean;
+}
+
+export const Sidebar: React.FC<SidebarProps> = () => {
     const location = useLocation();
     const { user } = useAuth();
 
@@ -40,6 +44,7 @@ export const Sidebar: React.FC = () => {
     const piNavItems = [
         { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
         { label: 'Patient Registry', icon: Users, path: '/patients' },
+        { label: 'Screening & Consent', icon: ClipboardList, path: '/patients/screening' },
         { label: 'eCRF Entry', icon: ClipboardList, path: '/ecrf' },
         { label: 'Safety Monitoring', icon: AlertTriangle, path: '/safety' },
         { label: 'Lab Results', icon: TestTube, path: '/labs' },
@@ -50,8 +55,9 @@ export const Sidebar: React.FC = () => {
     // Study Coordinator nav items
     const coordinatorNavItems = [
         { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
-        { label: 'Patient Check-In', icon: CalendarCheck, path: '/checkin' },
-        { label: 'Visit Scheduler', icon: Users, path: '/schedule' },
+        { label: 'Patient Registry', icon: Users, path: '/patients' },
+        { label: 'Screening & Consent', icon: ClipboardList, path: '/patients/screening' },
+        { label: 'Visit Management', icon: CalendarCheck, path: '/visits' },
         { label: 'eCRF Entry', icon: ClipboardList, path: '/ecrf' },
         { label: 'Lab Entry', icon: TestTube, path: '/labs/entry' },
     ];
@@ -97,8 +103,8 @@ export const Sidebar: React.FC = () => {
         { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
         { label: 'Trial Management', icon: Globe, path: '/admin/trials' },
         { label: 'Site Management', icon: Users, path: '/admin/sites' },
-        { label: 'User Management', icon: UserCog, path: '/admin/users', badge: parseInt(dmBadge ?? 0) > 0 ? 0 : 0 },
-        { label: 'Lock Management', icon: Lock, path: '/admin/locks', badge: 0 },
+        { label: 'User Management', icon: UserCog, path: '/admin/users' },
+        { label: 'Lock Management', icon: Lock, path: '/admin/locks' },
         { label: 'Audit Trail', icon: FileText, path: '/audit' },
         { label: 'System Settings', icon: Settings, path: '/admin/settings' },
     ];
@@ -146,4 +152,3 @@ export const Sidebar: React.FC = () => {
         </aside>
     );
 };
-

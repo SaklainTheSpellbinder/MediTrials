@@ -5,7 +5,7 @@ const API = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 10000, 
+  timeout: 10000,
 });
 
 API.interceptors.request.use(
@@ -71,6 +71,67 @@ export const patientAPI = {
   // Delete patient
   delete: async (id: number) => {
     const response = await API.delete(`/patients/${id}`);
+    return response.data;
+  },
+};
+
+export const patientProfileAPI = {
+  getHeader: async (patientId: number) => {
+    const response = await API.get(`/patients/${patientId}/profile`);
+    return response.data;
+  },
+  getTimeline: async (patientId: number) => {
+    const response = await API.get(`/patients/${patientId}/timeline`);
+    return response.data;
+  },
+  getClinical: async (patientId: number) => {
+    const response = await API.get(`/patients/${patientId}/clinical`);
+    return response.data;
+  },
+  getSafety: async (patientId: number) => {
+    const response = await API.get(`/patients/${patientId}/safety`);
+    return response.data;
+  },
+  getLabs: async (patientId: number) => {
+    const response = await API.get(`/patients/${patientId}/labs`);
+    return response.data;
+  },
+  getDocuments: async (patientId: number) => {
+    const response = await API.get(`/patients/${patientId}/documents`);
+    return response.data;
+  },
+};
+
+export const screeningAPI = {
+  // Fetch eligibility criteria for a site's trial
+  getCriteria: async (siteId: number) => {
+    const response = await API.get(`/screening/criteria?site_id=${siteId}`);
+    return response.data;
+  },
+
+  // Fetch available consent/protocol versions for a site's trial
+  getProtocolVersions: async (siteId: number) => {
+    const response = await API.get(`/screening/protocol-versions?site_id=${siteId}`);
+    return response.data;
+  },
+
+  // Submit the complete screening + consent record
+  submit: async (payload: {
+    full_name: string;
+    date_of_birth: string;
+    gender: string;
+    site_id: number;
+    screening_status: string;
+    eligibility_score: number;
+    manual_override: boolean;
+    override_reason: string;
+    failures: Array<{ criterion_id: number; failure_reason: string; override_approved: boolean }>;
+    consent_version: string;
+    consent_date: string;
+    e_signature_password: string;
+    submitted_by_user_id: number;
+  }) => {
+    const response = await API.post('/screening/submit', payload);
     return response.data;
   },
 };

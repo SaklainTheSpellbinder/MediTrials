@@ -10,6 +10,8 @@ import dataManagerRoutes from './routes/dataManagerRoutes';
 import statisticianRoutes from './routes/statisticianRoutes';
 import adminRoutes from './routes/adminRoutes';
 
+import patientProfileRoutes from './routes/patientProfileRoutes';
+import screeningRoutes from './routes/screeningRoutes';
 dotenv.config();
 
 const app = express();
@@ -27,11 +29,13 @@ app.use(express.json());
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
-app.use('/api/patients', patientRoutes);
+app.use('/api/patients', patientRoutes); // Standard /api/patients routes
+app.use('/api/patients', patientProfileRoutes); // Detail routes e.g., /api/patients/:patientId/profile
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/dashboard', safetyMonitorRoutes);
 app.use('/api/safety', safetyMonitorRoutes);
 app.use('/api/coordinator', coordinatorRoutes);
+app.use('/api/screening', screeningRoutes);
 app.use('/api/dashboard', dataManagerRoutes);
 app.use('/api/data-management', dataManagerRoutes);
 app.use('/api/dashboard', statisticianRoutes);

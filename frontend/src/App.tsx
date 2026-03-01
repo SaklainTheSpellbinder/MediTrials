@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { MainLayout } from './components/layout/MainLayout';
 import { Dashboard } from './pages/Dashboard';
 import { Login } from './pages/Login';
+import { useAuth } from './contexts/AuthContext';
 
 // PI pages
 import { PatientRegistry } from './pages/Principal_Investigator/PatientRegistry';
@@ -9,10 +10,11 @@ import { CreatePatient } from './pages/Principal_Investigator/CreatePatient';
 import { PatientProfile } from './pages/Principal_Investigator/PatientProfile';
 
 // Coordinator pages
+import { Screening } from './pages/Principal_Investigator/Screening';
 import { ECRFEntry } from './pages/study_coordinator/ECRFEntry/ECRFEntry';
-import { PatientCheckIn } from './pages/study_coordinator/PatientCheckIn';
-import { VisitScheduler } from './pages/study_coordinator/VisitScheduler';
+import { VisitManagement } from './pages/study_coordinator/VisitManagement';
 import { LabResultsEntry } from './pages/study_coordinator/LabResultsEntry';
+import { CoordinatorDashboard } from './pages/study_coordinator/CoordinatorDashboard';
 
 // Safety Monitor pages
 import { AllPatients } from './pages/safety_monitor/AllPatients';
@@ -55,23 +57,25 @@ import { SystemSettings } from './pages/admin/SystemSettings';
 const W = ({ children }: { children: React.ReactNode }) => <MainLayout>{children}</MainLayout>;
 
 function App() {
+  const { user } = useAuth();
+
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
 
       {/* Shared */}
       <Route path="/" element={<W><Navigate to="/dashboard" replace /></W>} />
-      <Route path="/dashboard" element={<W><Dashboard /></W>} />
+      <Route path="/dashboard" element={<W>{user?.role === 'Study_Coordinator' ? <CoordinatorDashboard /> : <Dashboard />}</W>} />
 
       {/* PI Routes */}
       <Route path="/patients" element={<W><PatientRegistry /></W>} />
       <Route path="/patients/new" element={<W><CreatePatient /></W>} />
+      <Route path="/patients/screening" element={<MainLayout><Screening /></MainLayout>} />
       <Route path="/patients/:patient_id" element={<W><PatientProfile /></W>} />
       <Route path="/ecrf" element={<W><ECRFEntry /></W>} />
 
       {/* Coordinator Routes */}
-      <Route path="/checkin" element={<W><PatientCheckIn /></W>} />
-      <Route path="/schedule" element={<W><VisitScheduler /></W>} />
+      <Route path="/visits" element={<W><VisitManagement /></W>} />
       <Route path="/labs/entry" element={<W><LabResultsEntry /></W>} />
 
       {/* Safety Monitor Routes */}
@@ -89,7 +93,6 @@ function App() {
       <Route path="/data-management/review" element={<W><DataReview /></W>} />
       <Route path="/data-management/lock" element={<W><DatabaseLock /></W>} />
       <Route path="/data-management/export" element={<W><CDISCExport /></W>} />
-      <Route path="/audit" element={<W><AuditTrail /></W>} />
       <Route path="/protocols" element={<W><Protocols /></W>} />
 
       {/* Statistician Routes */}
@@ -116,7 +119,7 @@ function App() {
       <Route path="/admin/locks" element={<W><LockManagement /></W>} />
       <Route path="/admin/settings" element={<W><SystemSettings /></W>} />
 
-      {/* Upgrade /audit to full admin audit trail */}
+      {/* Audit Trail — uses AdminAuditTrail for full traceability */}
       <Route path="/audit" element={<W><AdminAuditTrail /></W>} />
 
       <Route path="*" element={<W><div className="p-8">Page Not Found</div></W>} />
