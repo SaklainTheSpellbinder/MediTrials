@@ -1,0 +1,282 @@
+/* Statistician Dashboard CSS */
+
+/* ROW 2: 60/40 */
+.stat-row2 {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+/* ROW 4: 50/50 */
+.stat-row4 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+/* Datasets table */
+.stat-table-wrap {
+    overflow-x: auto;
+}
+
+.stat-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.stat-table th {
+    text-align: left;
+    padding: 8px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #9CA3AF;
+    text-transform: uppercase;
+    border-bottom: 1px solid #F3F4F6;
+    white-space: nowrap;
+}
+
+.stat-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #F9FAFB;
+    color: #374151;
+    vertical-align: middle;
+}
+
+.stat-name {
+    font-size: 12px;
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.stat-trial {
+    font-size: 11px;
+    color: #6B7280;
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.stat-mono {
+    font-family: monospace;
+    font-size: 11px;
+}
+
+.stat-arm {
+    font-family: monospace;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+/* Type / phase badges */
+.stat-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.stat-badge-red {
+    background: #FEE2E2;
+    color: #991B1B;
+}
+
+.stat-badge-blue {
+    background: #DBEAFE;
+    color: #1D4ED8;
+}
+
+.stat-badge-green {
+    background: #D1FAE5;
+    color: #065F46;
+}
+
+.stat-badge-teal {
+    background: #CCFBF1;
+    color: #0F766E;
+}
+
+.stat-badge-purple {
+    background: #EDE9FE;
+    color: #6D28D9;
+}
+
+.stat-badge-gray {
+    background: #F3F4F6;
+    color: #374151;
+}
+
+/* Active data locks */
+.stat-locks-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 4px 0;
+}
+
+.stat-lock-item {
+    padding: 10px 12px;
+    background: #F9FAFB;
+    border-radius: 8px;
+    border: 1px solid #F3F4F6;
+}
+
+.stat-lock-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.stat-lock-trial {
+    font-weight: 700;
+    font-size: 13px;
+    color: #111827;
+    flex: 1;
+}
+
+.stat-lock-bottom {
+    display: flex;
+    gap: 12px;
+    font-size: 12px;
+    color: #6B7280;
+}
+
+/* Enrollment panel */
+.stat-enroll-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 4px 0;
+}
+
+.stat-enroll-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.stat-enroll-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 200px;
+}
+
+.stat-enroll-name {
+    font-weight: 600;
+    font-size: 13px;
+    color: #111827;
+}
+
+.stat-enroll-bar-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.stat-enroll-track {
+    flex: 1;
+    height: 10px;
+    background: #F3F4F6;
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.stat-enroll-fill {
+    height: 100%;
+    border-radius: 5px;
+    transition: width 0.4s ease;
+}
+
+.stat-enroll-label {
+    font-size: 12px;
+    color: #6B7280;
+    white-space: nowrap;
+}
+
+/* Survival list */
+.stat-surv-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 4px 0;
+}
+
+.stat-surv-item {
+    padding: 10px 12px;
+    background: #F9FAFB;
+    border-radius: 8px;
+    border: 1px solid #F3F4F6;
+}
+
+.stat-surv-top {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.stat-surv-endpoint {
+    font-weight: 700;
+    font-size: 13px;
+    color: #111827;
+}
+
+.stat-surv-trial {
+    font-size: 12px;
+    color: #6B7280;
+    flex: 1;
+}
+
+.stat-surv-date {
+    font-size: 11px;
+    color: #9CA3AF;
+    white-space: nowrap;
+}
+
+.stat-surv-bottom {
+    display: flex;
+    gap: 14px;
+    font-size: 12px;
+}
+
+.stat-surv-hr {
+    font-family: monospace;
+}
+
+/* Randomization balance */
+.stat-balance-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.stat-balance-trial {}
+
+.stat-balance-title {
+    font-weight: 700;
+    font-size: 13px;
+    color: #111827;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.stat-imbalance {
+    background: #FEF3C7;
+    color: #92400E;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+}
