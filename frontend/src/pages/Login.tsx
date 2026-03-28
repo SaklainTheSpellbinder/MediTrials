@@ -44,23 +44,39 @@ export const Login: React.FC = () => {
         }
     };
 
-    // ✅ UPDATED: Uses the REAL data we inserted into PostgreSQL
+    // ── Quick-fill test credentials (real DB users, all share the same hash) ──
+    const PASS = 'ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f';
     const fillTestCredentials = (testUser: string) => {
         const credentials: Record<string, { user: string, pass: string, role: string }> = {
             'investigator': {
-                user: 'dr_connor', // From Site 1 (Mass General)
-                pass: 'hashed_pass_123',
-                role: 'Principal_Investigator' // Fixed: underscore to match DB
+                user: 'pi_site_1',
+                pass: PASS,
+                role: 'Principal_Investigator'
             },
-            'nurse': {
-                user: 'nurse_joy', // From Site 1
-                pass: 'hashed_pass_123',
-                role: 'Study_Coordinator' // Fixed: underscore to match DB
+            'coordinator': {
+                user: 'coord_site_1',
+                pass: PASS,
+                role: 'Study_Coordinator'
             },
-            'monitor': {
-                user: 'dr_watson', // Using a PI as monitor for testing
-                pass: 'hashed_pass_123',
-                role: 'Principal_Investigator' // Fixed: underscore to match DB
+            'safety_monitor': {
+                user: 'safety_1',
+                pass: PASS,
+                role: 'Safety_Monitor'
+            },
+            'data_manager': {
+                user: 'datamgr_1',
+                pass: PASS,
+                role: 'Data_Manager'
+            },
+            'statistician': {
+                user: 'stat_1',
+                pass: PASS,
+                role: 'Statistician'
+            },
+            'admin': {
+                user: 'admin',
+                pass: '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9',
+                role: 'System_Admin'
             }
         };
 
@@ -133,15 +149,27 @@ export const Login: React.FC = () => {
                         {loading ? <Loader2 size={16} className="animate-spin" /> : 'Sign In'}
                     </button>
 
-                    {/* Quick Test Buttons with REAL DB Data */}
+                    {/* Quick Test Buttons */}
                     <div className="mt-4 pt-4 border-t border-gray-200">
-                        <p className="text-xs text-gray-500 mb-2">Auto-fill (Real DB Users):</p>
+                        <p className="text-xs text-gray-500 mb-2">Quick fill (Dev):</p>
                         <div className="flex flex-wrap gap-2">
                             <button type="button" onClick={() => fillTestCredentials('investigator')} className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded">
-                                PI (Dr. Connor)
+                                PI (pi_site_1)
                             </button>
-                            <button type="button" onClick={() => fillTestCredentials('nurse')} className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded">
-                                Nurse (Joy)
+                            <button type="button" onClick={() => fillTestCredentials('coordinator')} className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded">
+                                Coordinator (coord_site_1)
+                            </button>
+                            <button type="button" onClick={() => fillTestCredentials('safety_monitor')} className="text-xs px-2 py-1 bg-red-100 text-red-700 rounded">
+                                Safety (safety_1)
+                            </button>
+                            <button type="button" onClick={() => fillTestCredentials('data_manager')} className="text-xs px-2 py-1 bg-yellow-100 text-yellow-700 rounded">
+                                Data Mgr (datamgr_1)
+                            </button>
+                            <button type="button" onClick={() => fillTestCredentials('statistician')} className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded">
+                                Statistician (stat_1)
+                            </button>
+                            <button type="button" onClick={() => fillTestCredentials('admin')} className="text-xs px-2 py-1 bg-gray-200 text-gray-700 rounded font-semibold">
+                                Admin (admin)
                             </button>
                         </div>
                     </div>
@@ -149,4 +177,5 @@ export const Login: React.FC = () => {
             </div>
         </div>
     );
+
 };
