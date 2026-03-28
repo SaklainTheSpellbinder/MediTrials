@@ -73,6 +73,12 @@ export const patientAPI = {
     const response = await API.delete(`/patients/${id}`);
     return response.data;
   },
+
+  // Record informed consent (coordinator action)
+  recordConsent: async (patientId: number, payload: any) => {
+    const response = await API.post(`/patients/${patientId}/record-consent`, payload);
+    return response.data;
+  },
 };
 
 export const patientProfileAPI = {
@@ -115,23 +121,41 @@ export const screeningAPI = {
     return response.data;
   },
 
-  // Submit the complete screening + consent record
-  submit: async (payload: {
-    full_name: string;
-    date_of_birth: string;
-    gender: string;
-    site_id: number;
-    screening_status: string;
-    eligibility_score: number;
-    manual_override: boolean;
-    override_reason: string;
-    failures: Array<{ criterion_id: number; failure_reason: string; override_approved: boolean }>;
-    consent_version: string;
-    consent_date: string;
-    e_signature_password: string;
-    submitted_by_user_id: number;
-  }) => {
+  // Submit the complete screening + consent record (or draft)
+  submit: async (payload: any) => {
     const response = await API.post('/screening/submit', payload);
+    return response.data;
+  },
+
+  // Get a draft screening
+  getDraft: async (patientId: number) => {
+    const response = await API.get(`/screening/${patientId}`);
+    return response.data;
+  },
+
+  // Submit consent for a drafted patient
+  submitConsent: async (patientId: number, payload: any) => {
+    const response = await API.post(`/screening/${patientId}/consent`, payload);
+    return response.data;
+  },
+
+  getPendingPiReview: async (siteId: number) => {
+    const response = await API.get(`/screening/pending-pi-review?site_id=${siteId}`);
+    return response.data;
+  },
+
+  saveChecklistDraft: async (patientId: number, payload: any) => {
+    const response = await API.put(`/screening/checklist/${patientId}`, payload);
+    return response.data;
+  },
+
+  submitForPiReview: async (patientId: number, payload: any) => {
+    const response = await API.post(`/screening/submit-for-review/${patientId}`, payload);
+    return response.data;
+  },
+
+  piEnroll: async (patientId: number, payload: any) => {
+    const response = await API.post(`/screening/pi-enroll/${patientId}`, payload);
     return response.data;
   },
 };
@@ -155,10 +179,27 @@ export const labAPI = {
     return response.data;
   },
 
+  getSiteLabs: async (siteId: number) => {
+    const response = await API.get(`/labs?site_id=${siteId}`);
+    return response.data;
+  },
+
+  review: async (resultId: number) => {
+    const response = await API.post(`/labs/${resultId}/review`);
+    return response.data;
+  },
+
   getByPatientId: async (patientId: number) => {
     const response = await API.get(`/patients/${patientId}/labs`);
     return response.data;
   },
+};
+
+export const ecrfAPI = {
+  submit: async (data: any) => {
+    const response = await API.post('/ecrf/submit', data);
+    return response.data;
+  }
 };
 
 // Test API connection

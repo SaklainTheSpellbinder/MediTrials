@@ -20,7 +20,7 @@ router.get('/:patientId/profile', requirePatientId, async (req: any, res: any) =
             SELECT 
                 p.patient_id,
                 p.trial_patient_id,
-                p.full_name,
+                p.trial_patient_id AS full_name,
                 p.date_of_birth,
                 p.gender,
                 p.patient_status,
@@ -197,21 +197,24 @@ router.get('/:patientId/labs', requirePatientId, async (req: any, res: any) => {
     try {
         const labsQuery = `
             SELECT 
+                lr.result_id,
+                p.trial_patient_id,
+                p.trial_patient_id AS full_name,
                 lt.test_name,
                 lr.result_value,
                 lr.result_date,
                 lr.result_status,
-                lr.critical_result_flag,
-                lr.reference_low,
-                lr.reference_high,
+                (lr.critical_result_flag = 'Y') as critical_result_flag,
+                COALESCE(lt.reference_ranges->>LOWER(p.gender), lt.reference_ranges->>'all') as reference_range_text,
                 lt.unit_of_measure,
                 CASE 
-                    WHEN lr.result_value < lr.reference_low THEN 'Low'
-                    WHEN lr.result_value > lr.reference_high THEN 'High'
+                    WHEN lr.result_value <= lt.critical_low_value THEN 'Low'
+                    WHEN lr.result_value >= lt.critical_high_value THEN 'High'
                     ELSE 'Normal'
                 END as range_flag
             FROM lab_results lr
             JOIN laboratory_tests lt ON lr.test_id = lt.test_id
+            JOIN patients p ON lr.patient_id = p.patient_id
             WHERE lr.patient_id = $1
             ORDER BY lr.result_date DESC;
         `;

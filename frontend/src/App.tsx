@@ -3,9 +3,11 @@ import { MainLayout } from './components/layout/MainLayout';
 import { Dashboard } from './pages/Dashboard';
 import { Login } from './pages/Login';
 import { PatientRegistry } from './pages/Principal_Investigator/PatientRegistry';
-import { CreatePatient } from './pages/Principal_Investigator/CreatePatient';
 import { PatientProfile } from './pages/Principal_Investigator/PatientProfile';
 import { Screening } from './pages/Principal_Investigator/Screening';
+import { ScreeningReview } from './pages/Principal_Investigator/ScreeningReview';
+import { ScreeningQueue } from './pages/Principal_Investigator/ScreeningQueue';
+import { LabResults } from './pages/Principal_Investigator/LabResults';
 import { ECRFEntry } from './pages/study_coordinator/ECRFEntry/ECRFEntry';
 import { VisitManagement } from './pages/study_coordinator/VisitManagement';
 import { LabResultsEntry } from './pages/study_coordinator/LabResultsEntry';
@@ -34,29 +36,15 @@ function App() {
         </MainLayout>
       } />
 
-      <Route path="/patients" element={
+      {/* Patient Registry & Screening */}
+      <Route path="/patients" element={<MainLayout><PatientRegistry /></MainLayout>} />
+      <Route path="/patients/screening" element={<MainLayout><ScreeningQueue /></MainLayout>} />
+      <Route path="/patients/screening/:patient_id" element={
         <MainLayout>
-          <PatientRegistry />
+          {user?.role === 'Principal_Investigator' ? <ScreeningReview /> : <Screening />}
         </MainLayout>
       } />
-
-      <Route path="/patients/new" element={
-        <MainLayout>
-          <CreatePatient />
-        </MainLayout>
-      } />
-
-      <Route path="/patients/screening" element={
-        <MainLayout>
-          <Screening />
-        </MainLayout>
-      } />
-
-      <Route path="/patients/:patient_id" element={
-        <MainLayout>
-          <PatientProfile />
-        </MainLayout>
-      } />
+      <Route path="/patients/:patient_id" element={<MainLayout><PatientProfile /></MainLayout>} />
 
       <Route path="/ecrf" element={
         <MainLayout>
@@ -72,7 +60,7 @@ function App() {
 
       <Route path="/labs" element={
         <MainLayout>
-          <div className="p-8"><h1>Lab Results (Coming Soon)</h1></div>
+          <LabResults />
         </MainLayout>
       } />
 

@@ -1,16 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
-    ArrowLeft, ArrowRight, CheckCircle, AlertCircle,
-    User, ClipboardList, FileText, Shield,
-    RefreshCw, AlertTriangle, Lock, Check
+    ArrowLeft, CheckCircle, AlertCircle, ClipboardList,
+    RefreshCw, AlertTriangle, Send, Save, Heart, Activity
 } from 'lucide-react';
 import { screeningAPI } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import './Screening.css';
 
 // ─── Types ───────────────────────────────────────────────────────────
-interface Criterion {
+interface CriterionDef {
     criterion_id: number;
     criterion_type: 'Inclusion' | 'Exclusion';
     criterion_text: string;
@@ -18,665 +17,410 @@ interface Criterion {
     criterion_logic: string | null;
 }
 
-interface CriterionState {
-    criterion_id: number;
-    criterion_type: 'Inclusion' | 'Exclusion';
-    criterion_text: string;
-    is_mandatory: boolean;
-    // Pass = true means: inclusion is met / exclusion is NOT present
-    pass: boolean;
-    failure_reason: string;
+interface ScreeningFormData {
+    systolic_bp: string;
+    diastolic_bp: string;
+    heart_rate: string;
+    temperature: string;
+    spo2: string;
+    height_cm: string;
+    weight_kg: string;
+    smoking_status: string;
+    current_medications: string;
+    is_pregnant: boolean;
+    has_uncontrolled_diabetes: boolean;
+    has_active_cancer: boolean;
+    has_severe_allergy: boolean;
+    recent_trial_participation: boolean;
+    notes: string;
 }
 
-interface ProtocolVersion {
-    protocol_id: number;
-    version_number: string;
-    approval_date: string;
-    valid_from: string;
-}
-
-type ScreeningResult = {
-    patient_id: number;
-    trial_patient_id: string;
-    screening_number: string;
-    screening_id: number;
-    consent_id: number | null;
+const INITIAL_FORM: ScreeningFormData = {
+    systolic_bp: '', diastolic_bp: '', heart_rate: '', temperature: '', spo2: '',
+    height_cm: '', weight_kg: '', smoking_status: 'Never', current_medications: '',
+    is_pregnant: false, has_uncontrolled_diabetes: false, has_active_cancer: false,
+    has_severe_allergy: false, recent_trial_participation: false, notes: '',
 };
 
-// ─── Helpers ─────────────────────────────────────────────────────────
-const today = () => new Date().toISOString().split('T')[0];
+// ─── Auto-evaluate a single criterion against form data ──────────
+function evalCriterion(logic: string | null, form: ScreeningFormData, patientAge: number | null): boolean | null {
+    if (!logic) return null; // no auto-eval rule → manual
+    const n = (v: string) => parseFloat(v);
+    switch (logic) {
+        case 'age_18_75':
+            return patientAge != null && patientAge >= 18 && patientAge <= 75;
+        case 'systolic_90_180':
+            return form.systolic_bp !== '' && n(form.systolic_bp) >= 90 && n(form.systolic_bp) <= 180;
+        case 'diastolic_60_110':
+            return form.diastolic_bp !== '' && n(form.diastolic_bp) >= 60 && n(form.diastolic_bp) <= 110;
+        case 'hr_50_110':
+            return form.heart_rate !== '' && n(form.heart_rate) >= 50 && n(form.heart_rate) <= 110;
+        case 'temp_normal':
+            return form.temperature !== '' && n(form.temperature) >= 35.5 && n(form.temperature) <= 37.5;
+        case 'not_pregnant':
+            return !form.is_pregnant;
+        case 'no_uncontrolled_diabetes':
+            return !form.has_uncontrolled_diabetes;
+        case 'no_active_cancer':
+            return !form.has_active_cancer;
+        case 'no_severe_allergy':
+            return !form.has_severe_allergy;
+        case 'no_recent_trial':
+            return !form.recent_trial_participation;
+        default:
+            return null;
+    }
+}
 
+// ─── Component ──────────────────────────────────────────────────────
 export const Screening: React.FC = () => {
     const navigate = useNavigate();
     const { user } = useAuth();
+    const { patient_id } = useParams<{ patient_id: string }>();
 
-    // ── Wizard Step
-    const [step, setStep] = useState<1 | 2 | 3>(1);
-    const [submitted, setSubmitted] = useState(false);
-    const [result, setResult] = useState<ScreeningResult | null>(null);
-    const [submitting, setSubmitting] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [criteria, setCriteria] = useState<CriterionDef[]>([]);
+    const [form, setForm] = useState<ScreeningFormData>(INITIAL_FORM);
+    const [patientAge, setPatientAge] = useState<number | null>(null);
+    const [loading, setLoading] = useState(true);
 
-    // ── Step 1: Demographics
-    const [demographics, setDemographics] = useState({
-        full_name: '',
-        date_of_birth: '',
-        gender: 'Male',
-    });
-
-    // ── Step 2: Eligibility
-    const [criteria, setCriteria] = useState<CriterionState[]>([]);
-    const [criteriaLoading, setCriteriaLoading] = useState(false);
     const [manualOverride, setManualOverride] = useState(false);
     const [overrideReason, setOverrideReason] = useState('');
+    const [submitting, setSubmitting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-    // ── Step 3: Consent
-    const [versions, setVersions] = useState<ProtocolVersion[]>([]);
-    const [versionsLoading, setVersionsLoading] = useState(false);
-    const [selectedVersion, setSelectedVersion] = useState('');
-    const [consentDate, setConsentDate] = useState(today());
-    const [eSignPassword, setESignPassword] = useState('');
+    useEffect(() => { if (patient_id) loadData(); }, [patient_id]);
 
-    // ─── Load eligibility criteria when entering Step 2
-    useEffect(() => {
-        if (step === 2 && criteria.length === 0) {
-            loadCriteria();
-        }
-    }, [step]);
-
-    // ─── Load protocol versions when entering Step 3
-    useEffect(() => {
-        if (step === 3 && versions.length === 0) {
-            loadVersions();
-        }
-    }, [step]);
-
-    const loadCriteria = async () => {
-        if (!user?.site_id) {
-            // Fallback in-memory criteria for demo if no site_id
-            setCriteria([
-                { criterion_id: 1, criterion_type: 'Inclusion', criterion_text: 'Age 18–75 years at time of screening', is_mandatory: true, pass: true, failure_reason: '' },
-                { criterion_id: 2, criterion_type: 'Inclusion', criterion_text: 'Confirmed diagnosis of the target condition per standard criteria', is_mandatory: true, pass: true, failure_reason: '' },
-                { criterion_id: 3, criterion_type: 'Inclusion', criterion_text: 'Willing and able to provide written informed consent', is_mandatory: true, pass: true, failure_reason: '' },
-                { criterion_id: 4, criterion_type: 'Exclusion', criterion_text: 'Current pregnancy or breastfeeding', is_mandatory: true, pass: true, failure_reason: '' },
-                { criterion_id: 5, criterion_type: 'Exclusion', criterion_text: 'Participation in another clinical trial within the past 30 days', is_mandatory: true, pass: true, failure_reason: '' },
-                { criterion_id: 6, criterion_type: 'Exclusion', criterion_text: 'Known hypersensitivity to study drug or excipients', is_mandatory: true, pass: true, failure_reason: '' },
-            ]);
-            return;
-        }
-        setCriteriaLoading(true);
+    const loadData = async () => {
+        setLoading(true);
         try {
-            const data = await screeningAPI.getCriteria(user.site_id);
-            if (data.criteria && data.criteria.length > 0) {
-                setCriteria(data.criteria.map((c: Criterion) => ({
-                    ...c,
-                    pass: true,
-                    failure_reason: '',
-                })));
-            } else {
-                // Fallback to demo criteria if DB has none
-                setCriteria([
-                    { criterion_id: 1, criterion_type: 'Inclusion', criterion_text: 'Age 18–75 years at time of screening', is_mandatory: true, pass: true, failure_reason: '' },
-                    { criterion_id: 2, criterion_type: 'Inclusion', criterion_text: 'Confirmed diagnosis per standard criteria', is_mandatory: true, pass: true, failure_reason: '' },
-                    { criterion_id: 3, criterion_type: 'Inclusion', criterion_text: 'Willing and able to provide written informed consent', is_mandatory: true, pass: true, failure_reason: '' },
-                    { criterion_id: 4, criterion_type: 'Exclusion', criterion_text: 'Current pregnancy or breastfeeding', is_mandatory: true, pass: true, failure_reason: '' },
-                    { criterion_id: 5, criterion_type: 'Exclusion', criterion_text: 'Participation in another trial within 30 days', is_mandatory: true, pass: true, failure_reason: '' },
-                ]);
+            // Load criteria
+            if (user?.site_id) {
+                const cData = await screeningAPI.getCriteria(user.site_id);
+                setCriteria(cData.criteria || []);
             }
-        } catch {
-            setCriteria([
-                { criterion_id: 1, criterion_type: 'Inclusion', criterion_text: 'Age 18–75 years at time of screening', is_mandatory: true, pass: true, failure_reason: '' },
-                { criterion_id: 2, criterion_type: 'Exclusion', criterion_text: 'Current pregnancy or breastfeeding', is_mandatory: true, pass: true, failure_reason: '' },
-            ]);
+            // Load existing draft
+            try {
+                const draftData = await screeningAPI.getDraft(parseInt(patient_id!));
+                const s = draftData.screening;
+                if (s) {
+                    if (s.date_of_birth) {
+                        const dob = new Date(s.date_of_birth);
+                        const today = new Date();
+                        let age = today.getFullYear() - dob.getFullYear();
+                        const m = today.getMonth() - dob.getMonth();
+                        if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+                        setPatientAge(age);
+                    }
+                    // Restore existing screening_data if present
+                    if (s.screening_data && Object.keys(s.screening_data).length > 0) {
+                        setForm(prev => ({ ...prev, ...s.screening_data }));
+                    }
+                    if (s.manual_override) setManualOverride(true);
+                    if (s.parsed_justification) setOverrideReason(s.parsed_justification);
+                }
+            } catch { /* no existing draft */ }
+        } catch (err) {
+            console.error('Failed to load criteria:', err);
         } finally {
-            setCriteriaLoading(false);
+            setLoading(false);
         }
     };
 
-    const loadVersions = async () => {
-        if (!user?.site_id) {
-            setVersions([{ protocol_id: 1, version_number: '1.0', approval_date: '2024-01-01', valid_from: '2024-01-01' }]);
-            setSelectedVersion('1.0');
-            return;
-        }
-        setVersionsLoading(true);
-        try {
-            const data = await screeningAPI.getProtocolVersions(user.site_id);
-            if (data.versions && data.versions.length > 0) {
-                setVersions(data.versions);
-                setSelectedVersion(data.versions[0].version_number);
-            } else {
-                setVersions([{ protocol_id: 1, version_number: '1.0', approval_date: today(), valid_from: today() }]);
-                setSelectedVersion('1.0');
-            }
-        } catch {
-            setVersions([{ protocol_id: 1, version_number: '1.0', approval_date: today(), valid_from: today() }]);
-            setSelectedVersion('1.0');
-        } finally {
-            setVersionsLoading(false);
-        }
-    };
+    // ─── Evaluate all criteria against current form data ──────────
+    const evaluated = criteria.map(c => {
+        const pass = evalCriterion(c.criterion_logic, form, patientAge);
+        // For exclusion criteria, the criterion "passes" if condition is NOT present
+        return { ...c, pass };
+    });
 
-    // ─── Eligibility Score Calculation ─────────────────────────────
-    const includedCriteria = criteria.filter(c => c.criterion_type === 'Inclusion');
-    const excludedCriteria = criteria.filter(c => c.criterion_type === 'Exclusion');
-    const passedInclusion = includedCriteria.filter(c => c.pass).length;
-    const totalCriteria = criteria.length;
-    const score = totalCriteria > 0
-        ? Math.round(((passedInclusion + excludedCriteria.filter(c => c.pass).length) / totalCriteria) * 100)
-        : 100;
-
-    const failures = criteria.filter(c => !c.pass);
+    const failures = evaluated.filter(c => c.pass === false);
     const mandatoryFailures = failures.filter(c => c.is_mandatory);
+    const totalEvaluated = evaluated.filter(c => c.pass !== null).length;
+    const totalPassed = evaluated.filter(c => c.pass === true).length;
+    const score = totalEvaluated > 0 ? Math.round((totalPassed / totalEvaluated) * 100) : 100;
 
     const verdict: 'ELIGIBLE' | 'INELIGIBLE' | 'PENDING' =
-        mandatoryFailures.length === 0
-            ? 'ELIGIBLE'
-            : manualOverride
-                ? 'PENDING'
-                : 'INELIGIBLE';
+        mandatoryFailures.length === 0 ? 'ELIGIBLE' : manualOverride ? 'PENDING' : 'INELIGIBLE';
 
-    // ─── Step Validation ───────────────────────────────────────────
-    const step1Valid = demographics.full_name.trim() && demographics.date_of_birth && demographics.gender;
-    // Step 2 is valid once criteria are loaded — any verdict is submittable (screen failure is a valid outcome)
-    const step2Valid = criteria.length > 0 && (
+    const canSubmit = criteria.length > 0 && (
         verdict === 'ELIGIBLE' ||
-        verdict === 'INELIGIBLE' ||
         (manualOverride && overrideReason.trim().length >= 20)
     );
-    const step3Valid = selectedVersion && consentDate && eSignPassword.length >= 6;
 
-    // ─── Criterion Toggle ──────────────────────────────────────────
-    const toggleCriterion = (id: number, pass: boolean) => {
-        setCriteria(prev => prev.map(c => c.criterion_id === id ? { ...c, pass } : c));
-    };
-
-    const setFailureReason = (id: number, reason: string) => {
-        setCriteria(prev => prev.map(c => c.criterion_id === id ? { ...c, failure_reason: reason } : c));
-    };
-
-    // ─── Final Submit ──────────────────────────────────────────────
-    const handleSubmit = async () => {
-        setError(null);
-        if (!step3Valid) return;
-        setSubmitting(true);
-
-        const screeningStatus = verdict === 'ELIGIBLE'
-            ? 'Passed'
-            : manualOverride
-                ? 'Pending Review'
-                : 'Failed';
-
-        const failurePayload = failures.map(f => ({
+    // ─── Build payload ────────────────────────────────────────────
+    const buildPayload = () => ({
+        eligibility_score: score,
+        manual_override: manualOverride,
+        override_reason: overrideReason,
+        screening_data: form,
+        failures: failures.map(f => ({
             criterion_id: f.criterion_id,
-            failure_reason: f.failure_reason,
+            failure_reason: f.criterion_text,
             override_approved: manualOverride,
-        }));
+        })),
+    });
 
+    const handleSaveDraft = async () => {
+        setError(null); setSuccessMsg(null); setSubmitting(true);
         try {
-            const data = await screeningAPI.submit({
-                full_name: demographics.full_name.trim(),
-                date_of_birth: demographics.date_of_birth,
-                gender: demographics.gender,
-                site_id: user?.site_id ?? 1,
-                screening_status: screeningStatus,
-                eligibility_score: score,
-                manual_override: manualOverride,
-                override_reason: overrideReason,
-                failures: failurePayload,
-                consent_version: selectedVersion,
-                consent_date: consentDate,
-                e_signature_password: eSignPassword,
-                submitted_by_user_id: user?.user_id ?? 0,
-            });
-
-            setResult(data);
-            setSubmitted(true);
+            await screeningAPI.saveChecklistDraft(parseInt(patient_id!), buildPayload());
+            setSuccessMsg('Draft saved.');
         } catch (err: any) {
-            // Handle both axios response errors and network-level failures
-            const msg =
-                err?.response?.data?.error ||
-                err?.response?.data?.message ||
-                (err?.message === 'Network Error' ? 'Cannot reach server. Please ensure the backend is running and try again.' : null) ||
-                err?.message ||
-                'Submission failed. Please try again.';
-            setError(msg);
-            console.error('Screening submit error:', err);
-        } finally {
-            setSubmitting(false);
-        }
+            setError(err?.response?.data?.error || 'Failed to save draft.');
+        } finally { setSubmitting(false); }
     };
 
-    // ─── Verdict Styles Helper ─────────────────────────────────────
+    const handleSubmitToPI = async () => {
+        if (!canSubmit) return;
+        setError(null); setSuccessMsg(null); setSubmitting(true);
+        try {
+            await screeningAPI.submitForPiReview(parseInt(patient_id!), buildPayload());
+            setSuccessMsg('Submitted to PI for review!');
+            setTimeout(() => navigate('/patients/screening'), 1500);
+        } catch (err: any) {
+            setError(err?.response?.data?.error || 'Submission failed.');
+        } finally { setSubmitting(false); }
+    };
+
+    // ─── Style helpers ─────────────────────────────────────────────
     const verdictClass = verdict === 'ELIGIBLE' ? 'verdict-eligible'
-        : verdict === 'INELIGIBLE' ? 'verdict-ineligible'
-            : 'verdict-pending';
+        : verdict === 'INELIGIBLE' ? 'verdict-ineligible' : 'verdict-pending';
+    const scoreBanner = verdict === 'ELIGIBLE' ? 'score-eligible'
+        : verdict === 'INELIGIBLE' ? 'score-ineligible' : 'score-pending';
 
-    const scoreBannerClass = verdict === 'ELIGIBLE' ? 'score-eligible'
-        : verdict === 'INELIGIBLE' ? 'score-ineligible'
-            : 'score-pending';
+    const updateField = (key: keyof ScreeningFormData, value: any) =>
+        setForm(prev => ({ ...prev, [key]: value }));
 
-    // ─────────────────────────────────────────────────────────────── 
-    // RENDER
-    // ─────────────────────────────────────────────────────────────── 
-
-    if (submitted && result) {
-        return (
-            <div className="screening-container">
-                <div className="screening-card">
-                    <div className="success-screen">
-                        <div className="success-icon">
-                            <CheckCircle size={36} />
-                        </div>
-                        <h2>Screening Submitted Successfully</h2>
-                        <p>
-                            The patient has been recorded in the system. You can now proceed to randomization or track them in the Patient Registry.
-                        </p>
-                        <div className="success-meta-grid">
-                            <span className="success-meta-key">Patient ID</span>
-                            <span className="success-meta-val">{result.trial_patient_id}</span>
-                            <span className="success-meta-key">Screening #</span>
-                            <span className="success-meta-val">{result.screening_number}</span>
-                            <span className="success-meta-key">Verdict</span>
-                            <span className="success-meta-val" style={{ color: verdict === 'ELIGIBLE' ? 'var(--color-success)' : verdict === 'INELIGIBLE' ? 'var(--color-danger)' : 'var(--color-warning)' }}>
-                                {verdict === 'ELIGIBLE' ? 'PASSED' : verdict === 'INELIGIBLE' ? 'FAILED' : 'PENDING REVIEW'}
-                            </span>
-                            {result.consent_id && (
-                                <>
-                                    <span className="success-meta-key">Consent Recorded</span>
-                                    <span className="success-meta-val" style={{ color: 'var(--color-success)' }}>✓ Version {selectedVersion}</span>
-                                </>
-                            )}
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'center', gap: 'var(--spacing-3)' }}>
-                            <button className="btn-secondary" onClick={() => navigate('/patients')}>
-                                View Registry
-                            </button>
-                            <button className="btn-primary" onClick={() => navigate(`/patients/${result.patient_id}`)}>
-                                Open Patient Profile
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        );
-    }
+    if (!patient_id) return <div className="screening-container"><div className="card p-8 text-center text-red-500">No patient selected.</div></div>;
 
     return (
         <div className="screening-container">
-            {/* ── Page Header ─────────────────────────────────────── */}
+            {/* Header */}
             <div className="screening-page-header">
-                <button className="back-btn" onClick={() => navigate('/patients')} aria-label="Back to registry">
-                    <ArrowLeft size={18} />
-                </button>
+                <button className="back-btn" onClick={() => navigate('/patients')}><ArrowLeft size={18} /></button>
                 <div>
-                    <h1>New Patient Screening</h1>
-                    <p>Complete all three steps to register and consent a new trial candidate.</p>
+                    <h1>Screening Data Entry</h1>
+                    <p>Patient #{patient_id} {patientAge ? `· ${patientAge} yrs old` : ''} — Enter vitals and medical screening data. Eligibility auto-evaluates.</p>
                 </div>
             </div>
 
-            {/* ── Step Progress Indicator ─────────────────────────── */}
-            <div className="step-progress">
-                {([
-                    { num: 1, label: 'Demographics' },
-                    { num: 2, label: 'Eligibility' },
-                    { num: 3, label: 'Consent' },
-                ] as { num: 1 | 2 | 3; label: string }[]).map(({ num, label }, i) => (
-                    <React.Fragment key={num}>
-                        <div className={`step-item ${step === num ? 'active' : step > num ? 'completed' : ''}`}>
-                            <div className={`step-circle ${step === num ? 'active' : step > num ? 'completed' : ''}`}>
-                                {step > num ? <Check size={14} /> : num}
-                            </div>
-                            <div className="step-meta">
-                                <span className="step-num">Step {num}</span>
-                                <span className="step-label">{label}</span>
-                            </div>
-                        </div>
-                        {i < 2 && <div className={`step-connector ${step > num ? 'completed' : ''}`} />}
-                    </React.Fragment>
-                ))}
-            </div>
-
-            {/* ══════════════════════════════════════════════════════
-                STEP 1 — DEMOGRAPHICS
-            ══════════════════════════════════════════════════════ */}
-            {step === 1 && (
+            {loading ? (
                 <div className="screening-card">
-                    <div className="screening-card-header">
-                        <div className="screening-card-icon"><User size={20} /></div>
-                        <div>
-                            <h2>Patient Demographics</h2>
-                            <p>Enter the candidate's basic information. A screening number will be auto-generated.</p>
-                        </div>
-                    </div>
-                    <div className="screening-card-body">
-                        <div className="form-group">
-                            <label className="form-label">Full Name <span className="required">*</span></label>
-                            <input
-                                type="text"
-                                className="form-input"
-                                placeholder="e.g., Jane Doe"
-                                value={demographics.full_name}
-                                onChange={e => setDemographics(p => ({ ...p, full_name: e.target.value }))}
-                            />
-                        </div>
-                        <div className="form-row">
-                            <div className="form-group">
-                                <label className="form-label">Date of Birth <span className="required">*</span></label>
-                                <input
-                                    type="date"
-                                    className="form-input"
-                                    max={today()}
-                                    value={demographics.date_of_birth}
-                                    onChange={e => setDemographics(p => ({ ...p, date_of_birth: e.target.value }))}
-                                />
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">Gender <span className="required">*</span></label>
-                                <select
-                                    className="form-select"
-                                    value={demographics.gender}
-                                    onChange={e => setDemographics(p => ({ ...p, gender: e.target.value }))}
-                                >
-                                    <option value="Male">Male</option>
-                                    <option value="Female">Female</option>
-                                    <option value="Other">Other / Prefer not to say</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div className="form-group">
-                            <label className="form-label">Screening Number</label>
-                            <input
-                                type="text"
-                                className="form-input"
-                                value="Auto-generated on submission"
-                                disabled
-                                style={{ color: 'var(--gray-400)', background: 'var(--gray-50)' }}
-                            />
-                            <p className="form-hint">Format: SCR-YYYYMMDD-XXXX — assigned automatically.</p>
-                        </div>
-                        <div className="form-actions">
-                            <button className="btn-primary" disabled={!step1Valid} onClick={() => setStep(2)}>
-                                Next: Eligibility Checklist <ArrowRight size={15} />
-                            </button>
-                        </div>
+                    <div className="screening-card-body" style={{ padding: 48, textAlign: 'center' }}>
+                        <RefreshCw size={28} className="animate-spin" style={{ display: 'block', margin: '0 auto 12px' }} />
+                        <span style={{ color: 'var(--gray-400)' }}>Loading eligibility criteria…</span>
                     </div>
                 </div>
-            )}
+            ) : (
+                <>
+                    {/* Alerts */}
+                    {error && <div className="screening-error"><AlertCircle size={18} /><span>{error}</span></div>}
+                    {successMsg && <div style={{ padding: '10px 14px', background: '#f0fdf4', color: '#166534', borderRadius: 8, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem' }}><CheckCircle size={16} />{successMsg}</div>}
 
-            {/* ══════════════════════════════════════════════════════
-                STEP 2 — ELIGIBILITY CHECKLIST
-            ══════════════════════════════════════════════════════ */}
-            {step === 2 && (
-                <div className="screening-card">
-                    <div className="screening-card-header">
-                        <div className="screening-card-icon" style={{ background: 'var(--color-success-bg)', color: 'var(--color-success)' }}>
-                            <ClipboardList size={20} />
-                        </div>
-                        <div>
-                            <h2>Eligibility Checklist</h2>
-                            <p>Review all inclusion and exclusion criteria. Score updates live.</p>
-                        </div>
-                    </div>
-                    <div className="screening-card-body">
-                        {criteriaLoading ? (
-                            <div className="loading-spinner">
-                                <RefreshCw size={28} className="animate-spin" />
-                                <span>Loading eligibility criteria…</span>
+                    {/* ── SECTION 1: Vitals ─────────────────────────────────── */}
+                    <div className="screening-card">
+                        <div className="screening-card-header">
+                            <div className="screening-card-icon" style={{ background: '#eef2ff', color: '#4f46e5' }}>
+                                <Heart size={20} />
                             </div>
-                        ) : (
-                            <>
-                                {/* Score Banner */}
-                                <div className={`eligibility-score-banner ${scoreBannerClass}`}>
-                                    <div>
-                                        <div className="score-label">Eligibility Score</div>
-                                        <div className="score-value" style={{ color: verdict === 'ELIGIBLE' ? 'var(--color-success)' : verdict === 'INELIGIBLE' ? 'var(--color-danger)' : 'var(--color-warning)' }}>
-                                            {score}%
-                                        </div>
-                                    </div>
-                                    <div style={{ textAlign: 'center' }}>
-                                        <div style={{ fontSize: '0.72rem', color: 'var(--gray-500)', marginBottom: 6 }}>
-                                            {failures.length} of {totalCriteria} criteria unmet
-                                        </div>
-                                        <span className={`verdict-badge ${verdictClass}`}>{verdict}</span>
-                                    </div>
-                                </div>
-
-                                {/* Inclusion Criteria */}
-                                {includedCriteria.length > 0 && (
-                                    <>
-                                        <div className="criteria-section-title inclusion-title">
-                                            <CheckCircle size={14} /> Inclusion Criteria ({passedInclusion}/{includedCriteria.length} met)
-                                        </div>
-                                        {includedCriteria.map(c => (
-                                            <div key={c.criterion_id} className={`criterion-card ${c.pass ? 'pass' : 'fail'}`}>
-                                                <div className="criterion-check">
-                                                    <button className={`toggle-pass ${c.pass ? 'active' : ''}`} onClick={() => toggleCriterion(c.criterion_id, true)}>✓</button>
-                                                    <button className={`toggle-fail ${!c.pass ? 'active' : ''}`} onClick={() => toggleCriterion(c.criterion_id, false)}>✗</button>
-                                                </div>
-                                                <div className="criterion-body">
-                                                    <p className="criterion-text">{c.criterion_text}</p>
-                                                    {c.is_mandatory && <span className="criterion-mandatory">● Mandatory</span>}
-                                                    {!c.pass && (
-                                                        <div className="criterion-failure-note">
-                                                            <textarea
-                                                                rows={2}
-                                                                placeholder="Reason for failure (optional but recommended)…"
-                                                                value={c.failure_reason}
-                                                                onChange={e => setFailureReason(c.criterion_id, e.target.value)}
-                                                            />
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </>
-                                )}
-
-                                {/* Exclusion Criteria */}
-                                {excludedCriteria.length > 0 && (
-                                    <>
-                                        <div className="criteria-section-title exclusion-title" style={{ marginTop: 'var(--spacing-6)' }}>
-                                            <AlertCircle size={14} /> Exclusion Criteria ({excludedCriteria.filter(c => c.pass).length}/{excludedCriteria.length} cleared)
-                                        </div>
-                                        {excludedCriteria.map(c => (
-                                            <div key={c.criterion_id} className={`criterion-card ${c.pass ? 'pass' : 'fail'}`}>
-                                                <div className="criterion-check">
-                                                    <button className={`toggle-pass ${c.pass ? 'active' : ''}`} title="Not present / Cleared" onClick={() => toggleCriterion(c.criterion_id, true)}>✓</button>
-                                                    <button className={`toggle-fail ${!c.pass ? 'active' : ''}`} title="Present — patient excluded" onClick={() => toggleCriterion(c.criterion_id, false)}>✗</button>
-                                                </div>
-                                                <div className="criterion-body">
-                                                    <p className="criterion-text">{c.criterion_text}</p>
-                                                    {c.is_mandatory && <span className="criterion-mandatory">● Mandatory exclusion</span>}
-                                                    {!c.pass && (
-                                                        <div className="criterion-failure-note">
-                                                            <textarea
-                                                                rows={2}
-                                                                placeholder="Additional notes…"
-                                                                value={c.failure_reason}
-                                                                onChange={e => setFailureReason(c.criterion_id, e.target.value)}
-                                                            />
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </>
-                                )}
-
-                                {/* Manual Override */}
-                                {mandatoryFailures.length > 0 && (
-                                    <div style={{ marginTop: 'var(--spacing-6)' }}>
-                                        <div className="override-toggle-row">
-                                            <div>
-                                                <div className="override-toggle-label">
-                                                    <AlertTriangle size={14} style={{ display: 'inline', marginRight: 6 }} />
-                                                    Manual Override (PI Discretion)
-                                                </div>
-                                                <div className="override-toggle-desc">
-                                                    Enable only for borderline cases where the PI determines eligibility. Requires written justification of ≥20 characters.
-                                                    {user?.role === 'Study Coordinator' && (
-                                                        <div className="text-red-500 mt-1 font-medium">⚠️ PI Approval Required — Coordinators cannot override.</div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            <label className="toggle-switch">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={manualOverride}
-                                                    onChange={e => setManualOverride(e.target.checked)}
-                                                    disabled={user?.role === 'Study Coordinator'}
-                                                    title={user?.role === 'Study Coordinator' ? 'Only the Principal Investigator can manually override eligibility.' : ''}
-                                                />
-                                                <span className={`toggle-slider ${user?.role === 'Study Coordinator' ? 'opacity-50 cursor-not-allowed' : ''}`} />
-                                            </label>
-                                        </div>
-                                        {manualOverride && (
-                                            <div className="form-group">
-                                                <label className="form-label">Override Justification <span className="required">*</span></label>
-                                                <textarea
-                                                    className="form-textarea"
-                                                    rows={4}
-                                                    placeholder="Provide clinical justification for allowing this patient to proceed despite unmet criteria…"
-                                                    value={overrideReason}
-                                                    onChange={e => setOverrideReason(e.target.value)}
-                                                />
-                                                <p className="form-hint">{overrideReason.length}/20 characters minimum</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                <div className="form-actions">
-                                    <button className="btn-secondary" onClick={() => setStep(1)}>
-                                        <ArrowLeft size={15} /> Back
-                                    </button>
-                                    <button className="btn-primary" disabled={!step2Valid} onClick={() => setStep(3)}>
-                                        Next: Consent Recording <ArrowRight size={15} />
-                                    </button>
-                                </div>
-                            </>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {/* ══════════════════════════════════════════════════════
-                STEP 3 — CONSENT RECORDING
-            ══════════════════════════════════════════════════════ */}
-            {step === 3 && (
-                <div className="screening-card">
-                    <div className="screening-card-header">
-                        <div className="screening-card-icon" style={{ background: '#ede9fe', color: '#7c3aed' }}>
-                            <FileText size={20} />
+                            <div><h2>Vital Signs</h2><p>Record screening vitals</p></div>
                         </div>
-                        <div>
-                            <h2>Informed Consent Recording</h2>
-                            <p>Record which protocol version was consented to, in compliance with 21 CFR Part 11.</p>
-                        </div>
-                    </div>
-                    <div className="screening-card-body">
-                        {error && (
-                            <div className="screening-error">
-                                <AlertCircle size={18} />
-                                <span>{error}</span>
+                        <div className="screening-card-body">
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 16 }}>
+                                <div className="form-group">
+                                    <label className="form-label">Systolic BP (mmHg) *</label>
+                                    <input type="number" className="form-input" placeholder="e.g. 120"
+                                        value={form.systolic_bp} onChange={e => updateField('systolic_bp', e.target.value)} />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Diastolic BP (mmHg) *</label>
+                                    <input type="number" className="form-input" placeholder="e.g. 80"
+                                        value={form.diastolic_bp} onChange={e => updateField('diastolic_bp', e.target.value)} />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Heart Rate (bpm) *</label>
+                                    <input type="number" className="form-input" placeholder="e.g. 72"
+                                        value={form.heart_rate} onChange={e => updateField('heart_rate', e.target.value)} />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Temperature (°C)</label>
+                                    <input type="number" step="0.1" className="form-input" placeholder="e.g. 36.6"
+                                        value={form.temperature} onChange={e => updateField('temperature', e.target.value)} />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">SpO₂ (%)</label>
+                                    <input type="number" className="form-input" placeholder="e.g. 98"
+                                        value={form.spo2} onChange={e => updateField('spo2', e.target.value)} />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Height (cm)</label>
+                                    <input type="number" className="form-input" placeholder="e.g. 170"
+                                        value={form.height_cm} onChange={e => updateField('height_cm', e.target.value)} />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Weight (kg)</label>
+                                    <input type="number" step="0.1" className="form-input" placeholder="e.g. 72.5"
+                                        value={form.weight_kg} onChange={e => updateField('weight_kg', e.target.value)} />
+                                </div>
                             </div>
-                        )}
-
-                        {/* 21 CFR Part 11 Notice */}
-                        <div className="esig-warning">
-                            <Shield size={18} style={{ flexShrink: 0, marginTop: 1 }} />
-                            <span>
-                                <strong>21 CFR Part 11 E-Signature Required.</strong> By entering your password below, you are legally attesting that this informed consent process was performed in compliance with GCP guidelines and that the patient voluntarily agreed to participate after receiving adequate information.
-                            </span>
-                        </div>
-
-                        {/* Protocol Version */}
-                        <div className="form-group">
-                            <label className="form-label">Consent Protocol Version <span className="required">*</span></label>
-                            {versionsLoading ? (
-                                <div style={{ color: 'var(--gray-400)', fontSize: '0.875rem' }}>Loading versions…</div>
-                            ) : versions.length > 0 ? (
-                                versions.map(v => (
-                                    <div
-                                        key={v.protocol_id}
-                                        className={`consent-version-option ${selectedVersion === v.version_number ? 'selected' : ''}`}
-                                        onClick={() => setSelectedVersion(v.version_number)}
-                                    >
-                                        <div className={`consent-radio ${selectedVersion === v.version_number ? 'selected' : ''}`} />
-                                        <div>
-                                            <div style={{ fontWeight: 600, color: 'var(--gray-800)' }}>Version {v.version_number}</div>
-                                            <div style={{ fontSize: '0.78rem', color: 'var(--gray-500)', marginTop: 2 }}>
-                                                Approved: {new Date(v.approval_date).toLocaleDateString()} · Valid from: {new Date(v.valid_from).toLocaleDateString()}
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))
-                            ) : (
-                                <div style={{ padding: 'var(--spacing-3)', color: 'var(--gray-400)', fontSize: '0.875rem', background: 'var(--gray-50)', borderRadius: 'var(--radius-md)', border: '1px solid var(--gray-200)' }}>
-                                    No protocol versions found. Using default v1.0.
+                            {form.height_cm && form.weight_kg && (
+                                <div style={{ marginTop: 8, fontSize: '0.82rem', color: 'var(--gray-600)' }}>
+                                    BMI: <strong>{(parseFloat(form.weight_kg) / Math.pow(parseFloat(form.height_cm) / 100, 2)).toFixed(1)}</strong> kg/m²
                                 </div>
                             )}
                         </div>
+                    </div>
 
-                        {/* Consent Date */}
-                        <div className="form-row">
-                            <div className="form-group">
-                                <label className="form-label">Consent Date <span className="required">*</span></label>
-                                <input
-                                    type="date"
-                                    className="form-input"
-                                    max={today()}
-                                    value={consentDate}
-                                    onChange={e => setConsentDate(e.target.value)}
-                                />
+                    {/* ── SECTION 2: Medical Screening Questions ───────────── */}
+                    <div className="screening-card">
+                        <div className="screening-card-header">
+                            <div className="screening-card-icon" style={{ background: '#fef3c7', color: '#d97706' }}>
+                                <ClipboardList size={20} />
                             </div>
-                            <div className="form-group">
-                                <label className="form-label">Patient Verdict</label>
-                                <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--gray-200)', background: 'var(--gray-50)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    <span className={`verdict-badge ${verdictClass}`} style={{ fontSize: '0.75rem' }}>{verdict}</span>
-                                    <span style={{ fontSize: '0.78rem', color: 'var(--gray-500)' }}>
-                                        {verdict === 'ELIGIBLE' ? 'All criteria met' : verdict === 'INELIGIBLE' ? 'Criteria not met' : 'Manual override active — PI review required'}
-                                    </span>
+                            <div><h2>Medical Screening</h2><p>Confirm the following conditions</p></div>
+                        </div>
+                        <div className="screening-card-body">
+                            {[
+                                { key: 'is_pregnant' as const, label: 'Is the patient currently pregnant or planning pregnancy?' },
+                                { key: 'has_uncontrolled_diabetes' as const, label: 'Does the patient have uncontrolled diabetes (HbA1c > 9%)?' },
+                                { key: 'has_active_cancer' as const, label: 'Does the patient have active malignancy (cancer under treatment)?' },
+                                { key: 'has_severe_allergy' as const, label: 'Does the patient have a history of severe allergic reaction (anaphylaxis)?' },
+                                { key: 'recent_trial_participation' as const, label: 'Has the patient participated in another clinical trial within the last 30 days?' },
+                            ].map(q => (
+                                <div key={q.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid var(--gray-100)' }}>
+                                    <span style={{ fontSize: '0.875rem', color: 'var(--gray-700)', flex: 1 }}>{q.label}</span>
+                                    <div style={{ display: 'flex', gap: 8 }}>
+                                        <button
+                                            className={`toggle-pass ${!form[q.key] ? 'active' : ''}`}
+                                            onClick={() => updateField(q.key, false)}
+                                        >No</button>
+                                        <button
+                                            className={`toggle-fail ${form[q.key] ? 'active' : ''}`}
+                                            onClick={() => updateField(q.key, true)}
+                                        >Yes</button>
+                                    </div>
+                                </div>
+                            ))}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16 }}>
+                                <div className="form-group" style={{ marginBottom: 0 }}>
+                                    <label className="form-label">Smoking Status</label>
+                                    <select className="form-select" value={form.smoking_status} onChange={e => updateField('smoking_status', e.target.value)}>
+                                        <option value="Never">Never Smoked</option>
+                                        <option value="Former">Former Smoker</option>
+                                        <option value="Current">Current Smoker</option>
+                                    </select>
+                                </div>
+                                <div className="form-group" style={{ marginBottom: 0 }}>
+                                    <label className="form-label">Current Medications</label>
+                                    <input type="text" className="form-input" placeholder="e.g. Metformin 500mg, Aspirin"
+                                        value={form.current_medications} onChange={e => updateField('current_medications', e.target.value)} />
                                 </div>
                             </div>
-                        </div>
-
-                        {/* E-Signature / Password */}
-                        <div className="form-group">
-                            <label className="form-label">
-                                <Lock size={12} style={{ display: 'inline', marginRight: 4 }} />
-                                E-Signature — Password Re-Entry <span className="required">*</span>
-                            </label>
-                            <input
-                                type="password"
-                                className="form-input"
-                                placeholder="Re-enter your account password to sign"
-                                value={eSignPassword}
-                                onChange={e => setESignPassword(e.target.value)}
-                                autoComplete="current-password"
-                            />
-                            <p className="form-hint">Minimum 6 characters. A SHA-256 hash of your signature will be recorded in the audit trail.</p>
-                        </div>
-
-                        <div className="form-actions">
-                            <button className="btn-secondary" onClick={() => setStep(2)}>
-                                <ArrowLeft size={15} /> Back
-                            </button>
-                            <button
-                                className="btn-primary"
-                                disabled={!step3Valid || submitting}
-                                onClick={handleSubmit}
-                            >
-                                {submitting ? (
-                                    <><RefreshCw size={14} className="animate-spin" /> Submitting…</>
-                                ) : (
-                                    <><CheckCircle size={14} /> Submit Screening & Consent</>
-                                )}
-                            </button>
+                            <div className="form-group" style={{ marginTop: 16 }}>
+                                <label className="form-label">Additional Notes</label>
+                                <textarea className="form-textarea" rows={2} placeholder="Any other observations…"
+                                    value={form.notes} onChange={e => updateField('notes', e.target.value)} />
+                            </div>
                         </div>
                     </div>
-                </div>
+
+                    {/* ── SECTION 3: Auto-Evaluated Criteria ─────────────── */}
+                    <div className="screening-card">
+                        <div className="screening-card-header">
+                            <div className="screening-card-icon" style={{ background: 'var(--color-success-bg)', color: 'var(--color-success)' }}>
+                                <Activity size={20} />
+                            </div>
+                            <div><h2>Eligibility Evaluation</h2><p>Auto-evaluated from entered data</p></div>
+                        </div>
+                        <div className="screening-card-body">
+                            {/* Score Banner */}
+                            <div className={`eligibility-score-banner ${scoreBanner}`}>
+                                <div>
+                                    <div className="score-label">Eligibility Score</div>
+                                    <div className="score-value" style={{
+                                        color: verdict === 'ELIGIBLE' ? 'var(--color-success)' : verdict === 'INELIGIBLE' ? 'var(--color-danger)' : 'var(--color-warning)'
+                                    }}>{score}%</div>
+                                </div>
+                                <div style={{ textAlign: 'center' }}>
+                                    <div style={{ fontSize: '0.72rem', color: 'var(--gray-500)', marginBottom: 6 }}>
+                                        {failures.length} of {criteria.length} criteria unmet
+                                    </div>
+                                    <span className={`verdict-badge ${verdictClass}`}>{verdict}</span>
+                                </div>
+                            </div>
+
+                            {/* Criteria List */}
+                            {evaluated.map(c => {
+                                const passStatus = c.pass === null ? 'pending' : c.pass ? 'pass' : 'fail';
+                                const icon = c.pass === true ? '✓' : c.pass === false ? '✗' : '—';
+                                const bgColor = passStatus === 'pass' ? '#f0fdf4' : passStatus === 'fail' ? '#fef2f2' : '#f9fafb';
+                                const borderColor = passStatus === 'pass' ? '#bbf7d0' : passStatus === 'fail' ? '#fecaca' : '#e5e7eb';
+                                return (
+                                    <div key={c.criterion_id} style={{
+                                        display: 'flex', alignItems: 'center', gap: 12,
+                                        padding: '10px 14px', marginBottom: 6, borderRadius: 8,
+                                        background: bgColor, border: `1px solid ${borderColor}`,
+                                    }}>
+                                        <span style={{
+                                            width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            fontWeight: 700, fontSize: '0.85rem',
+                                            background: passStatus === 'pass' ? '#dcfce7' : passStatus === 'fail' ? '#fee2e2' : '#f3f4f6',
+                                            color: passStatus === 'pass' ? '#15803d' : passStatus === 'fail' ? '#b91c1c' : '#6b7280',
+                                        }}>{icon}</span>
+                                        <div style={{ flex: 1 }}>
+                                            <span style={{ fontSize: '0.85rem', color: 'var(--gray-800)' }}>{c.criterion_text}</span>
+                                            <span style={{ fontSize: '0.7rem', color: 'var(--gray-400)', marginLeft: 8 }}>
+                                                [{c.criterion_type}]{c.is_mandatory ? ' · Mandatory' : ''}
+                                            </span>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+
+                            {/* Manual Override */}
+                            {mandatoryFailures.length > 0 && (
+                                <div style={{ marginTop: 'var(--spacing-6)' }}>
+                                    <div className="override-toggle-row">
+                                        <div>
+                                            <div className="override-toggle-label">
+                                                <AlertTriangle size={14} style={{ display: 'inline', marginRight: 6 }} />
+                                                Request PI Manual Override
+                                            </div>
+                                            <div className="override-toggle-desc">Enable only for borderline cases.</div>
+                                        </div>
+                                        <label className="toggle-switch">
+                                            <input type="checkbox" checked={manualOverride} onChange={e => setManualOverride(e.target.checked)} />
+                                            <span className="toggle-slider" />
+                                        </label>
+                                    </div>
+                                    {manualOverride && (
+                                        <div className="form-group">
+                                            <label className="form-label">Override Justification *</label>
+                                            <textarea className="form-textarea" rows={3}
+                                                placeholder="Clinical justification for allowing this patient to proceed…"
+                                                value={overrideReason} onChange={e => setOverrideReason(e.target.value)} />
+                                            <p className="form-hint">{overrideReason.length}/20 characters minimum</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Actions */}
+                            <div className="form-actions" style={{ marginTop: 'var(--spacing-6)' }}>
+                                <button className="btn-secondary" onClick={() => navigate('/patients')}>
+                                    <ArrowLeft size={15} /> Cancel
+                                </button>
+                                <button className="btn-secondary" disabled={submitting || criteria.length === 0} onClick={handleSaveDraft}>
+                                    <Save size={14} /> {submitting ? 'Saving…' : 'Save Draft'}
+                                </button>
+                                <button className="btn-primary" disabled={!canSubmit || submitting} onClick={handleSubmitToPI}>
+                                    <Send size={14} /> {submitting ? 'Submitting…' : 'Submit to PI'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </>
             )}
         </div>
     );

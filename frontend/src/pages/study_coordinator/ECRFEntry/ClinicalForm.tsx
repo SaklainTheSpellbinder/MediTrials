@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Save, ArrowLeft } from 'lucide-react';
 import type { Patient } from './PatientList';
 import './ClinicalForm.css';
+import { ecrfAPI } from '../../../services/api';
 
 interface ClinicalFormProps {
   patient: Patient;
@@ -17,9 +18,37 @@ export const ClinicalForm: React.FC<ClinicalFormProps> = ({ patient, onBack }) =
     temp: '',
   });
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      if (!patient.db_id) {
+        throw new Error('Patient ID not found');
+      }
+
+      const payload = {
+        patient_id: patient.db_id,
+        ...formData
+      };
+
+      await ecrfAPI.submit(payload);
+      alert('Clinical data saved successfully!');
+      onBack();
+    } catch (err: any) {
+      console.error(err);
+      setError(err.response?.data?.error || err.message || 'Failed to save data');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -40,7 +69,12 @@ export const ClinicalForm: React.FC<ClinicalFormProps> = ({ patient, onBack }) =
       </div>
 
       <div className="card">
-        <form className="patient-form" onSubmit={(e) => e.preventDefault()}>
+        {error && (
+          <div className="bg-red-50 text-red-600 p-3 rounded-md mb-4 text-sm whitespace-pre-line">
+            {error}
+          </div>
+        )}
+        <form className="patient-form" onSubmit={handleSubmit}>
 
           {/* Section: Assessment Details */}
           <div>
@@ -119,12 +153,12 @@ export const ClinicalForm: React.FC<ClinicalFormProps> = ({ patient, onBack }) =
 
           {/* Form Actions */}
           <div className="form-actions">
-            <button type="button" onClick={onBack} className="btn-secondary">
+            <button type="button" onClick={onBack} className="btn-secondary" disabled={isSubmitting}>
               Cancel
             </button>
-            <button type="submit" className="btn-primary">
+            <button type="submit" className="btn-primary" disabled={isSubmitting}>
               <Save size={18} />
-              Save Record
+              {isSubmitting ? 'Saving...' : 'Save Record'}
             </button>
           </div>
 

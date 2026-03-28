@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { StatCard } from '../../components/dashboard/StatCard';
+import { PendingScreeningsWidget } from '../../components/dashboard/PendingScreeningsWidget';
 import '../Dashboard.css';
 
 export const PIDashboard: React.FC = () => {
@@ -133,7 +134,7 @@ export const PIDashboard: React.FC = () => {
                     </div>
 
                     {/* Enrollment Progress */}
-                    <div className="card">
+                    <div className="card my-4">
                         <div className="card-header">
                             <h3 className="card-title">
                                 <Users size={18} />
@@ -154,6 +155,8 @@ export const PIDashboard: React.FC = () => {
                             </div>
                         </div>
                     </div>
+
+                    <PendingScreeningsWidget />
                 </div>
 
                 {/* Right Column: Schedule & Tasks */}

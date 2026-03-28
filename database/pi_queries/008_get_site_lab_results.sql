@@ -1,5 +1,7 @@
--- 005_get_lab_results.sql
--- Gets Lab Results for a patient
+-- 008_get_site_lab_results.sql
+-- Gets all latest Lab Results for patients associated with a specific site
+-- Used by the Principal Investigator Lab Results page
+
 SELECT 
     lr.result_id,
     p.trial_patient_id,
@@ -19,5 +21,5 @@ SELECT
 FROM lab_results lr
 JOIN laboratory_tests lt ON lr.test_id = lt.test_id
 JOIN patients p ON lr.patient_id = p.patient_id
-WHERE lr.patient_id = $1
+WHERE p.site_id = $1
 ORDER BY lr.result_date DESC;

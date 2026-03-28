@@ -38,7 +38,7 @@ export const PatientList: React.FC<PatientListProps> = ({ onSelectPatient }) => 
             initials: p.full_name ? p.full_name.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() : 'XX',
             siteId: p.institution_name || 'Site ' + p.site_id,
             status: mapStatus(p.patient_status),
-            lastVisit: 'N/A', // Not currently fetched
+            lastVisit: p.last_visit_date ? new Date(p.last_visit_date).toLocaleDateString() : 'No recorded visits',
             enrollmentDate: p.enrollment_date ? new Date(p.enrollment_date).toLocaleDateString() : 'N/A'
           }));
           setPatients(formattedPatients);

@@ -24,6 +24,10 @@ app.use('/api/auth', authRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/coordinator', coordinatorRoutes);
 app.use('/api/screening', screeningRoutes);
+import ecrfRoutes from './routes/ecrfRoutes';
+app.use('/api/ecrf', ecrfRoutes);
+import labRoutes from './routes/labRoutes';
+app.use('/api/labs', labRoutes);
 
 // Root Check
 app.get('/', (req, res) => {

@@ -1,0 +1,299 @@
+.lab-results-container {
+    padding: 2rem 3rem;
+    min-height: 100vh;
+    animation: fadeIn 0.4s ease-out;
+}
+
+/* Header & Tabs */
+.labs-header {
+    margin-bottom: 2rem;
+}
+
+.labs-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.labs-tabs {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0;
+}
+
+.lab-tab {
+    padding: 0.75rem 1.5rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-bottom: -1px;
+}
+
+.lab-tab:hover {
+    color: var(--primary-color);
+}
+
+.lab-tab.active {
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+}
+
+/* KPI Overview */
+.labs-overview {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.lab-stat-card {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.lab-stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.05);
+}
+
+.lab-stat-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.lab-stat-icon.primary {
+    background: #eff6ff;
+    color: #3b82f6;
+}
+
+.lab-stat-icon.warning {
+    background: #fffbeb;
+    color: #f59e0b;
+}
+
+.lab-stat-icon.danger {
+    background: #fef2f2;
+    color: #ef4444;
+}
+
+.lab-stat-info h3 {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.25rem;
+}
+
+.lab-stat-info p {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+/* Table Card */
+.labs-card {
+    background: white;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
+    overflow: hidden;
+}
+
+.labs-toolbar {
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #fafafa;
+}
+
+.search-box {
+    display: flex;
+    align-items: center;
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0.5rem 1rem;
+    width: 320px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.search-box:focus-within {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.search-icon {
+    color: #9ca3af;
+    margin-right: 0.5rem;
+}
+
+.search-box input {
+    border: none;
+    outline: none;
+    width: 100%;
+    font-size: 0.875rem;
+}
+
+/* Table Styles */
+.labs-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.labs-table th {
+    background: #f8fafc;
+    padding: 1rem 1.5rem;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.labs-table td {
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+    vertical-align: middle;
+    font-size: 0.875rem;
+}
+
+.labs-table tr:last-child td {
+    border-bottom: none;
+}
+
+.labs-table tr:hover {
+    background: #f8fafc;
+}
+
+/* Range Flags */
+.range-indicator {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    min-width: 60px;
+}
+
+.range-normal {
+    background: #ecfdf5;
+    color: #10b981;
+}
+
+.range-high {
+    background: #fef2f2;
+    color: #ef4444;
+}
+
+.range-low {
+    background: #eff6ff;
+    color: #3b82f6;
+}
+
+/* Critical Badge */
+.critical-badge {
+    background: #ef4444;
+    color: white;
+    font-size: 0.65rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 8px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+    }
+
+    70% {
+        transform: scale(1.05);
+        box-shadow: 0 0 0 4px rgba(239, 68, 68, 0);
+    }
+
+    100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+    }
+}
+
+.patient-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.patient-id {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.patient-name {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.result-value-col {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.reference-range {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
+.action-btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: white;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.action-btn:hover {
+    background: #f3f4f6;
+    border-color: #d1d5db;
+}
+
+.action-btn.urgent {
+    border-color: #fca5a5;
+    color: #ef4444;
+    background: #fef2f2;
+}
+
+.action-btn.urgent:hover {
+    background: #fee2e2;
+    border-color: #ef4444;
+}

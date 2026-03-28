@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
     Activity,
     FileText,
@@ -14,14 +14,19 @@ import {
     MapPin,
     CheckCircle,
     ChevronRight,
-    RefreshCw
+    RefreshCw,
+    Shield,
+    Lock,
+    X,
+    ClipboardList
 } from 'lucide-react';
-import { patientProfileAPI } from '../../services/api';
+import { patientProfileAPI, patientAPI, screeningAPI } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import './PatientProfile.css';
 
 export const PatientProfile: React.FC = () => {
     const { user } = useAuth();
+    const navigate = useNavigate();
     const { patient_id } = useParams<{ patient_id: string }>();
     const [activeTab, setActiveTab] = useState('timeline');
     const [patient, setPatient] = useState<any>(null);
@@ -31,6 +36,13 @@ export const PatientProfile: React.FC = () => {
     const [labs, setLabs] = useState<any[]>([]);
     const [documents, setDocuments] = useState<any>({ consent: [], ecrfs: [], auditTrail: [] });
     const [loading, setLoading] = useState(true);
+
+    // ── Consent modal state ──────────────────────────────────────────
+    const [showConsentModal, setShowConsentModal] = useState(false);
+    const [consentForm, setConsentForm] = useState({ consent_version: '', consent_date: new Date().toISOString().split('T')[0], e_signature_password: '' });
+    const [consentVersions, setConsentVersions] = useState<any[]>([]);
+    const [consentSubmitting, setConsentSubmitting] = useState(false);
+    const [consentError, setConsentError] = useState<string | null>(null);
 
     useEffect(() => {
         if (patient_id) fetchPatientData();
@@ -200,19 +212,36 @@ export const PatientProfile: React.FC = () => {
                     <button className="btn-action btn-action-ghost" onClick={fetchPatientData}>
                         <RefreshCw size={14} /> Refresh
                     </button>
-                    <button className="btn-action btn-action-ghost">
-                        <Calendar size={14} /> Schedule Visit
-                    </button>
-                    {user?.role === 'Principal_Investigator' ? (
-                        <button className="btn-action btn-action-white">
-                            <PenTool size={14} /> Sign eCRF
-                        </button>
-                    ) : (
-                        <button className="btn-action btn-action-white">
-                            <Activity size={14} /> Enter Vitals
+                    {/* Consent button — visible for coordinators when patient is Screened with no consent */}
+                    {patient?.patient_status === 'Screened' && !patient?.enrollment_date && documents.consent?.length === 0 && (
+                        <button className="btn-action btn-action-white" onClick={async () => {
+                            if (user?.site_id) {
+                                try {
+                                    const data = await screeningAPI.getProtocolVersions(user.site_id);
+                                    setConsentVersions(data.versions || []);
+                                    if (data.versions?.length) setConsentForm(f => ({ ...f, consent_version: data.versions[0].version_number }));
+                                } catch { setConsentVersions([]); }
+                            }
+                            setShowConsentModal(true);
+                        }}>
+                            <Shield size={14} /> Record Consent
                         </button>
                     )}
-                    <button className="btn-action btn-action-danger">
+                    {/* Checklist button — visible when consent is on file but not enrolled */}
+                    {patient?.patient_status === 'Screened' && !patient?.enrollment_date && documents.consent?.length > 0 && (
+                        <button className="btn-action btn-action-white" onClick={() => navigate(`/patients/screening/${patient_id}`)}>
+                            <ClipboardList size={14} /> Eligibility Checklist
+                        </button>
+                    )}
+                    <button className="btn-action btn-action-ghost" onClick={() => alert("Scheduling system coming soon!")}>
+                        <Calendar size={14} /> Schedule Visit
+                    </button>
+                    {user?.role === 'Principal_Investigator' && (
+                        <button className="btn-action btn-action-white" onClick={() => alert("eCRF Signing coming in V2")}>
+                            <PenTool size={14} /> Sign eCRF
+                        </button>
+                    )}
+                    <button className="btn-action btn-action-danger" onClick={() => alert("AE Report Modal coming soon!")}>
                         <AlertCircle size={14} /> Report AE
                     </button>
                 </div>
@@ -528,16 +557,16 @@ export const PatientProfile: React.FC = () => {
                                                 <tr key={idx}>
                                                     <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>{new Date(l.result_date).toLocaleDateString()}</td>
                                                     <td style={{ fontWeight: 600, color: 'var(--gray-800)' }}>{l.test_name}</td>
-                                                    <td style={{ textAlign: 'right', fontWeight: 700, color: l.critical_result_flag === 'Y' ? 'var(--color-danger)' : 'var(--gray-800)' }}>
+                                                    <td style={{ textAlign: 'right', fontWeight: 700, color: l.critical_result_flag ? 'var(--color-danger)' : 'var(--gray-800)' }}>
                                                         {l.result_value}
                                                     </td>
-                                                    <td style={{ color: 'var(--gray-500)', fontSize: '0.8rem' }}>{l.unit_of_measure}</td>
+                                                    <td style={{ color: 'var(--gray-500)', fontSize: '0.8rem' }}>{l.unit_of_measure.replace('uL', 'µL')}</td>
                                                     <td style={{ textAlign: 'center', fontSize: '0.78rem', color: 'var(--gray-400)', fontFamily: 'var(--font-mono)' }}>
-                                                        {l.reference_low} – {l.reference_high}
+                                                        {l.reference_range_text}
                                                     </td>
                                                     <td style={{ textAlign: 'center' }}>
-                                                        <span className={getFlagChipClass(l.range_flag, l.critical_result_flag)}>
-                                                            {l.critical_result_flag === 'Y' ? 'CRIT' : l.range_flag || 'Normal'}
+                                                        <span className={getFlagChipClass(l.range_flag, l.critical_result_flag ? 'Y' : 'N')}>
+                                                            {l.critical_result_flag ? 'CRIT' : l.range_flag || 'Normal'}
                                                         </span>
                                                     </td>
                                                 </tr>
@@ -736,6 +765,61 @@ export const PatientProfile: React.FC = () => {
                     </div>
                 </div>
             </div>
+
+            {/* ── Consent Recording Modal ────────────────────────────── */}
+            {showConsentModal && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(3px)' }} onClick={() => setShowConsentModal(false)}>
+                    <div style={{ background: 'white', borderRadius: 12, boxShadow: '0 16px 48px rgba(0,0,0,0.18)', width: '90%', maxWidth: 480, overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid var(--gray-200)' }}>
+                            <h2 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>Record Informed Consent</h2>
+                            <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-500)' }} onClick={() => setShowConsentModal(false)}><X size={20} /></button>
+                        </div>
+                        <div style={{ padding: 20 }}>
+                            <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '10px 12px', marginBottom: 16, fontSize: '0.82rem', color: '#1e40af', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                                <Shield size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+                                <span>21 CFR Part 11 — By entering your password you attest that the patient has voluntarily signed the consent form.</span>
+                            </div>
+                            {consentError && <div style={{ padding: '8px 12px', background: '#fef2f2', color: '#b91c1c', borderRadius: 6, fontSize: '0.82rem', marginBottom: 12 }}>{consentError}</div>}
+                            <div style={{ marginBottom: 16 }}>
+                                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--gray-700)', marginBottom: 4 }}>Protocol Version *</label>
+                                <select style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--gray-300)', borderRadius: 6, fontSize: '0.875rem' }} value={consentForm.consent_version} onChange={e => setConsentForm(f => ({ ...f, consent_version: e.target.value }))}>
+                                    {consentVersions.length === 0 && <option value="">No versions found</option>}
+                                    {consentVersions.map((v: any) => <option key={v.protocol_id} value={v.version_number}>v{v.version_number} (Approved: {new Date(v.approval_date).toLocaleDateString()})</option>)}
+                                </select>
+                            </div>
+                            <div style={{ marginBottom: 16 }}>
+                                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--gray-700)', marginBottom: 4 }}>Date of Patient Signature *</label>
+                                <input type="date" style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--gray-300)', borderRadius: 6, fontSize: '0.875rem' }} max={new Date().toISOString().split('T')[0]} value={consentForm.consent_date} onChange={e => setConsentForm(f => ({ ...f, consent_date: e.target.value }))} />
+                            </div>
+                            <div style={{ marginBottom: 8 }}>
+                                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--gray-700)', marginBottom: 4 }}><Lock size={12} style={{ display: 'inline', marginRight: 4 }} /> E-Signature — Password *</label>
+                                <input type="password" style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--gray-300)', borderRadius: 6, fontSize: '0.875rem' }} placeholder="Re-enter your password to sign" value={consentForm.e_signature_password} onChange={e => setConsentForm(f => ({ ...f, e_signature_password: e.target.value }))} />
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '12px 20px', borderTop: '1px solid var(--gray-200)', background: 'var(--gray-50)' }}>
+                            <button className="btn-secondary" onClick={() => setShowConsentModal(false)}>Cancel</button>
+                            <button className="btn-primary" disabled={!consentForm.consent_version || !consentForm.consent_date || consentForm.e_signature_password.length < 6 || consentSubmitting} onClick={async () => {
+                                setConsentSubmitting(true); setConsentError(null);
+                                try {
+                                    await patientAPI.recordConsent(parseInt(patient_id!), {
+                                        consent_version: consentForm.consent_version,
+                                        consent_date: consentForm.consent_date,
+                                        e_signature_password: consentForm.e_signature_password,
+                                        recorded_by_user_id: user?.user_id ?? 0,
+                                    });
+                                    setShowConsentModal(false);
+                                    setConsentForm({ consent_version: '', consent_date: new Date().toISOString().split('T')[0], e_signature_password: '' });
+                                    fetchPatientData();
+                                } catch (err: any) {
+                                    setConsentError(err?.response?.data?.error || 'Failed to record consent.');
+                                } finally { setConsentSubmitting(false); }
+                            }}>
+                                {consentSubmitting ? 'Signing…' : 'Record Consent'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

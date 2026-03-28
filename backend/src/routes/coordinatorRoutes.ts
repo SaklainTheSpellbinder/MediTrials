@@ -60,7 +60,7 @@ router.get('/visits/today', requireSiteId, async (req, res) => {
         // Logic from 001_get_todays_visits.sql
         const query = `
             SELECT 
-                p.full_name,
+                p.trial_patient_id AS full_name,
                 p.trial_patient_id,
                 vs.visit_name,
                 pv.scheduled_date,
@@ -97,7 +97,7 @@ router.get('/labs/pending', requireSiteId, async (req, res) => {
         const query = `
             SELECT
                 lr.result_id,
-                p.full_name,
+                p.trial_patient_id AS full_name,
                 p.trial_patient_id,
                 lt.test_name,
                 lr.result_status,
