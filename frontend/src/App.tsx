@@ -54,8 +54,12 @@ import { LockManagement } from './pages/admin/LockManagement';
 import { AdminAuditTrail } from './pages/admin/AdminAuditTrail';
 import { SystemSettings } from './pages/admin/SystemSettings';
 
-const W = ({ children }: { children: React.ReactNode }) => <MainLayout>{children}</MainLayout>;
-
+const W = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading } = useAuth();
+  if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: '#6B7280' }}>Loading user session…</div>;
+  if (!user) return <Navigate to="/login" replace />;
+  return <MainLayout>{children}</MainLayout>;
+};
 function App() {
   const { user } = useAuth();
 
@@ -119,8 +123,8 @@ function App() {
       <Route path="/admin/locks" element={<W><LockManagement /></W>} />
       <Route path="/admin/settings" element={<W><SystemSettings /></W>} />
 
-      {/* Audit Trail — uses AdminAuditTrail for full traceability */}
-      <Route path="/audit" element={<W><AdminAuditTrail /></W>} />
+      {/* Audit Trail — role-aware: DM gets 21 CFR DM view, others get AdminAuditTrail */}
+      <Route path="/audit" element={<W>{user?.role === 'Data_Manager' ? <AuditTrail /> : <AdminAuditTrail />}</W>} />
 
       <Route path="*" element={<W><div className="p-8">Page Not Found</div></W>} />
     </Routes>
