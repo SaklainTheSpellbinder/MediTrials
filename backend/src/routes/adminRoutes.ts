@@ -16,7 +16,7 @@ function decodeUser(req: Request, res: Response): any | null {
 async function auditLog(tableName: string, recordId: number, action: string, newValues: any, userId: number, reason: string) {
     try {
         await pool.query(`
-            INSERT INTO meditrials.audit_trail_21cfr
+            INSERT INTO public.audit_trail_21cfr
                 (table_name, record_id, column_name, action_type, new_value, changed_by_user_id, change_reason)
             VALUES ($1, $2, $3, $4, $5, $6, $7)
         `, [tableName, recordId, '__json__', action, JSON.stringify(newValues), userId, reason]);
@@ -26,7 +26,7 @@ async function auditLog(tableName: string, recordId: number, action: string, new
 }
 
 async function refreshMVs() {
-    await pool.query(`SELECT meditrials.refresh_all_materialized_views()`);
+    await pool.query(`SELECT public.refresh_all_materialized_views()`);
 }
 
 // ── Auth helpers ──────────────────────────────────────────────────────────────
@@ -59,8 +59,8 @@ router.get('/admin', requireAdmin, async (req: Request, res: Response) => {
                    ct.trial_status, ct.therapeutic_area, ct.start_date,
                    ct.estimated_completion_date, ct.target_enrollment,
                    COUNT(DISTINCT ss.site_id) AS site_count
-            FROM meditrials.clinical_trials ct
-            LEFT JOIN meditrials.study_sites ss ON ss.trial_id = ct.trial_id
+            FROM public.clinical_trials ct
+            LEFT JOIN public.study_sites ss ON ss.trial_id = ct.trial_id
             GROUP BY ct.trial_id, ct.trial_nct_id, ct.trial_title, ct.trial_phase,
                      ct.trial_status, ct.therapeutic_area, ct.start_date,
                      ct.estimated_completion_date, ct.target_enrollment
@@ -72,14 +72,14 @@ router.get('/admin', requireAdmin, async (req: Request, res: Response) => {
                    SUM(current_enrollment)  AS current_enrollment,
                    SUM(target_enrollment)   AS target_enrollment,
                    ROUND(SUM(current_enrollment)::DECIMAL / NULLIF(SUM(target_enrollment),0) * 100, 1) AS enrollment_pct
-            FROM meditrials.mv_site_enrollment GROUP BY trial_id
+            FROM public.mv_site_enrollment GROUP BY trial_id
         `);
         const enrollMap: Record<number, any> = Object.fromEntries(enrollmentByTrial.rows.map((r: any) => [r.trial_id, r]));
 
         // mv_safety_overview — graceful fallback if MV doesn't exist yet
         let safetyOverviewRows: any[] = [];
         try {
-            const sovRes = await pool.query(`SELECT * FROM meditrials.mv_safety_overview`);
+            const sovRes = await pool.query(`SELECT * FROM public.mv_safety_overview`);
             safetyOverviewRows = sovRes.rows;
         } catch { /* MV may not exist or be empty */ }
         const safetyMap: Record<number, any> = Object.fromEntries(safetyOverviewRows.map((r: any) => [r.trial_id, r]));
@@ -91,7 +91,7 @@ router.get('/admin', requireAdmin, async (req: Request, res: Response) => {
             try {
                 const { rows: mr } = await pool.query(`
                     SELECT total_enrolled, screening_failure_rate, enrollment_velocity, projected_completion
-                    FROM (CALL meditrials.sp_calculate_enrollment_metrics($1, NULL, NULL, NULL, NULL, NULL)) AS r
+                    FROM (CALL public.sp_calculate_enrollment_metrics($1, NULL, NULL, NULL, NULL, NULL)) AS r
                 `, [trial.trial_id]);
                 metricsMap[trial.trial_id] = mr[0] ?? {};
             } catch { metricsMap[trial.trial_id] = {}; }
@@ -113,13 +113,13 @@ router.get('/admin', requireAdmin, async (req: Request, res: Response) => {
         const [systemHealth, userActivity, recentAudit, dataQuality] = await Promise.all([
             pool.query(`
                 SELECT
-                    (SELECT COUNT(*) FROM meditrials.clinical_trials WHERE trial_status IN ('Active','Recruiting')) AS active_trials,
-                    (SELECT COUNT(*) FROM meditrials.users WHERE is_active = TRUE) AS active_users,
-                    (SELECT COUNT(*) FROM meditrials.patients) AS total_patients,
-                    (SELECT COUNT(*) FROM meditrials.safety_alerts
+                    (SELECT COUNT(*) FROM public.clinical_trials WHERE trial_status IN ('Active','Recruiting')) AS active_trials,
+                    (SELECT COUNT(*) FROM public.users WHERE is_active = TRUE) AS active_users,
+                    (SELECT COUNT(*) FROM public.patients) AS total_patients,
+                    (SELECT COUNT(*) FROM public.safety_alerts
                      WHERE alert_severity IN ('CRITICAL','SEVERE')
                        AND alert_status = 'ACTIVE') AS unacknowledged_critical_alerts,
-                    (SELECT COUNT(*) FROM meditrials.data_locks WHERE unlock_date IS NULL) AS active_locks
+                    (SELECT COUNT(*) FROM public.data_locks WHERE unlock_date IS NULL) AS active_locks
             `),
             pool.query(`
                 SELECT
@@ -127,13 +127,13 @@ router.get('/admin', requireAdmin, async (req: Request, res: Response) => {
                     COUNT(*) FILTER (WHERE last_login >= CURRENT_DATE - 7)                     AS logged_in_7d,
                     COUNT(*) FILTER (WHERE last_login IS NULL OR last_login < CURRENT_DATE - 90) AS inactive_users,
                     0 AS failed_logins_24h
-                FROM meditrials.users WHERE is_active = TRUE
+                FROM public.users WHERE is_active = TRUE
             `),
             pool.query(`
                 SELECT at.audit_id, at.table_name, at.record_id, at.action_type,
                        at.new_value AS new_values, at.change_reason, at.change_timestamp, u.username AS changed_by
-                FROM meditrials.audit_trail_21cfr at
-                LEFT JOIN meditrials.users u ON u.user_id = at.changed_by_user_id
+                FROM public.audit_trail_21cfr at
+                LEFT JOIN public.users u ON u.user_id = at.changed_by_user_id
                 WHERE at.table_name IN ('users','clinical_trials','study_sites','data_locks','study_protocols')
                 ORDER BY at.change_timestamp DESC LIMIT 20
             `),
@@ -142,7 +142,7 @@ router.get('/admin', requireAdmin, async (req: Request, res: Response) => {
                     COUNT(*) AS total_patients,
                     ROUND(SUM(signed_forms)::DECIMAL / NULLIF(SUM(total_forms),0) * 100, 1) AS signed_pct,
                     COALESCE(SUM(open_queries),0) AS total_open_queries
-                FROM meditrials.mv_data_quality GROUP BY trial_id ORDER BY trial_id
+                FROM public.mv_data_quality GROUP BY trial_id ORDER BY trial_id
             `),
         ]);
 
@@ -172,9 +172,9 @@ router.get('/trials', requireAdmin, async (req: Request, res: Response) => {
         const { rows } = await pool.query(`
             SELECT ct.*, COUNT(DISTINCT ss.site_id) AS site_count,
                    COALESCE(SUM(mse.current_enrollment),0) AS current_enrollment
-            FROM meditrials.clinical_trials ct
-            LEFT JOIN meditrials.study_sites ss ON ss.trial_id = ct.trial_id
-            LEFT JOIN meditrials.mv_site_enrollment mse ON mse.trial_id = ct.trial_id
+            FROM public.clinical_trials ct
+            LEFT JOIN public.study_sites ss ON ss.trial_id = ct.trial_id
+            LEFT JOIN public.mv_site_enrollment mse ON mse.trial_id = ct.trial_id
             GROUP BY ct.trial_id ORDER BY ct.trial_id
         `);
         res.json(rows);
@@ -186,7 +186,7 @@ router.post('/trials', requireAdmin, async (req: Request, res: Response) => {
     const { trial_nct_id, trial_title, trial_phase, therapeutic_area, trial_status, start_date, estimated_completion_date, target_enrollment } = req.body;
     try {
         const { rows } = await pool.query(`
-            INSERT INTO meditrials.clinical_trials
+            INSERT INTO public.clinical_trials
                 (trial_nct_id, trial_title, trial_phase, therapeutic_area, trial_status, start_date, estimated_completion_date, target_enrollment)
             VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *
         `, [trial_nct_id, trial_title, trial_phase, therapeutic_area, trial_status, start_date, estimated_completion_date, target_enrollment]);
@@ -200,14 +200,14 @@ router.get('/trials/:trialId', requireAdmin, async (req: Request, res: Response)
     const { trialId } = req.params;
     try {
         const [trial, sites, protocols, arms, eligibility, visits, ecrfDefs, labTests] = await Promise.all([
-            pool.query(`SELECT * FROM meditrials.clinical_trials WHERE trial_id = $1`, [trialId]),
-            pool.query(`SELECT * FROM meditrials.mv_site_enrollment WHERE trial_id = $1 ORDER BY enrollment_pct DESC`, [trialId]),
-            pool.query(`SELECT * FROM meditrials.study_protocols WHERE trial_id = $1 ORDER BY version_number DESC`, [trialId]),
-            pool.query(`SELECT * FROM meditrials.treatment_arms WHERE trial_id = $1`, [trialId]),
-            pool.query(`SELECT * FROM meditrials.eligibility_criteria WHERE trial_id = $1 ORDER BY criterion_order`, [trialId]),
-            pool.query(`SELECT * FROM meditrials.visit_schedules WHERE trial_id = $1 ORDER BY visit_day`, [trialId]),
-            pool.query(`SELECT * FROM meditrials.ecrf_definitions WHERE trial_id = $1`, [trialId]),
-            pool.query(`SELECT * FROM meditrials.laboratory_tests WHERE trial_id = $1`, [trialId]),
+            pool.query(`SELECT * FROM public.clinical_trials WHERE trial_id = $1`, [trialId]),
+            pool.query(`SELECT * FROM public.mv_site_enrollment WHERE trial_id = $1 ORDER BY enrollment_pct DESC`, [trialId]),
+            pool.query(`SELECT * FROM public.study_protocols WHERE trial_id = $1 ORDER BY version_number DESC`, [trialId]),
+            pool.query(`SELECT * FROM public.treatment_arms WHERE trial_id = $1`, [trialId]),
+            pool.query(`SELECT * FROM public.eligibility_criteria WHERE trial_id = $1 ORDER BY criterion_order`, [trialId]),
+            pool.query(`SELECT * FROM public.visit_schedules WHERE trial_id = $1 ORDER BY visit_day`, [trialId]),
+            pool.query(`SELECT * FROM public.ecrf_definitions WHERE trial_id = $1`, [trialId]),
+            pool.query(`SELECT * FROM public.laboratory_tests WHERE trial_id = $1`, [trialId]),
         ]);
         if (!trial.rows[0]) return res.status(404).json({ error: 'Trial not found' });
         res.json({ trial: trial.rows[0], sites: sites.rows, protocols: protocols.rows, arms: arms.rows, eligibility: eligibility.rows, visits: visits.rows, ecrfDefs: ecrfDefs.rows, labTests: labTests.rows });
@@ -220,7 +220,7 @@ router.put('/trials/:trialId', requireAdmin, async (req: Request, res: Response)
     const { trial_nct_id, trial_title, trial_phase, therapeutic_area, trial_status, start_date, estimated_completion_date, target_enrollment } = req.body;
     try {
         const { rows } = await pool.query(`
-            UPDATE meditrials.clinical_trials SET
+            UPDATE public.clinical_trials SET
                 trial_nct_id=$1, trial_title=$2, trial_phase=$3, therapeutic_area=$4,
                 trial_status=$5, start_date=$6, estimated_completion_date=$7, target_enrollment=$8
             WHERE trial_id=$9 RETURNING *
@@ -235,7 +235,7 @@ router.delete('/trials/:trialId', requireAdmin, async (req: Request, res: Respon
     const user = (req as any).user;
     const { trialId } = req.params;
     try {
-        await pool.query(`UPDATE meditrials.clinical_trials SET trial_status='Archived' WHERE trial_id=$1`, [trialId]);
+        await pool.query(`UPDATE public.clinical_trials SET trial_status='Archived' WHERE trial_id=$1`, [trialId]);
         await auditLog('clinical_trials', parseInt(trialId), 'UPDATE', { trial_status: 'Archived' }, user.user_id, 'Admin archived trial');
         res.json({ success: true });
     } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -248,7 +248,7 @@ router.post('/trials/:trialId/sites', requireAdmin, async (req: Request, res: Re
     const { institution_name, country, target_enrollment, initiation_date } = req.body;
     try {
         const { rows } = await pool.query(`
-            INSERT INTO meditrials.study_sites (trial_id, institution_name, country, target_enrollment, initiation_date)
+            INSERT INTO public.study_sites (trial_id, institution_name, country, target_enrollment, initiation_date)
             VALUES ($1,$2,$3,$4,$5) RETURNING *
         `, [trialId, institution_name, country, target_enrollment, initiation_date]);
         await auditLog('study_sites', rows[0].site_id, 'INSERT', rows[0], user.user_id, 'Admin added site to trial');
@@ -262,7 +262,7 @@ router.post('/trials/:trialId/protocols', requireAdmin, async (req: Request, res
     const { version_number, amendment_number, effective_date, protocol_document } = req.body;
     try {
         const { rows } = await pool.query(`
-            INSERT INTO meditrials.study_protocols (trial_id, version_number, amendment_number, effective_date, protocol_document)
+            INSERT INTO public.study_protocols (trial_id, version_number, amendment_number, effective_date, protocol_document)
             VALUES ($1,$2,$3,$4,$5) RETURNING *
         `, [trialId, version_number, amendment_number, effective_date, protocol_document ?? null]);
         res.status(201).json(rows[0]);
@@ -274,7 +274,7 @@ router.post('/trials/:trialId/arms', requireAdmin, async (req: Request, res: Res
     const { arm_code, arm_description, blinding_level } = req.body;
     try {
         const { rows } = await pool.query(`
-            INSERT INTO meditrials.treatment_arms (trial_id, arm_code, arm_description, blinding_level)
+            INSERT INTO public.treatment_arms (trial_id, arm_code, arm_description, blinding_level)
             VALUES ($1,$2,$3,$4) RETURNING *
         `, [trialId, arm_code, arm_description, blinding_level]);
         res.status(201).json(rows[0]);
@@ -286,7 +286,7 @@ router.put('/trials/:trialId/arms/:armId', requireAdmin, async (req: Request, re
     const { arm_description, blinding_level } = req.body;
     try {
         const { rows } = await pool.query(`
-            UPDATE meditrials.treatment_arms SET arm_description=$1, blinding_level=$2 WHERE arm_id=$3 RETURNING *
+            UPDATE public.treatment_arms SET arm_description=$1, blinding_level=$2 WHERE arm_id=$3 RETURNING *
         `, [arm_description, blinding_level, armId]);
         res.json(rows[0]);
     } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -297,7 +297,7 @@ router.post('/trials/:trialId/eligibility', requireAdmin, async (req: Request, r
     const { criterion_text, criterion_type, criterion_order } = req.body;
     try {
         const { rows } = await pool.query(`
-            INSERT INTO meditrials.eligibility_criteria (trial_id, criterion_text, criterion_type, criterion_order)
+            INSERT INTO public.eligibility_criteria (trial_id, criterion_text, criterion_type, criterion_order)
             VALUES ($1,$2,$3,$4) RETURNING *
         `, [trialId, criterion_text, criterion_type, criterion_order]);
         res.status(201).json(rows[0]);
@@ -307,7 +307,7 @@ router.post('/trials/:trialId/eligibility', requireAdmin, async (req: Request, r
 router.delete('/trials/:trialId/eligibility/:criterionId', requireAdmin, async (req: Request, res: Response) => {
     const { trialId, criterionId } = req.params;
     try {
-        await pool.query(`DELETE FROM meditrials.eligibility_criteria WHERE criterion_id=$1 AND trial_id=$2`, [criterionId, trialId]);
+        await pool.query(`DELETE FROM public.eligibility_criteria WHERE criterion_id=$1 AND trial_id=$2`, [criterionId, trialId]);
         res.json({ success: true });
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -317,7 +317,7 @@ router.post('/trials/:trialId/visits', requireAdmin, async (req: Request, res: R
     const { visit_name, visit_day, window_before_days, window_after_days, is_required } = req.body;
     try {
         const { rows } = await pool.query(`
-            INSERT INTO meditrials.visit_schedules (trial_id, visit_name, visit_day, window_before_days, window_after_days, is_required)
+            INSERT INTO public.visit_schedules (trial_id, visit_name, visit_day, window_before_days, window_after_days, is_required)
             VALUES ($1,$2,$3,$4,$5,$6) RETURNING *
         `, [trialId, visit_name, visit_day, window_before_days, window_after_days, is_required]);
         res.status(201).json(rows[0]);
@@ -329,7 +329,7 @@ router.post('/trials/:trialId/lab-tests', requireAdmin, async (req: Request, res
     const { test_name, test_code_loinc, unit_of_measure, reference_low, reference_high, critical_low_value, critical_high_value } = req.body;
     try {
         const { rows } = await pool.query(`
-            INSERT INTO meditrials.laboratory_tests
+            INSERT INTO public.laboratory_tests
                 (trial_id, test_name, test_code_loinc, unit_of_measure, reference_low, reference_high, critical_low_value, critical_high_value)
             VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *
         `, [trialId, test_name, test_code_loinc, unit_of_measure, reference_low, reference_high, critical_low_value, critical_high_value]);
@@ -347,9 +347,9 @@ router.get('/sites', requireAdmin, async (req: Request, res: Response) => {
         const params = trial_id ? [trial_id] : [];
         const { rows } = await pool.query(`
             SELECT mse.*, ss.site_status, u.username AS pi_name
-            FROM meditrials.mv_site_enrollment mse
-            JOIN meditrials.study_sites ss ON ss.site_id = mse.site_id
-            LEFT JOIN meditrials.users u ON u.site_id = mse.site_id AND u.role = 'Principal_Investigator'
+            FROM public.mv_site_enrollment mse
+            JOIN public.study_sites ss ON ss.site_id = mse.site_id
+            LEFT JOIN public.users u ON u.site_id = mse.site_id AND u.role = 'Principal_Investigator'
             ${filter}
             ORDER BY mse.trial_id, mse.enrollment_pct DESC
         `, params);
@@ -361,14 +361,14 @@ router.get('/sites/:siteId', requireAdmin, async (req: Request, res: Response) =
     const { siteId } = req.params;
     try {
         const [site, enrollment, siteUsers, queryRes] = await Promise.all([
-            pool.query(`SELECT * FROM meditrials.study_sites WHERE site_id = $1`, [siteId]),
-            pool.query(`SELECT * FROM meditrials.mv_site_enrollment WHERE site_id = $1`, [siteId]),
-            pool.query(`SELECT user_id, username, email, role, last_login, is_active FROM meditrials.users WHERE site_id = $1`, [siteId]),
-            pool.query(`SELECT * FROM meditrials.mv_query_resolution_time WHERE site_id = $1`, [siteId]),
+            pool.query(`SELECT * FROM public.study_sites WHERE site_id = $1`, [siteId]),
+            pool.query(`SELECT * FROM public.mv_site_enrollment WHERE site_id = $1`, [siteId]),
+            pool.query(`SELECT user_id, username, email, role, last_login, is_active FROM public.users WHERE site_id = $1`, [siteId]),
+            pool.query(`SELECT * FROM public.mv_query_resolution_time WHERE site_id = $1`, [siteId]),
         ]);
         let perf: any = null;
         try {
-            const perfRes = await pool.query(`SELECT * FROM meditrials.mv_site_performance WHERE site_id = $1 ORDER BY period_end_date DESC LIMIT 1`, [siteId]);
+            const perfRes = await pool.query(`SELECT * FROM public.mv_site_performance WHERE site_id = $1 ORDER BY period_end_date DESC LIMIT 1`, [siteId]);
             perf = perfRes.rows[0] ?? null;
         } catch { /* MV may not exist */ }
         res.json({ site: site.rows[0], enrollment: enrollment.rows[0], performance: perf, users: siteUsers.rows, queryResolution: queryRes.rows[0] });
@@ -381,7 +381,7 @@ router.put('/sites/:siteId', requireAdmin, async (req: Request, res: Response) =
     const { institution_name, country, target_enrollment, site_status, initiation_date } = req.body;
     try {
         const { rows } = await pool.query(`
-            UPDATE meditrials.study_sites SET institution_name=$1, country=$2, target_enrollment=$3, site_status=$4, initiation_date=$5
+            UPDATE public.study_sites SET institution_name=$1, country=$2, target_enrollment=$3, site_status=$4, initiation_date=$5
             WHERE site_id=$6 RETURNING *
         `, [institution_name, country, target_enrollment, site_status, initiation_date, siteId]);
         await auditLog('study_sites', parseInt(siteId), 'UPDATE', rows[0], user.user_id, 'Admin updated site');
@@ -395,7 +395,7 @@ router.put('/sites/:siteId/suspend', requireAdmin, async (req: Request, res: Res
     const { siteId } = req.params;
     const { reason } = req.body;
     try {
-        await pool.query(`UPDATE meditrials.study_sites SET site_status='Suspended' WHERE site_id=$1`, [siteId]);
+        await pool.query(`UPDATE public.study_sites SET site_status='Suspended' WHERE site_id=$1`, [siteId]);
         await auditLog('study_sites', parseInt(siteId), 'UPDATE', { site_status: 'Suspended', reason }, user.user_id, reason || 'Admin suspended site');
         res.json({ success: true });
     } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -412,8 +412,8 @@ router.get('/users', requireAdmin, async (req: Request, res: Response) => {
             SELECT u.user_id, u.username, u.email, u.role, u.site_id,
                    ss.institution_name AS site_name, u.is_active, u.mfa_enabled,
                    u.last_login, u.created_at, 0 AS failed_login_attempts
-            FROM meditrials.users u
-            LEFT JOIN meditrials.study_sites ss ON ss.site_id = u.site_id
+            FROM public.users u
+            LEFT JOIN public.study_sites ss ON ss.site_id = u.site_id
             WHERE (NULLIF($1,'') IS NULL OR u.role = $1)
               AND ($2::BOOLEAN IS NULL OR u.is_active = $2)
               AND ($3::INT IS NULL OR u.site_id = $3)
@@ -434,7 +434,7 @@ router.post('/users', requireAdmin, async (req: Request, res: Response) => {
 
         const passwordHash = await bcrypt.hash(password, 12);
         const { rows } = await pool.query(`
-            INSERT INTO meditrials.users
+            INSERT INTO public.users
                 (username, email, role, site_id, password_hash, mfa_enabled, is_active, force_password_change)
             VALUES ($1,$2,$3,$4,$5,$6,TRUE,TRUE)
             RETURNING user_id, username, email, role, site_id, is_active, mfa_enabled
@@ -457,7 +457,7 @@ router.put('/users/:userId', requireAdmin, async (req: Request, res: Response) =
         if (!siteRequired && site_id) return res.status(400).json({ error: `site_id must be null for role ${role}` });
 
         const { rows } = await pool.query(`
-            UPDATE meditrials.users SET username=$1, email=$2, role=$3, site_id=$4, is_active=$5, mfa_enabled=$6
+            UPDATE public.users SET username=$1, email=$2, role=$3, site_id=$4, is_active=$5, mfa_enabled=$6
             WHERE user_id=$7
             RETURNING user_id, username, email, role, site_id, is_active, mfa_enabled
         `, [username, email, role, site_id ?? null, is_active, mfa_enabled, userId]);
@@ -470,7 +470,7 @@ router.put('/users/:userId/activate', requireAdmin, async (req: Request, res: Re
     const user = (req as any).user;
     const { userId } = req.params;
     try {
-        await pool.query(`UPDATE meditrials.users SET is_active=TRUE WHERE user_id=$1`, [userId]);
+        await pool.query(`UPDATE public.users SET is_active=TRUE WHERE user_id=$1`, [userId]);
         await auditLog('users', parseInt(userId), 'UPDATE', { is_active: true }, user.user_id, 'Admin activated user');
         res.json({ success: true });
     } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -480,7 +480,7 @@ router.put('/users/:userId/deactivate', requireAdmin, async (req: Request, res: 
     const user = (req as any).user;
     const { userId } = req.params;
     try {
-        await pool.query(`UPDATE meditrials.users SET is_active=FALSE WHERE user_id=$1`, [userId]);
+        await pool.query(`UPDATE public.users SET is_active=FALSE WHERE user_id=$1`, [userId]);
         await auditLog('users', parseInt(userId), 'UPDATE', { is_active: false }, user.user_id, 'Admin deactivated user');
         res.json({ success: true });
     } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -494,7 +494,7 @@ router.post('/users/:userId/reset-password', requireAdmin, async (req: Request, 
     try {
         const hash = await bcrypt.hash(new_password, 12);
         await pool.query(`
-            UPDATE meditrials.users SET password_hash=$1, force_password_change=TRUE,
+            UPDATE public.users SET password_hash=$1, force_password_change=TRUE,
                 password_reset_token=NULL, password_reset_expires=NULL
             WHERE user_id=$2
         `, [hash, userId]);
@@ -507,7 +507,7 @@ router.get('/users/:userId/access-log', requireAdmin, async (req: Request, res: 
     const { userId } = req.params;
     try {
         const { rows } = await pool.query(`
-            SELECT * FROM meditrials.user_access_log WHERE user_id=$1 ORDER BY access_time DESC LIMIT 100
+            SELECT * FROM public.user_access_log WHERE user_id=$1 ORDER BY access_time DESC LIMIT 100
         `, [userId]);
         res.json(rows);
     } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -521,9 +521,9 @@ router.get('/locks', requireAdmin, async (req: Request, res: Response) => {
         const { rows } = await pool.query(`
             SELECT dl.lock_id, ct.trial_title, dl.lock_type, dl.lock_date, dl.unlock_date,
                    dl.snapshot_hash, u.username AS locked_by
-            FROM meditrials.data_locks dl
-            JOIN meditrials.clinical_trials ct ON ct.trial_id = dl.trial_id
-            LEFT JOIN meditrials.users u ON u.user_id = dl.locked_by_user_id
+            FROM public.data_locks dl
+            JOIN public.clinical_trials ct ON ct.trial_id = dl.trial_id
+            LEFT JOIN public.users u ON u.user_id = dl.locked_by_user_id
             ORDER BY dl.lock_date DESC
         `);
         res.json(rows);
@@ -534,7 +534,7 @@ router.post('/locks', requireAdmin, async (req: Request, res: Response) => {
     const user = (req as any).user;
     const { trial_id, lock_type } = req.body;
     try {
-        await pool.query(`CALL meditrials.sp_lock_database($1, $2, $3)`, [trial_id, lock_type, user.user_id]);
+        await pool.query(`CALL public.sp_lock_database($1, $2, $3)`, [trial_id, lock_type, user.user_id]);
         await auditLog('data_locks', trial_id, 'INSERT', { trial_id, lock_type }, user.user_id, `Admin applied ${lock_type} lock`);
         res.json({ success: true });
     } catch (err: any) {
@@ -550,9 +550,9 @@ router.put('/locks/:lockId/unlock', requireAdmin, async (req: Request, res: Resp
     const { reason } = req.body;
     if (!reason) return res.status(400).json({ error: 'Unlock reason is required (21 CFR Part 11)' });
     try {
-        await pool.query(`UPDATE meditrials.data_locks SET unlock_date=NOW() WHERE lock_id=$1 AND unlock_date IS NULL`, [lockId]);
+        await pool.query(`UPDATE public.data_locks SET unlock_date=NOW() WHERE lock_id=$1 AND unlock_date IS NULL`, [lockId]);
         await pool.query(`
-            INSERT INTO meditrials.audit_trail_21cfr (table_name, record_id, action_type, new_values, changed_by_user_id, change_reason)
+            INSERT INTO public.audit_trail_21cfr (table_name, record_id, action_type, new_values, changed_by_user_id, change_reason)
             VALUES ('data_locks', $1, 'UPDATE', '{"unlock_date":"now"}'::JSONB, $2, $3)
         `, [lockId, user.user_id, reason]);
         res.json({ success: true });
@@ -565,11 +565,11 @@ router.get('/locks/:lockId/verify', requireAdmin, async (req: Request, res: Resp
         const { rows } = await pool.query(`
             SELECT dl.snapshot_hash, dl.trial_id,
                    MD5(COALESCE(p.patient_data::TEXT,'')) AS computed_hash
-            FROM meditrials.data_locks dl
+            FROM public.data_locks dl
             LEFT JOIN LATERAL (
                 SELECT json_agg(row_to_json(p.*) ORDER BY p.patient_id) AS patient_data
-                FROM meditrials.patients p
-                JOIN meditrials.study_sites ss ON ss.site_id = p.site_id
+                FROM public.patients p
+                JOIN public.study_sites ss ON ss.site_id = p.site_id
                 WHERE ss.trial_id = dl.trial_id
             ) p ON TRUE
             WHERE dl.lock_id = $1
@@ -590,8 +590,8 @@ router.get('/audit', requireAdmin, async (req: Request, res: Response) => {
     try {
         const { rows } = await pool.query(`
             SELECT at.*, u.username AS changed_by
-            FROM meditrials.audit_trail_21cfr at
-            LEFT JOIN meditrials.users u ON u.user_id = at.changed_by_user_id
+            FROM public.audit_trail_21cfr at
+            LEFT JOIN public.users u ON u.user_id = at.changed_by_user_id
             WHERE (NULLIF($1,'') IS NULL OR at.table_name = $1)
               AND ($2::INT IS NULL OR at.changed_by_user_id = $2)
               AND (NULLIF($3,'') IS NULL OR at.action_type = $3)
@@ -625,12 +625,12 @@ router.get('/settings', requireAdmin, async (req: Request, res: Response) => {
     try {
         // Ensure table exists
         await pool.query(`
-            CREATE TABLE IF NOT EXISTS meditrials.system_settings (
+            CREATE TABLE IF NOT EXISTS public.system_settings (
                 key VARCHAR PRIMARY KEY, value JSONB,
                 updated_by INTEGER, updated_at TIMESTAMPTZ DEFAULT NOW()
             )
         `);
-        const { rows } = await pool.query(`SELECT key, value, updated_at FROM meditrials.system_settings ORDER BY key`);
+        const { rows } = await pool.query(`SELECT key, value, updated_at FROM public.system_settings ORDER BY key`);
         res.json(rows);
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -640,7 +640,7 @@ router.put('/settings', requireAdmin, async (req: Request, res: Response) => {
     const { key, value } = req.body;
     try {
         await pool.query(`
-            INSERT INTO meditrials.system_settings (key, value, updated_by, updated_at)
+            INSERT INTO public.system_settings (key, value, updated_by, updated_at)
             VALUES ($1, $2::JSONB, $3, NOW())
             ON CONFLICT (key) DO UPDATE SET value=$2::JSONB, updated_by=$3, updated_at=NOW()
         `, [key, JSON.stringify(value), user.user_id]);

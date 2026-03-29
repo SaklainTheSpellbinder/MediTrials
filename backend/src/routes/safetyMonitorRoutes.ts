@@ -34,10 +34,10 @@ router.get('/safety-monitor', requireSafetyMonitor, async (req: any, res: any) =
             `SELECT trial_id, trial_title, trial_status, total_ae, grade3plus_ae,
                     total_sae, ae_deaths, total_alerts, active_alerts,
                     total_deviations, critical_deviations
-             FROM meditrials.mv_safety_overview ORDER BY trial_id`
+             FROM public.mv_safety_overview ORDER BY trial_id`
         );
         const criticalCount = await pool.query(
-            `SELECT COUNT(*) AS cnt FROM meditrials.safety_alerts
+            `SELECT COUNT(*) AS cnt FROM public.safety_alerts
              WHERE alert_severity IN ('CRITICAL','SEVERE') AND alert_status = 'ACTIVE'`
         );
         const saeDeadlines = await pool.query(
@@ -48,24 +48,24 @@ router.get('/safety-monitor', requireSafetyMonitor, async (req: any, res: any) =
                COUNT(*) FILTER (WHERE report_deadline_date < CURRENT_DATE
                                  AND sae_status NOT IN ('Reported','Closed')
                                  AND report_submitted_date IS NULL) AS overdue_count
-             FROM meditrials.serious_adverse_events`
+             FROM public.serious_adverse_events`
         );
         const aeTrend = await pool.query(
             `SELECT
                COUNT(*) FILTER (WHERE ae_start_date >= date_trunc('month', CURRENT_DATE)) AS this_month,
                COUNT(*) FILTER (WHERE ae_start_date >= date_trunc('month', CURRENT_DATE - INTERVAL '1 month')
                                   AND ae_start_date < date_trunc('month', CURRENT_DATE)) AS last_month
-             FROM meditrials.adverse_events`
+             FROM public.adverse_events`
         );
         const overdueSaes = await pool.query(
             `SELECT sae.sae_report_number, p.trial_patient_id, ss.institution_name AS site_name,
                     ae.ae_term, ae.severity_grade, sae.report_deadline_date,
                     (CURRENT_DATE - sae.report_deadline_date) AS days_overdue,
                     EXTRACT(EPOCH FROM (sae.report_deadline_date::TIMESTAMPTZ - NOW())) / 3600 AS hours_until_deadline
-             FROM meditrials.serious_adverse_events sae
-             JOIN meditrials.adverse_events ae ON ae.ae_id = sae.ae_id
-             JOIN meditrials.patients p ON p.patient_id = ae.patient_id
-             JOIN meditrials.study_sites ss ON ss.site_id = p.site_id
+             FROM public.serious_adverse_events sae
+             JOIN public.adverse_events ae ON ae.ae_id = sae.ae_id
+             JOIN public.patients p ON p.patient_id = ae.patient_id
+             JOIN public.study_sites ss ON ss.site_id = p.site_id
              WHERE sae.report_deadline_date <= CURRENT_DATE + 3
                AND sae.sae_status NOT IN ('Reported','Closed')
                AND sae.report_submitted_date IS NULL
@@ -75,9 +75,9 @@ router.get('/safety-monitor', requireSafetyMonitor, async (req: any, res: any) =
             `SELECT sa.alert_id, p.trial_patient_id, ss.institution_name AS site_name,
                     sa.alert_code, sa.alert_message, sa.alert_severity, sa.created_at,
                     FLOOR(EXTRACT(EPOCH FROM (NOW() - sa.created_at)) / 60)::INT AS minutes_open
-             FROM meditrials.safety_alerts sa
-             JOIN meditrials.patients p ON p.patient_id = sa.patient_id
-             JOIN meditrials.study_sites ss ON ss.site_id = p.site_id
+             FROM public.safety_alerts sa
+             JOIN public.patients p ON p.patient_id = sa.patient_id
+             JOIN public.study_sites ss ON ss.site_id = p.site_id
              WHERE sa.alert_severity IN ('CRITICAL','SEVERE') AND sa.alert_status = 'ACTIVE'
              ORDER BY sa.created_at DESC LIMIT 20`
         );
@@ -88,10 +88,10 @@ router.get('/safety-monitor', requireSafetyMonitor, async (req: any, res: any) =
                COUNT(*) FILTER (WHERE ae.severity_grade = 3) AS grade3,
                COUNT(*) FILTER (WHERE ae.severity_grade = 4) AS grade4,
                COUNT(*) FILTER (WHERE ae.severity_grade = 5) AS grade5
-             FROM meditrials.adverse_events ae
-             JOIN meditrials.patients p ON p.patient_id = ae.patient_id
-             JOIN meditrials.study_sites ss ON ss.site_id = p.site_id
-             JOIN meditrials.clinical_trials ct ON ct.trial_id = ss.trial_id
+             FROM public.adverse_events ae
+             JOIN public.patients p ON p.patient_id = ae.patient_id
+             JOIN public.study_sites ss ON ss.site_id = p.site_id
+             JOIN public.clinical_trials ct ON ct.trial_id = ss.trial_id
              WHERE ae.ae_start_date >= NOW() - INTERVAL '30 days'
              GROUP BY ss.trial_id, ct.trial_title ORDER BY ss.trial_id`
         );
@@ -104,12 +104,12 @@ router.get('/safety-monitor', requireSafetyMonitor, async (req: any, res: any) =
                 COUNT(DISTINCT sae.sae_id) FILTER (WHERE sae.sae_status = 'Open') as open_saes,
                 COUNT(DISTINCT sa.alert_id) FILTER (WHERE sa.alert_status = 'ACTIVE' AND sa.alert_severity IN ('CRITICAL','SEVERE')) as critical_alerts,
                 COUNT(DISTINCT sae.sae_id) FILTER (WHERE sae.report_deadline_date < CURRENT_DATE AND sae.report_submitted_date IS NULL) as overdue_saes
-            FROM meditrials.clinical_trials ct
-            JOIN meditrials.study_sites ss ON ss.trial_id = ct.trial_id
-            JOIN meditrials.patients p ON p.site_id = ss.site_id
-            LEFT JOIN meditrials.adverse_events ae ON ae.patient_id = p.patient_id AND ae.ae_start_date >= DATE_TRUNC('month', CURRENT_DATE)
-            LEFT JOIN meditrials.serious_adverse_events sae ON sae.ae_id = ae.ae_id
-            LEFT JOIN meditrials.safety_alerts sa ON sa.patient_id = p.patient_id
+            FROM public.clinical_trials ct
+            JOIN public.study_sites ss ON ss.trial_id = ct.trial_id
+            JOIN public.patients p ON p.site_id = ss.site_id
+            LEFT JOIN public.adverse_events ae ON ae.patient_id = p.patient_id AND ae.ae_start_date >= DATE_TRUNC('month', CURRENT_DATE)
+            LEFT JOIN public.serious_adverse_events sae ON sae.ae_id = ae.ae_id
+            LEFT JOIN public.safety_alerts sa ON sa.patient_id = p.patient_id
             GROUP BY ct.trial_id, ct.trial_title`
         );
 
@@ -117,7 +117,7 @@ router.get('/safety-monitor', requireSafetyMonitor, async (req: any, res: any) =
         const systemEvents = await pool.query(
             `SELECT at.audit_id, at.table_name, at.action_type, at.change_reason,
                     at.changed_at, at.changed_by_user_id
-             FROM meditrials.audit_trail_21cfr at
+             FROM public.audit_trail_21cfr at
              WHERE at.action_type = 'INSERT'
              ORDER BY at.changed_at DESC LIMIT 10`
         );
@@ -128,7 +128,7 @@ router.get('/safety-monitor', requireSafetyMonitor, async (req: any, res: any) =
             try {
                 // INOUT procedure: pass NULL for the INOUT param; pg returns it in rows[0].signals
                 const { rows: sr } = await pool.query(
-                    `CALL meditrials.sp_detect_safety_signals($1, NULL::JSONB)`, [tid]
+                    `CALL public.sp_detect_safety_signals($1, NULL::JSONB)`, [tid]
                 );
                 const sigArray = sr[0]?.signals ?? [];
                 (Array.isArray(sigArray) ? sigArray : []).forEach((s: any) =>
@@ -143,9 +143,9 @@ router.get('/safety-monitor', requireSafetyMonitor, async (req: any, res: any) =
             `SELECT sae.sae_id, sae.sae_report_number, p.trial_patient_id,
                     ae.ae_term, sae.report_deadline_date, sae.sae_status,
                     EXTRACT(EPOCH FROM (sae.report_deadline_date::TIMESTAMPTZ - NOW())) / 3600 AS hours_until_deadline
-             FROM meditrials.serious_adverse_events sae
-             JOIN meditrials.adverse_events ae ON ae.ae_id = sae.ae_id
-             JOIN meditrials.patients p ON p.patient_id = ae.patient_id
+             FROM public.serious_adverse_events sae
+             JOIN public.adverse_events ae ON ae.ae_id = sae.ae_id
+             JOIN public.patients p ON p.patient_id = ae.patient_id
              WHERE sae.sae_status IN ('Open','Under Investigation')
              ORDER BY sae.report_deadline_date ASC`
         );
@@ -189,13 +189,13 @@ router.get('/patients', requireSafetyMonitor, async (req: any, res: any) => {
                     MAX(sa.alert_severity) FILTER (WHERE sa.alert_status = 'ACTIVE') as max_alert_severity,
                     MAX(pv.visit_date) as last_visit_date,
                     EXTRACT(YEAR FROM AGE(p.date_of_birth))::INT as age
-             FROM meditrials.patients p
-             JOIN meditrials.study_sites ss ON ss.site_id = p.site_id
-             JOIN meditrials.clinical_trials ct ON ct.trial_id = ss.trial_id
-             LEFT JOIN meditrials.randomization_assignments ra ON ra.patient_id = p.patient_id
-             LEFT JOIN meditrials.treatment_arms ta ON ta.arm_id = ra.arm_id
-             LEFT JOIN meditrials.safety_alerts sa ON sa.patient_id = p.patient_id
-             LEFT JOIN meditrials.patient_visits pv ON pv.patient_id = p.patient_id
+             FROM public.patients p
+             JOIN public.study_sites ss ON ss.site_id = p.site_id
+             JOIN public.clinical_trials ct ON ct.trial_id = ss.trial_id
+             LEFT JOIN public.randomization_assignments ra ON ra.patient_id = p.patient_id
+             LEFT JOIN public.treatment_arms ta ON ta.arm_id = ra.arm_id
+             LEFT JOIN public.safety_alerts sa ON sa.patient_id = p.patient_id
+             LEFT JOIN public.patient_visits pv ON pv.patient_id = p.patient_id
              WHERE ($1::INT IS NULL OR p.site_id = $1)
                AND ($2::TEXT IS NULL OR p.patient_status = $2)
                AND ($3::TEXT IS NULL OR p.trial_patient_id ILIKE '%' || $3 || '%')
@@ -227,7 +227,7 @@ router.get('/patients', requireSafetyMonitor, async (req: any, res: any) => {
 router.get('/patients/:patientId/ae-summary', requireSafetyMonitor, async (req: any, res: any) => {
     try {
         const { rows } = await pool.query(
-            `SELECT * FROM meditrials.get_patient_ae_summary($1)`,
+            `SELECT * FROM public.get_patient_ae_summary($1)`,
             [parseInt(req.params.patientId)]
         );
         res.json(rows[0] ?? {});
@@ -251,11 +251,11 @@ router.get('/alerts', requireSafetyMonitor, async (req: any, res: any) => {
                     EXTRACT(EPOCH FROM (NOW() - sa.created_at))/3600 AS hours_open,
                     lr.test_value, lr.reference_range_low, lr.reference_range_high, lr.critical_result_flag,
                     lt.test_name
-             FROM meditrials.safety_alerts sa
-             JOIN meditrials.patients p ON p.patient_id = sa.patient_id
-             JOIN meditrials.study_sites ss ON ss.site_id = p.site_id
-             LEFT JOIN meditrials.lab_results lr ON lr.lab_result_id = sa.source_record_id AND sa.source_type = 'LAB_RESULT'
-             LEFT JOIN meditrials.laboratory_tests lt ON lt.test_id = lr.test_id
+             FROM public.safety_alerts sa
+             JOIN public.patients p ON p.patient_id = sa.patient_id
+             JOIN public.study_sites ss ON ss.site_id = p.site_id
+             LEFT JOIN public.lab_results lr ON lr.lab_result_id = sa.source_record_id AND sa.source_type = 'LAB_RESULT'
+             LEFT JOIN public.laboratory_tests lt ON lt.test_id = lr.test_id
              WHERE ($1::TEXT IS NULL OR sa.alert_severity = $1)
                AND ($2::TEXT IS NULL OR sa.alert_status = $2)
                AND ($3::INT IS NULL OR ss.site_id = $3)
@@ -277,7 +277,7 @@ router.get('/alerts', requireSafetyMonitor, async (req: any, res: any) => {
                COUNT(*) FILTER (WHERE alert_status = 'ACTIVE' AND alert_severity = 'SEVERE') as severe,
                COUNT(*) FILTER (WHERE alert_status = 'ACTIVE' AND alert_severity = 'WARNING') as warning,
                COUNT(*) FILTER (WHERE alert_status = 'ACTIVE' AND alert_severity = 'INFO') as info
-             FROM meditrials.safety_alerts`
+             FROM public.safety_alerts`
         );
         res.json({ alerts: rows, kpis: counts.rows[0] });
     } catch (err: any) {
@@ -297,11 +297,11 @@ router.put('/alerts/:alertId/acknowledge', requireSafetyMonitor, async (req: any
         if (!reason) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'reason required' }); }
         await set21CFRVars(client, userId, reason);
         await client.query(
-            `UPDATE meditrials.safety_alerts SET alert_status='ACKNOWLEDGED', acknowledged_by_user_id=$1, updated_at=NOW() WHERE alert_id=$2`,
+            `UPDATE public.safety_alerts SET alert_status='ACKNOWLEDGED', acknowledged_by_user_id=$1, updated_at=NOW() WHERE alert_id=$2`,
             [userId, alertId]
         );
         await client.query(
-            `INSERT INTO meditrials.audit_trail_21cfr (table_name,record_id,action_type,new_values,changed_by_user_id,change_reason)
+            `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,new_values,changed_by_user_id,change_reason)
              VALUES ('safety_alerts',$1,'UPDATE',jsonb_build_object('alert_status','ACKNOWLEDGED','reason',$2),$3,$2)`,
             [alertId, reason, userId]
         );
@@ -325,14 +325,14 @@ router.put('/alerts/:alertId/escalate', requireSafetyMonitor, async (req: any, r
         if (!reason) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'reason required' }); }
         await set21CFRVars(client, userId, reason);
         await client.query(
-            `UPDATE meditrials.safety_alerts
+            `UPDATE public.safety_alerts
              SET escalation_level = COALESCE($1, escalation_level + 1),
                  escalated_at = NOW(), alert_status = 'ESCALATED', updated_at = NOW()
              WHERE alert_id = $2`,
             [escalation_level ?? null, alertId]
         );
         await client.query(
-            `INSERT INTO meditrials.audit_trail_21cfr (table_name,record_id,action_type,new_values,changed_by_user_id,change_reason)
+            `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,new_values,changed_by_user_id,change_reason)
              VALUES ('safety_alerts',$1,'UPDATE',jsonb_build_object('action','ESCALATED','reason',$2),$3,$2)`,
             [alertId, reason, userId]
         );
@@ -355,11 +355,11 @@ router.put('/alerts/:alertId/dismiss', requireSafetyMonitor, async (req: any, re
         if (!reason) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'reason required' }); }
         await set21CFRVars(client, userId, reason);
         await client.query(
-            `UPDATE meditrials.safety_alerts SET alert_status='DISMISSED', updated_at=NOW() WHERE alert_id=$1`,
+            `UPDATE public.safety_alerts SET alert_status='DISMISSED', updated_at=NOW() WHERE alert_id=$1`,
             [alertId]
         );
         await client.query(
-            `INSERT INTO meditrials.audit_trail_21cfr (table_name,record_id,action_type,new_values,changed_by_user_id,change_reason)
+            `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,new_values,changed_by_user_id,change_reason)
              VALUES ('safety_alerts',$1,'UPDATE',jsonb_build_object('alert_status','DISMISSED','reason',$2),$3,$2)`,
             [alertId, reason, userId]
         );
@@ -384,11 +384,11 @@ router.get('/ae', requireSafetyMonitor, async (req: any, res: any) => {
                     ae.results_in_death, ae.life_threatening, ae.requires_hospitalization,
                     ae.treatment_related, ae.status,
                     sae.sae_id, sae.sae_report_number, sae.sae_status, sae.report_deadline_date
-             FROM meditrials.adverse_events ae
-             JOIN meditrials.patients p ON p.patient_id = ae.patient_id
-             JOIN meditrials.study_sites ss ON ss.site_id = p.site_id
-             JOIN meditrials.clinical_trials ct ON ct.trial_id = ss.trial_id
-             LEFT JOIN meditrials.serious_adverse_events sae ON sae.ae_id = ae.ae_id
+             FROM public.adverse_events ae
+             JOIN public.patients p ON p.patient_id = ae.patient_id
+             JOIN public.study_sites ss ON ss.site_id = p.site_id
+             JOIN public.clinical_trials ct ON ct.trial_id = ss.trial_id
+             LEFT JOIN public.serious_adverse_events sae ON sae.ae_id = ae.ae_id
              WHERE ($1::INT IS NULL OR ss.trial_id = $1)
                AND ($2::INT IS NULL OR p.site_id = $2)
                AND ($3::INT IS NULL OR ae.severity_grade >= $3)
@@ -425,17 +425,17 @@ router.get('/ae/:aeId', requireSafetyMonitor, async (req: any, res: any) => {
             `SELECT ae.*, p.trial_patient_id, ss.institution_name AS site_name, ct.trial_title,
                     sae.sae_id, sae.sae_report_number, sae.sae_status, sae.report_deadline_date,
                     sae.report_submitted_date, sae.narrative_text, sae.dsmb_review_date
-             FROM meditrials.adverse_events ae
-             JOIN meditrials.patients p ON p.patient_id = ae.patient_id
-             JOIN meditrials.study_sites ss ON ss.site_id = p.site_id
-             JOIN meditrials.clinical_trials ct ON ct.trial_id = ss.trial_id
-             LEFT JOIN meditrials.serious_adverse_events sae ON sae.ae_id = ae.ae_id
+             FROM public.adverse_events ae
+             JOIN public.patients p ON p.patient_id = ae.patient_id
+             JOIN public.study_sites ss ON ss.site_id = p.site_id
+             JOIN public.clinical_trials ct ON ct.trial_id = ss.trial_id
+             LEFT JOIN public.serious_adverse_events sae ON sae.ae_id = ae.ae_id
              WHERE ae.ae_id = $1`, [parseInt(req.params.aeId)]
         );
         if (!rows.length) return res.status(404).json({ error: 'AE not found' });
 
         const alerts = await pool.query(
-            `SELECT * FROM meditrials.safety_alerts WHERE patient_id = $1 ORDER BY created_at ASC`,
+            `SELECT * FROM public.safety_alerts WHERE patient_id = $1 ORDER BY created_at ASC`,
             [rows[0].patient_id]
         );
         res.json({ ...rows[0], relatedAlerts: alerts.rows });
@@ -455,9 +455,9 @@ router.put('/ae/:aeId', requireSafetyMonitor, async (req: any, res: any) => {
         if (!reason) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'reason required for 21 CFR Part 11' }); }
         await set21CFRVars(client, userId, reason);
 
-        const oldRow = await client.query(`SELECT causality_relationship, outcome FROM meditrials.adverse_events WHERE ae_id=$1`, [aeId]);
+        const oldRow = await client.query(`SELECT causality_relationship, outcome FROM public.adverse_events WHERE ae_id=$1`, [aeId]);
         const { rows } = await client.query(
-            `UPDATE meditrials.adverse_events
+            `UPDATE public.adverse_events
              SET causality_relationship = COALESCE($1, causality_relationship),
                  outcome = COALESCE($2, outcome),
                  updated_at = NOW()
@@ -467,7 +467,7 @@ router.put('/ae/:aeId', requireSafetyMonitor, async (req: any, res: any) => {
         if (!rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'AE not found' }); }
 
         await client.query(
-            `INSERT INTO meditrials.audit_trail_21cfr (table_name,record_id,action_type,old_values,new_values,changed_by_user_id,change_reason)
+            `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,old_values,new_values,changed_by_user_id,change_reason)
              VALUES ('adverse_events',$1,'UPDATE',$2,$3,$4,$5)`,
             [aeId, JSON.stringify(oldRow.rows[0]),
                 JSON.stringify({ causality_relationship, outcome }), userId, reason]
@@ -498,11 +498,11 @@ router.get('/sae', requireSafetyMonitor, async (req: any, res: any) => {
                     ae.causality_relationship, ae.ae_id,
                     (CURRENT_DATE - sae.report_deadline_date) AS days_overdue,
                     EXTRACT(EPOCH FROM (sae.report_deadline_date::TIMESTAMPTZ - NOW()))/3600 AS hours_until_deadline
-             FROM meditrials.serious_adverse_events sae
-             JOIN meditrials.adverse_events ae ON ae.ae_id = sae.ae_id
-             JOIN meditrials.patients p ON p.patient_id = ae.patient_id
-             JOIN meditrials.study_sites ss ON ss.site_id = p.site_id
-             JOIN meditrials.clinical_trials ct ON ct.trial_id = ss.trial_id
+             FROM public.serious_adverse_events sae
+             JOIN public.adverse_events ae ON ae.ae_id = sae.ae_id
+             JOIN public.patients p ON p.patient_id = ae.patient_id
+             JOIN public.study_sites ss ON ss.site_id = p.site_id
+             JOIN public.clinical_trials ct ON ct.trial_id = ss.trial_id
              WHERE ($1::INT IS NULL OR ss.trial_id = $1)
                AND ($2::TEXT IS NULL OR sae.sae_status = $2)
              ORDER BY sae.report_deadline_date ASC NULLS LAST
@@ -512,7 +512,7 @@ router.get('/sae', requireSafetyMonitor, async (req: any, res: any) => {
 
         // Tab counts
         const tabCounts = await pool.query(
-            `SELECT sae_status, COUNT(*) as cnt FROM meditrials.serious_adverse_events GROUP BY sae_status`
+            `SELECT sae_status, COUNT(*) as cnt FROM public.serious_adverse_events GROUP BY sae_status`
         );
         res.json({ saes: rows, tabCounts: tabCounts.rows });
     } catch (err: any) {
@@ -530,12 +530,12 @@ router.get('/sae/:saeId', requireSafetyMonitor, async (req: any, res: any) => {
                     ae.results_in_death, ae.life_threatening, ae.requires_hospitalization,
                     ae.causality_relationship, ae.outcome, ae.treatment_related,
                     ra.awareness_date
-             FROM meditrials.serious_adverse_events sae
-             JOIN meditrials.adverse_events ae ON ae.ae_id = sae.ae_id
-             JOIN meditrials.patients p ON p.patient_id = ae.patient_id
-             JOIN meditrials.study_sites ss ON ss.site_id = p.site_id
-             JOIN meditrials.clinical_trials ct ON ct.trial_id = ss.trial_id
-             LEFT JOIN (SELECT ae_id, MIN(created_at)::DATE AS awareness_date FROM meditrials.audit_trail_21cfr WHERE table_name='adverse_events' GROUP BY ae_id) ra ON ra.ae_id = ae.ae_id
+             FROM public.serious_adverse_events sae
+             JOIN public.adverse_events ae ON ae.ae_id = sae.ae_id
+             JOIN public.patients p ON p.patient_id = ae.patient_id
+             JOIN public.study_sites ss ON ss.site_id = p.site_id
+             JOIN public.clinical_trials ct ON ct.trial_id = ss.trial_id
+             LEFT JOIN (SELECT ae_id, MIN(created_at)::DATE AS awareness_date FROM public.audit_trail_21cfr WHERE table_name='adverse_events' GROUP BY ae_id) ra ON ra.ae_id = ae.ae_id
              WHERE sae.sae_id = $1`, [parseInt(req.params.saeId)]
         );
         if (!rows.length) return res.status(404).json({ error: 'SAE not found' });
@@ -569,12 +569,12 @@ router.put('/sae/:saeId', requireSafetyMonitor, async (req: any, res: any) => {
 
         setClauses.push(`updated_at=NOW()`); values.push(saeId);
         const { rows } = await client.query(
-            `UPDATE meditrials.serious_adverse_events SET ${setClauses.join(',')} WHERE sae_id=$${idx} RETURNING *`, values
+            `UPDATE public.serious_adverse_events SET ${setClauses.join(',')} WHERE sae_id=$${idx} RETURNING *`, values
         );
         if (!rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'SAE not found' }); }
 
         await client.query(
-            `INSERT INTO meditrials.audit_trail_21cfr (table_name,record_id,action_type,new_values,changed_by_user_id,change_reason)
+            `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,new_values,changed_by_user_id,change_reason)
              VALUES ('serious_adverse_events',$1,'UPDATE',$2::jsonb,$3,$4)`,
             [saeId, JSON.stringify({ sae_status, report_submitted_date }), userId, reason]
         );
@@ -592,7 +592,7 @@ router.get('/signals', requireSafetyMonitor, async (req: any, res: any) => {
         const trialId = req.query.trial_id;
         if (!trialId) return res.status(400).json({ error: 'trial_id required' });
         const { rows } = await pool.query(
-            `SELECT signals FROM (CALL meditrials.sp_detect_safety_signals($1, NULL)) AS r`,
+            `SELECT signals FROM (CALL public.sp_detect_safety_signals($1, NULL)) AS r`,
             [parseInt(trialId as string)]
         );
         res.json(rows[0]?.signals ?? []);
@@ -610,9 +610,9 @@ router.get('/signals/drilldown', requireSafetyMonitor, async (req: any, res: any
             `SELECT ae.ae_id, p.trial_patient_id, ss.institution_name AS site_name,
                     ae.ae_start_date, ae.severity_grade, ae.causality_relationship,
                     EXTRACT(DAY FROM ae.ae_start_date - p.enrollment_date)::INT AS days_from_enrollment
-             FROM meditrials.adverse_events ae
-             JOIN meditrials.patients p ON p.patient_id = ae.patient_id
-             JOIN meditrials.study_sites ss ON ss.site_id = p.site_id
+             FROM public.adverse_events ae
+             JOIN public.patients p ON p.patient_id = ae.patient_id
+             JOIN public.study_sites ss ON ss.site_id = p.site_id
              WHERE ae.ae_term = $1 AND ($2::INT IS NULL OR ss.trial_id = $2)
              ORDER BY ae.ae_start_date DESC`, [ae_term, trial_id ? parseInt(trial_id as string) : null]
         );
@@ -624,9 +624,9 @@ router.get('/signals/drilldown', requireSafetyMonitor, async (req: any, res: any
                     SUM(COUNT(*)) OVER (PARTITION BY ae.ae_term ORDER BY DATE_TRUNC('week', ae.ae_start_date)) as cumulative_count,
                     AVG(ae.severity_grade) as avg_severity,
                     COUNT(*) FILTER (WHERE ae.severity_grade >= 3) as grade3plus
-             FROM meditrials.adverse_events ae
-             JOIN meditrials.patients p ON p.patient_id = ae.patient_id
-             JOIN meditrials.study_sites ss ON ss.site_id = p.site_id
+             FROM public.adverse_events ae
+             JOIN public.patients p ON p.patient_id = ae.patient_id
+             JOIN public.study_sites ss ON ss.site_id = p.site_id
              WHERE ae.ae_term = $1 AND ($2::INT IS NULL OR ss.trial_id = $2)
                AND ae.ae_start_date >= CURRENT_DATE - INTERVAL '90 days'
              GROUP BY ae.ae_term, DATE_TRUNC('week', ae.ae_start_date)
@@ -652,11 +652,11 @@ router.get('/site-comparison', requireSafetyMonitor, async (req: any, res: any) 
                     COUNT(DISTINCT pd.deviation_id) as protocol_deviations,
                     COUNT(DISTINCT sa.alert_id) FILTER (WHERE sa.alert_status = 'ACTIVE') as active_alerts,
                     RANK() OVER (ORDER BY COUNT(DISTINCT ae.ae_id)::DECIMAL / NULLIF(COUNT(DISTINCT p.patient_id),0) DESC) as safety_risk_rank
-             FROM meditrials.study_sites ss
-             LEFT JOIN meditrials.patients p ON p.site_id = ss.site_id
-             LEFT JOIN meditrials.adverse_events ae ON ae.patient_id = p.patient_id
-             LEFT JOIN meditrials.protocol_deviations pd ON pd.patient_id = p.patient_id
-             LEFT JOIN meditrials.safety_alerts sa ON sa.patient_id = p.patient_id
+             FROM public.study_sites ss
+             LEFT JOIN public.patients p ON p.site_id = ss.site_id
+             LEFT JOIN public.adverse_events ae ON ae.patient_id = p.patient_id
+             LEFT JOIN public.protocol_deviations pd ON pd.patient_id = p.patient_id
+             LEFT JOIN public.safety_alerts sa ON sa.patient_id = p.patient_id
              WHERE ss.trial_id = $1
              GROUP BY ss.site_id, ss.institution_name, ss.country
              ORDER BY safety_risk_rank`, [parseInt(trial_id as string)]
@@ -672,8 +672,8 @@ router.get('/dsmb', requireSafetyMonitor, async (req: any, res: any) => {
     try {
         const { rows } = await pool.query(
             `SELECT dm.*, ct.trial_title
-             FROM meditrials.dsmb_meetings dm
-             JOIN meditrials.clinical_trials ct ON ct.trial_id = dm.trial_id
+             FROM public.dsmb_meetings dm
+             JOIN public.clinical_trials ct ON ct.trial_id = dm.trial_id
              ORDER BY dm.meeting_date DESC`
         );
         res.json(rows);
@@ -691,7 +691,7 @@ router.post('/dsmb', requireSafetyMonitor, async (req: any, res: any) => {
         const userId = req.user?.user_id;
         await set21CFRVars(client, userId, 'DSMB meeting scheduled');
         const { rows } = await client.query(
-            `INSERT INTO meditrials.dsmb_meetings (trial_id, meeting_date, meeting_type, data_cutoff_date, created_by_user_id)
+            `INSERT INTO public.dsmb_meetings (trial_id, meeting_date, meeting_type, data_cutoff_date, created_by_user_id)
              VALUES ($1,$2,$3,$4,$5) RETURNING *`,
             [trial_id, meeting_date, meeting_type, data_cutoff_date, userId]
         );
@@ -707,15 +707,15 @@ router.post('/dsmb', requireSafetyMonitor, async (req: any, res: any) => {
 router.get('/dsmb/:meetingId', requireSafetyMonitor, async (req: any, res: any) => {
     try {
         const { rows } = await pool.query(
-            `SELECT dm.*, ct.trial_title FROM meditrials.dsmb_meetings dm
-             JOIN meditrials.clinical_trials ct ON ct.trial_id = dm.trial_id
+            `SELECT dm.*, ct.trial_title FROM public.dsmb_meetings dm
+             JOIN public.clinical_trials ct ON ct.trial_id = dm.trial_id
              WHERE dm.meeting_id = $1`, [parseInt(req.params.meetingId)]
         );
         if (!rows.length) return res.status(404).json({ error: 'Meeting not found' });
 
         // Safety snapshot at cutoff
         const snapshot = await pool.query(
-            `SELECT * FROM meditrials.mv_safety_overview WHERE trial_id = $1`, [rows[0].trial_id]
+            `SELECT * FROM public.mv_safety_overview WHERE trial_id = $1`, [rows[0].trial_id]
         );
         res.json({ ...rows[0], safetySnapshot: snapshot.rows[0] ?? null });
     } catch (err: any) {
@@ -733,7 +733,7 @@ router.put('/dsmb/:meetingId', requireSafetyMonitor, async (req: any, res: any) 
         const userId = req.user?.user_id;
         await set21CFRVars(client, userId, 'DSMB recommendation update');
         const { rows } = await client.query(
-            `UPDATE meditrials.dsmb_meetings
+            `UPDATE public.dsmb_meetings
              SET recommendation = COALESCE($1, recommendation),
                  meeting_minutes = COALESCE($2::jsonb, meeting_minutes),
                  updated_at = NOW()
@@ -758,16 +758,16 @@ router.get('/unblinding/:patientId', requireSafetyMonitor, async (req: any, res:
                     ra.is_unblinded, ra.unblinding_reason, ra.unblinded_at,
                     ta.arm_code, ta.arm_name, ta.arm_description,
                     ra.unblinded_by_user_id
-             FROM meditrials.patients p
-             JOIN meditrials.study_sites ss ON ss.site_id = p.site_id
-             LEFT JOIN meditrials.randomization_assignments ra ON ra.patient_id = p.patient_id
-             LEFT JOIN meditrials.treatment_arms ta ON ta.arm_id = ra.arm_id AND ra.is_unblinded = TRUE
+             FROM public.patients p
+             JOIN public.study_sites ss ON ss.site_id = p.site_id
+             LEFT JOIN public.randomization_assignments ra ON ra.patient_id = p.patient_id
+             LEFT JOIN public.treatment_arms ta ON ta.arm_id = ra.arm_id AND ra.is_unblinded = TRUE
              WHERE p.patient_id = $1 OR p.trial_patient_id = $1::TEXT`, [req.params.patientId]
         );
         if (!rows.length) return res.status(404).json({ error: 'Patient not found' });
 
         const history = await pool.query(
-            `SELECT * FROM meditrials.audit_trail_21cfr
+            `SELECT * FROM public.audit_trail_21cfr
              WHERE table_name='randomization_assignments' AND record_id=$1 AND action_type='UPDATE'
              ORDER BY changed_at DESC`, [rows[0].patient_id]
         );
@@ -791,20 +791,20 @@ router.post('/unblind', requireSafetyMonitor, async (req: any, res: any) => {
         await set21CFRVars(client, userId, reason);
         // Call stored procedure
         await client.query(
-            `CALL meditrials.sp_unblind_patient($1, $2, $3)`,
+            `CALL public.sp_unblind_patient($1, $2, $3)`,
             [patient_id, reason, userId]
         );
         // Record additional details in audit
         await client.query(
-            `INSERT INTO meditrials.audit_trail_21cfr (table_name,record_id,action_type,new_values,changed_by_user_id,change_reason)
+            `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,new_values,changed_by_user_id,change_reason)
              VALUES ('randomization_assignments',$1,'UPDATE',jsonb_build_object('action','UNBLINDED','justification_category',$2,'requesting_physician',$3),$4,$5)`,
             [patient_id, justification_category, requesting_physician, userId, reason]
         );
         // Fetch result
         const { rows } = await client.query(
             `SELECT ra.is_unblinded, ta.arm_code, ta.arm_name, ta.arm_description, ra.unblinded_at
-             FROM meditrials.randomization_assignments ra
-             JOIN meditrials.treatment_arms ta ON ta.arm_id = ra.arm_id
+             FROM public.randomization_assignments ra
+             JOIN public.treatment_arms ta ON ta.arm_id = ra.arm_id
              WHERE ra.patient_id = $1`, [patient_id]
         );
         await client.query('COMMIT');
@@ -822,7 +822,7 @@ router.post('/verify-password', requireSafetyMonitor, async (req: any, res: any)
         const username = req.user?.username;
         if (!password || !username) return res.status(400).json({ error: 'Missing credentials' });
         const { rows } = await pool.query(
-            `SELECT user_id FROM meditrials.users WHERE username=$1 AND password_hash=crypt($2,password_hash) AND is_active=TRUE`,
+            `SELECT user_id FROM public.users WHERE username=$1 AND password_hash=crypt($2,password_hash) AND is_active=TRUE`,
             [username, password]
         );
         if (!rows.length) return res.status(401).json({ verified: false });
@@ -840,31 +840,31 @@ router.get('/reports/generate', requireSafetyMonitor, async (req: any, res: any)
         const cutoff = (cutoff_date as string) ?? new Date().toISOString().split('T')[0];
 
         const { rows } = await pool.query(
-            `SELECT report FROM (CALL meditrials.sp_generate_safety_report($1, $2::DATE, NULL)) AS r`,
+            `SELECT report FROM (CALL public.sp_generate_safety_report($1, $2::DATE, NULL)) AS r`,
             [parseInt(trial_id as string), cutoff]
         );
 
         // Augment with AE by arm from mv_ae_by_arm
         const byArm = await pool.query(
             `SELECT arm_code, ae_term, occurrence_count, avg_severity, grade3plus_count
-             FROM meditrials.mv_ae_by_arm WHERE trial_id=$1 ORDER BY occurrence_count DESC LIMIT 20`,
+             FROM public.mv_ae_by_arm WHERE trial_id=$1 ORDER BY occurrence_count DESC LIMIT 20`,
             [parseInt(trial_id as string)]
         );
 
         // AE by severity grade
         const bySeverity = await pool.query(
-            `SELECT severity_grade, COUNT(*) as count FROM meditrials.adverse_events ae
-             JOIN meditrials.patients p ON p.patient_id=ae.patient_id
-             JOIN meditrials.study_sites ss ON ss.site_id=p.site_id
+            `SELECT severity_grade, COUNT(*) as count FROM public.adverse_events ae
+             JOIN public.patients p ON p.patient_id=ae.patient_id
+             JOIN public.study_sites ss ON ss.site_id=p.site_id
              WHERE ss.trial_id=$1 AND ae.ae_start_date<=$2::DATE
              GROUP BY severity_grade ORDER BY severity_grade`, [parseInt(trial_id as string), cutoff]
         );
 
         // Protocol deviations
         const deviations = await pool.query(
-            `SELECT deviation_type, COUNT(*) as count FROM meditrials.protocol_deviations pd
-             JOIN meditrials.patients p ON p.patient_id=pd.patient_id
-             JOIN meditrials.study_sites ss ON ss.site_id=p.site_id
+            `SELECT deviation_type, COUNT(*) as count FROM public.protocol_deviations pd
+             JOIN public.patients p ON p.patient_id=pd.patient_id
+             JOIN public.study_sites ss ON ss.site_id=p.site_id
              WHERE ss.trial_id=$1 GROUP BY deviation_type`, [parseInt(trial_id as string)]
         );
 
@@ -885,7 +885,7 @@ router.get('/reports/generate', requireSafetyMonitor, async (req: any, res: any)
 router.get('/trials', requireSafetyMonitor, async (_req: any, res: any) => {
     try {
         const { rows } = await pool.query(
-            `SELECT trial_id, trial_title, trial_status FROM meditrials.clinical_trials ORDER BY trial_title`
+            `SELECT trial_id, trial_title, trial_status FROM public.clinical_trials ORDER BY trial_title`
         );
         res.json(rows);
     } catch (err: any) {
@@ -897,7 +897,7 @@ router.get('/trials', requireSafetyMonitor, async (_req: any, res: any) => {
 router.get('/sites', requireSafetyMonitor, async (_req: any, res: any) => {
     try {
         const { rows } = await pool.query(
-            `SELECT site_id, institution_name, country, trial_id FROM meditrials.study_sites ORDER BY institution_name`
+            `SELECT site_id, institution_name, country, trial_id FROM public.study_sites ORDER BY institution_name`
         );
         res.json(rows);
     } catch (err: any) {

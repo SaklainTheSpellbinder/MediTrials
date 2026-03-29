@@ -45,7 +45,7 @@ router.get('/data-manager', requireDataManager, async (req: Request, res: Respon
             await Promise.all([
                 pool.query(`SELECT COUNT(*) FILTER (WHERE query_status='Open') AS open_total,
                     COUNT(*) FILTER (WHERE query_status='Open' AND raised_date < CURRENT_DATE - 7) AS open_last_week
-                    FROM meditrials.data_queries`),
+                    FROM public.data_queries`),
                 // Complex Query 2: site performance with window function RANK()
                 pool.query(`SELECT ss.institution_name, ss.site_id,
                     COUNT(DISTINCT dq.query_id) AS total_queries,
@@ -53,44 +53,44 @@ router.get('/data-manager', requireDataManager, async (req: Request, res: Respon
                     COUNT(DISTINCT dq.query_id) FILTER (WHERE dq.query_status IN ('Resolved','Closed')) AS resolved_queries,
                     COALESCE(ROUND(AVG(EXTRACT(DAY FROM dq.resolved_date - dq.raised_date))
                         FILTER (WHERE dq.resolved_date IS NOT NULL)::NUMERIC, 1), 0) AS avg_days_to_resolve
-                    FROM meditrials.study_sites ss
-                    LEFT JOIN meditrials.patients p ON p.site_id = ss.site_id
-                    LEFT JOIN meditrials.ecrf_data ed ON ed.patient_id = p.patient_id
-                    LEFT JOIN meditrials.data_queries dq ON dq.ecrf_instance_id = ed.ecrf_instance_id
+                    FROM public.study_sites ss
+                    LEFT JOIN public.patients p ON p.site_id = ss.site_id
+                    LEFT JOIN public.ecrf_data ed ON ed.patient_id = p.patient_id
+                    LEFT JOIN public.data_queries dq ON dq.ecrf_instance_id = ed.ecrf_instance_id
                     GROUP BY ss.site_id, ss.institution_name ORDER BY avg_days_to_resolve DESC NULLS LAST`),
                 pool.query(`SELECT COALESCE(ROUND(AVG(avg_days_to_resolve)::NUMERIC,1),0) AS global_avg
-                    FROM meditrials.mv_query_resolution_time WHERE avg_days_to_resolve IS NOT NULL`),
+                    FROM public.mv_query_resolution_time WHERE avg_days_to_resolve IS NOT NULL`),
                 pool.query(`SELECT COALESCE(ROUND(
                     COUNT(*) FILTER (WHERE total_forms>0 AND signed_forms<total_forms)::DECIMAL
                     /NULLIF(COUNT(*),0)*100,1),0) AS missing_data_rate,
                     COALESCE(SUM(GREATEST(total_forms-signed_forms-locked_forms,0)),0) AS unsigned_forms
-                    FROM meditrials.mv_data_quality`),
-                pool.query(`SELECT COUNT(*) AS cnt FROM meditrials.protocol_deviations
+                    FROM public.mv_data_quality`),
+                pool.query(`SELECT COUNT(*) AS cnt FROM public.protocol_deviations
                     WHERE deviation_date >= date_trunc('month',CURRENT_DATE)`),
                 pool.query(`SELECT
                     COUNT(*) FILTER (WHERE raised_date >= CURRENT_DATE-3) AS bucket_0_3,
                     COUNT(*) FILTER (WHERE raised_date >= CURRENT_DATE-7 AND raised_date < CURRENT_DATE-3) AS bucket_4_7,
                     COUNT(*) FILTER (WHERE raised_date >= CURRENT_DATE-14 AND raised_date < CURRENT_DATE-7) AS bucket_8_14,
                     COUNT(*) FILTER (WHERE raised_date < CURRENT_DATE-14) AS bucket_14plus
-                    FROM meditrials.data_queries WHERE query_status='Open'`),
+                    FROM public.data_queries WHERE query_status='Open'`),
                 pool.query(`SELECT ct.trial_id, ct.trial_title,
                     COUNT(DISTINCT dq.query_id) FILTER (WHERE dq.query_status='Open') AS open_queries,
                     COUNT(DISTINCT ed.ecrf_instance_id) FILTER (WHERE ed.form_status NOT IN ('Signed','Locked','Completed')) AS unsigned_forms,
                     COALESCE(ROUND(COUNT(DISTINCT ed.ecrf_instance_id) FILTER (WHERE ed.form_status='In Progress')::DECIMAL
                         /NULLIF(COUNT(DISTINCT ed.ecrf_instance_id),0)*100,1),0) AS missing_data_pct,
                     COUNT(DISTINCT pd.deviation_id) FILTER (WHERE pd.corrective_action IS NULL) AS deviations_undocumented,
-                    EXISTS(SELECT 1 FROM meditrials.data_locks dl WHERE dl.trial_id=ct.trial_id AND dl.unlock_date IS NULL) AS has_active_lock
-                    FROM meditrials.clinical_trials ct
-                    LEFT JOIN meditrials.study_sites ss ON ss.trial_id=ct.trial_id
-                    LEFT JOIN meditrials.patients p ON p.site_id=ss.site_id
-                    LEFT JOIN meditrials.ecrf_data ed ON ed.patient_id=p.patient_id
-                    LEFT JOIN meditrials.data_queries dq ON dq.ecrf_instance_id=ed.ecrf_instance_id
-                    LEFT JOIN meditrials.protocol_deviations pd ON pd.patient_id=p.patient_id
+                    EXISTS(SELECT 1 FROM public.data_locks dl WHERE dl.trial_id=ct.trial_id AND dl.unlock_date IS NULL) AS has_active_lock
+                    FROM public.clinical_trials ct
+                    LEFT JOIN public.study_sites ss ON ss.trial_id=ct.trial_id
+                    LEFT JOIN public.patients p ON p.site_id=ss.site_id
+                    LEFT JOIN public.ecrf_data ed ON ed.patient_id=p.patient_id
+                    LEFT JOIN public.data_queries dq ON dq.ecrf_instance_id=ed.ecrf_instance_id
+                    LEFT JOIN public.protocol_deviations pd ON pd.patient_id=p.patient_id
                     GROUP BY ct.trial_id, ct.trial_title`),
                 // System trigger activity: last 5 audit entries from automatic triggers
                 pool.query(`SELECT at.table_name, at.action_type, at.change_timestamp, at.change_reason, u.username
-                    FROM meditrials.audit_trail_21cfr at
-                    LEFT JOIN meditrials.users u ON u.user_id = at.changed_by_user_id
+                    FROM public.audit_trail_21cfr at
+                    LEFT JOIN public.users u ON u.user_id = at.changed_by_user_id
                     WHERE at.change_reason ILIKE '%via %'
                     ORDER BY at.change_timestamp DESC LIMIT 5`),
             ]);
@@ -119,7 +119,7 @@ router.get('/data-manager', requireDataManager, async (req: Request, res: Respon
 // ── GET /api/data-management/trials ──────────────────────────────────────────
 router.get('/trials', async (_req: Request, res: Response) => {
     try {
-        const { rows } = await pool.query(`SELECT trial_id, trial_title, trial_status FROM meditrials.clinical_trials ORDER BY trial_title`);
+        const { rows } = await pool.query(`SELECT trial_id, trial_title, trial_status FROM public.clinical_trials ORDER BY trial_title`);
         res.json(rows);
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -129,8 +129,8 @@ router.get('/sites', async (req: Request, res: Response) => {
     try {
         const { trial_id } = req.query;
         const q = trial_id
-            ? `SELECT site_id, institution_name, country FROM meditrials.study_sites WHERE trial_id=$1 ORDER BY institution_name`
-            : `SELECT site_id, institution_name, country FROM meditrials.study_sites ORDER BY institution_name`;
+            ? `SELECT site_id, institution_name, country FROM public.study_sites WHERE trial_id=$1 ORDER BY institution_name`
+            : `SELECT site_id, institution_name, country FROM public.study_sites ORDER BY institution_name`;
         const { rows } = await pool.query(q, trial_id ? [trial_id] : []);
         res.json(rows);
     } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -147,7 +147,7 @@ router.get('/patients', async (req: Request, res: Response) => {
         if (site_id)  { filters.push(`p.site_id=$${pi++}`); params.push(site_id); }
         const { rows } = await pool.query(`SELECT p.patient_id, p.trial_patient_id, p.patient_status,
             ss.institution_name AS site_name, ss.site_id
-            FROM meditrials.patients p JOIN meditrials.study_sites ss ON ss.site_id=p.site_id
+            FROM public.patients p JOIN public.study_sites ss ON ss.site_id=p.site_id
             WHERE ${filters.join(' AND ')} ORDER BY p.trial_patient_id`, params);
         res.json(rows);
     } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -158,8 +158,8 @@ router.get('/patients/:patientId/visits', async (req: Request, res: Response) =>
     try {
         const { rows } = await pool.query(
             `SELECT pv.visit_instance_id, vs.visit_name, pv.scheduled_date, pv.visit_status
-             FROM meditrials.patient_visits pv
-             JOIN meditrials.visit_schedules vs ON vs.visit_id = pv.visit_id
+             FROM public.patient_visits pv
+             JOIN public.visit_schedules vs ON vs.visit_id = pv.visit_id
              WHERE pv.patient_id=$1 ORDER BY vs.visit_number`, [req.params.patientId]);
         res.json(rows);
     } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -170,8 +170,8 @@ router.get('/visits/:visitInstanceId/forms', async (req: Request, res: Response)
     try {
         const { rows } = await pool.query(
             `SELECT ed.ecrf_instance_id, edef.ecrf_name, ed.form_status, edef.ecrf_schema
-             FROM meditrials.ecrf_data ed
-             JOIN meditrials.ecrf_definitions edef ON edef.ecrf_id = ed.ecrf_id
+             FROM public.ecrf_data ed
+             JOIN public.ecrf_definitions edef ON edef.ecrf_id = ed.ecrf_id
              WHERE ed.visit_instance_id=$1 ORDER BY edef.ecrf_name`, [req.params.visitInstanceId]);
         res.json(rows);
     } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -204,23 +204,23 @@ router.get('/queries', async (req: Request, res: Response) => {
                 vs.visit_name, edef.ecrf_name,
                 u_r.username AS raised_by_username,
                 u_res.username AS resolved_by_username
-            FROM meditrials.data_queries dq
-            JOIN meditrials.ecrf_data ed ON ed.ecrf_instance_id=dq.ecrf_instance_id
-            JOIN meditrials.ecrf_definitions edef ON edef.ecrf_id=ed.ecrf_id
-            JOIN meditrials.patient_visits pv ON pv.visit_instance_id=ed.visit_instance_id
-            JOIN meditrials.visit_schedules vs ON vs.visit_id=pv.visit_id
-            JOIN meditrials.patients p ON p.patient_id=ed.patient_id
-            JOIN meditrials.study_sites ss ON ss.site_id=p.site_id
-            JOIN meditrials.clinical_trials ct ON ct.trial_id=ss.trial_id
-            LEFT JOIN meditrials.users u_r ON u_r.user_id=dq.raised_by_user_id
-            LEFT JOIN meditrials.users u_res ON u_res.user_id=dq.resolved_by_user_id
+            FROM public.data_queries dq
+            JOIN public.ecrf_data ed ON ed.ecrf_instance_id=dq.ecrf_instance_id
+            JOIN public.ecrf_definitions edef ON edef.ecrf_id=ed.ecrf_id
+            JOIN public.patient_visits pv ON pv.visit_instance_id=ed.visit_instance_id
+            JOIN public.visit_schedules vs ON vs.visit_id=pv.visit_id
+            JOIN public.patients p ON p.patient_id=ed.patient_id
+            JOIN public.study_sites ss ON ss.site_id=p.site_id
+            JOIN public.clinical_trials ct ON ct.trial_id=ss.trial_id
+            LEFT JOIN public.users u_r ON u_r.user_id=dq.raised_by_user_id
+            LEFT JOIN public.users u_res ON u_res.user_id=dq.resolved_by_user_id
             WHERE ${filters.join(' AND ')}
             ORDER BY dq.raised_date DESC
             LIMIT $${pi++} OFFSET $${pi}`, params);
 
         // Count badges per status tab
         const counts = await pool.query(`SELECT query_status, COUNT(*) AS cnt
-            FROM meditrials.data_queries GROUP BY query_status`);
+            FROM public.data_queries GROUP BY query_status`);
         const statusCounts: Record<string, number> = {};
         counts.rows.forEach((r: any) => { statusCounts[r.query_status] = parseInt(r.cnt); });
         res.json({ queries: rows, statusCounts, page: parseInt(page as string) });
@@ -237,22 +237,22 @@ router.get('/queries/:queryId', async (req: Request, res: Response) => {
                 EXTRACT(DAY FROM NOW()-dq.raised_date)::INTEGER AS days_open,
                 u_r.username AS raised_by_username,
                 u_res.username AS resolved_by_username
-            FROM meditrials.data_queries dq
-            JOIN meditrials.ecrf_data ed ON ed.ecrf_instance_id=dq.ecrf_instance_id
-            JOIN meditrials.ecrf_definitions edef ON edef.ecrf_id=ed.ecrf_id
-            JOIN meditrials.patient_visits pv ON pv.visit_instance_id=ed.visit_instance_id
-            JOIN meditrials.visit_schedules vs ON vs.visit_id=pv.visit_id
-            JOIN meditrials.patients p ON p.patient_id=ed.patient_id
-            JOIN meditrials.study_sites ss ON ss.site_id=p.site_id
-            LEFT JOIN meditrials.users u_r ON u_r.user_id=dq.raised_by_user_id
-            LEFT JOIN meditrials.users u_res ON u_res.user_id=dq.resolved_by_user_id
+            FROM public.data_queries dq
+            JOIN public.ecrf_data ed ON ed.ecrf_instance_id=dq.ecrf_instance_id
+            JOIN public.ecrf_definitions edef ON edef.ecrf_id=ed.ecrf_id
+            JOIN public.patient_visits pv ON pv.visit_instance_id=ed.visit_instance_id
+            JOIN public.visit_schedules vs ON vs.visit_id=pv.visit_id
+            JOIN public.patients p ON p.patient_id=ed.patient_id
+            JOIN public.study_sites ss ON ss.site_id=p.site_id
+            LEFT JOIN public.users u_r ON u_r.user_id=dq.raised_by_user_id
+            LEFT JOIN public.users u_res ON u_res.user_id=dq.resolved_by_user_id
             WHERE dq.query_id=$1`, [req.params.queryId]);
         if (!rows.length) return res.status(404).json({ error: 'Query not found' });
         // Thread: audit trail entries for this query record
         const { rows: thread } = await pool.query(`
             SELECT at.action_type, at.change_timestamp, at.change_reason, at.new_value, u.username
-            FROM meditrials.audit_trail_21cfr at
-            LEFT JOIN meditrials.users u ON u.user_id=at.changed_by_user_id
+            FROM public.audit_trail_21cfr at
+            LEFT JOIN public.users u ON u.user_id=at.changed_by_user_id
             WHERE at.table_name='data_queries' AND at.record_id=$1
             ORDER BY at.change_timestamp ASC`, [req.params.queryId]);
         res.json({ ...rows[0], thread });
@@ -267,12 +267,12 @@ router.post('/queries', async (req: Request, res: Response) => {
     try {
         const result = await withTransaction(user.user_id, 'Data Manager raised query', async (client) => {
             const { rows } = await client.query(`
-                INSERT INTO meditrials.data_queries
+                INSERT INTO public.data_queries
                     (ecrf_instance_id, field_name, query_text, query_status, raised_by_user_id, raised_date)
                 VALUES ($1,$2,$3,'Open',$4,NOW()) RETURNING *`,
                 [ecrf_instance_id, field_name, query_text, user.user_id]);
             // Increment query_count on the linked eCRF instance (triggers audit)
-            await client.query(`UPDATE meditrials.ecrf_data SET query_count=COALESCE(query_count,0)+1
+            await client.query(`UPDATE public.ecrf_data SET query_count=COALESCE(query_count,0)+1
                 WHERE ecrf_instance_id=$1`, [ecrf_instance_id]);
             return rows[0];
         });
@@ -290,20 +290,20 @@ router.put('/queries/:queryId', async (req: Request, res: Response) => {
         const result = await withTransaction(user.user_id, reason || `Query ${action}`, async (client) => {
             if (action === 'resolve') {
                 const { rows } = await client.query(`
-                    UPDATE meditrials.data_queries SET query_status='Resolved',
+                    UPDATE public.data_queries SET query_status='Resolved',
                     resolved_date=NOW(), resolved_by_user_id=$1
                     WHERE query_id=$2 RETURNING *`, [user.user_id, queryId]);
                 return rows[0];
             } else if (action === 'reject') {
                 const newText = rejection_comment ? `[REJECTED] ${rejection_comment}` : '[REJECTED]';
                 const { rows } = await client.query(`
-                    UPDATE meditrials.data_queries SET query_status='Open',
+                    UPDATE public.data_queries SET query_status='Open',
                     response_text=$1, resolved_date=NULL, resolved_by_user_id=NULL
                     WHERE query_id=$2 RETURNING *`, [newText, queryId]);
                 return rows[0];
             } else if (action === 'close') {
                 const { rows } = await client.query(`
-                    UPDATE meditrials.data_queries SET query_status='Closed',
+                    UPDATE public.data_queries SET query_status='Closed',
                     resolved_date=COALESCE(resolved_date,NOW())
                     WHERE query_id=$1 RETURNING *`, [queryId]);
                 return rows[0];
@@ -330,10 +330,10 @@ router.get('/site-performance', async (_req: Request, res: Response) => {
                     FILTER (WHERE dq.resolved_date IS NOT NULL)::NUMERIC,1) AS median_days,
                 RANK() OVER (ORDER BY ROUND(AVG(EXTRACT(DAY FROM dq.resolved_date-dq.raised_date))
                     FILTER (WHERE dq.resolved_date IS NOT NULL)::NUMERIC,1) ASC NULLS LAST) AS resolution_rank
-            FROM meditrials.data_queries dq
-            JOIN meditrials.ecrf_data ed ON ed.ecrf_instance_id=dq.ecrf_instance_id
-            JOIN meditrials.patients p ON p.patient_id=ed.patient_id
-            JOIN meditrials.study_sites ss ON ss.site_id=p.site_id
+            FROM public.data_queries dq
+            JOIN public.ecrf_data ed ON ed.ecrf_instance_id=dq.ecrf_instance_id
+            JOIN public.patients p ON p.patient_id=ed.patient_id
+            JOIN public.study_sites ss ON ss.site_id=p.site_id
             GROUP BY ss.site_id, ss.institution_name, ss.country
             ORDER BY resolution_rank`);
         res.json(rows);
@@ -356,12 +356,12 @@ router.get('/completeness', async (req: Request, res: Response) => {
                 COUNT(DISTINCT ed.ecrf_instance_id) FILTER (WHERE ed.form_status='Completed') AS completed_count,
                 COUNT(DISTINCT ed.ecrf_instance_id) FILTER (WHERE ed.form_status='In Progress') AS in_progress_count,
                 COUNT(DISTINCT edef.ecrf_id) AS required_forms_count
-            FROM meditrials.patients p
-            JOIN meditrials.study_sites ss ON ss.site_id=p.site_id
-            CROSS JOIN meditrials.visit_schedules vs
-            LEFT JOIN meditrials.patient_visits pv ON pv.patient_id=p.patient_id AND pv.visit_id=vs.visit_id
-            LEFT JOIN meditrials.ecrf_data ed ON ed.visit_instance_id=pv.visit_instance_id
-            LEFT JOIN meditrials.ecrf_definitions edef ON edef.trial_id=vs.trial_id AND edef.signature_required=TRUE
+            FROM public.patients p
+            JOIN public.study_sites ss ON ss.site_id=p.site_id
+            CROSS JOIN public.visit_schedules vs
+            LEFT JOIN public.patient_visits pv ON pv.patient_id=p.patient_id AND pv.visit_id=vs.visit_id
+            LEFT JOIN public.ecrf_data ed ON ed.visit_instance_id=pv.visit_instance_id
+            LEFT JOIN public.ecrf_definitions edef ON edef.trial_id=vs.trial_id AND edef.signature_required=TRUE
             WHERE ss.trial_id=$1 AND vs.trial_id=$1
             GROUP BY p.patient_id, p.trial_patient_id, ss.site_id, ss.institution_name,
                 vs.visit_id, vs.visit_name, vs.visit_number, pv.visit_instance_id, pv.visit_status
@@ -385,12 +385,12 @@ router.get('/missing-data', async (req: Request, res: Response) => {
                 COALESCE(SUM(ed.query_count),0) AS missing_field_flags,
                 COUNT(DISTINCT dq.query_id) FILTER (WHERE dq.query_status='Open') AS open_queries,
                 MAX(ed.updated_at) AS last_activity
-            FROM meditrials.patients p
-            JOIN meditrials.study_sites ss ON ss.site_id=p.site_id
-            JOIN meditrials.patient_visits pv ON pv.patient_id=p.patient_id
-            JOIN meditrials.ecrf_definitions edef ON edef.trial_id=ss.trial_id
-            LEFT JOIN meditrials.ecrf_data ed ON ed.visit_instance_id=pv.visit_instance_id AND ed.ecrf_id=edef.ecrf_id
-            LEFT JOIN meditrials.data_queries dq ON dq.ecrf_instance_id=ed.ecrf_instance_id
+            FROM public.patients p
+            JOIN public.study_sites ss ON ss.site_id=p.site_id
+            JOIN public.patient_visits pv ON pv.patient_id=p.patient_id
+            JOIN public.ecrf_definitions edef ON edef.trial_id=ss.trial_id
+            LEFT JOIN public.ecrf_data ed ON ed.visit_instance_id=pv.visit_instance_id AND ed.ecrf_id=edef.ecrf_id
+            LEFT JOIN public.data_queries dq ON dq.ecrf_instance_id=ed.ecrf_instance_id
             WHERE ss.trial_id=$1
             GROUP BY p.patient_id, p.trial_patient_id, ss.institution_name
             ORDER BY completion_pct ASC NULLS FIRST`, [trial_id]);
@@ -417,10 +417,10 @@ router.get('/deviations', async (req: Request, res: Response) => {
                 pd.description, pd.corrective_action, pd.reported_to_irb,
                 p.trial_patient_id, ss.institution_name AS site_name,
                 u.username AS reported_by_username
-            FROM meditrials.protocol_deviations pd
-            JOIN meditrials.patients p ON p.patient_id=pd.patient_id
-            JOIN meditrials.study_sites ss ON ss.site_id=p.site_id
-            LEFT JOIN meditrials.users u ON u.user_id=pd.reported_by_user_id
+            FROM public.protocol_deviations pd
+            JOIN public.patients p ON p.patient_id=pd.patient_id
+            JOIN public.study_sites ss ON ss.site_id=p.site_id
+            LEFT JOIN public.users u ON u.user_id=pd.reported_by_user_id
             WHERE ${filters.join(' AND ')}
             ORDER BY pd.deviation_date DESC`, params);
         res.json(rows);
@@ -435,7 +435,7 @@ router.put('/deviations/:deviationId', async (req: Request, res: Response) => {
     try {
         const result = await withTransaction(user.user_id, reason || 'IRB status update', async (client) => {
             const { rows } = await client.query(`
-                UPDATE meditrials.protocol_deviations SET reported_to_irb=$1, updated_at=NOW()
+                UPDATE public.protocol_deviations SET reported_to_irb=$1, updated_at=NOW()
                 WHERE deviation_id=$2 RETURNING *`, [reported_to_irb, req.params.deviationId]);
             return rows[0];
         });
@@ -455,11 +455,11 @@ router.get('/trend/:trialId', async (req: Request, res: Response) => {
                 COUNT(DISTINCT dq.query_id) FILTER (WHERE dq.query_status IN ('Resolved','Closed')) AS queries_resolved,
                 ROUND(COUNT(DISTINCT ed.ecrf_instance_id) FILTER (WHERE ed.form_status IN ('Signed','Locked'))::DECIMAL
                     /NULLIF(COUNT(DISTINCT ed.ecrf_instance_id),0)*100,1) AS weekly_sign_rate
-            FROM meditrials.patient_visits pv
-            JOIN meditrials.ecrf_data ed ON ed.visit_instance_id=pv.visit_instance_id
-            JOIN meditrials.patients p ON p.patient_id=pv.patient_id
-            JOIN meditrials.study_sites ss ON ss.site_id=p.site_id
-            LEFT JOIN meditrials.data_queries dq ON dq.ecrf_instance_id=ed.ecrf_instance_id
+            FROM public.patient_visits pv
+            JOIN public.ecrf_data ed ON ed.visit_instance_id=pv.visit_instance_id
+            JOIN public.patients p ON p.patient_id=pv.patient_id
+            JOIN public.study_sites ss ON ss.site_id=p.site_id
+            LEFT JOIN public.data_queries dq ON dq.ecrf_instance_id=ed.ecrf_instance_id
             WHERE ss.trial_id=$1 AND pv.actual_visit_date IS NOT NULL
               AND pv.actual_visit_date >= CURRENT_DATE-INTERVAL '6 months'
             GROUP BY DATE_TRUNC('week',pv.actual_visit_date)
@@ -481,17 +481,17 @@ router.get('/lock-readiness/:trialId', async (req: Request, res: Response) => {
                 COUNT(DISTINCT pd.deviation_id) FILTER (WHERE pd.corrective_action IS NULL) AS undocumented_deviations,
                 COUNT(DISTINCT sa.alert_id) FILTER (WHERE sa.alert_status='ACTIVE' AND sa.alert_severity IN ('CRITICAL','SEVERE')) AS critical_alerts,
                 COUNT(DISTINCT sae.sae_id) FILTER (WHERE sae.sae_status!='Closed') AS open_saes,
-                EXISTS(SELECT 1 FROM meditrials.data_locks dl WHERE dl.trial_id=ct.trial_id AND dl.unlock_date IS NULL) AS has_active_lock
-            FROM meditrials.clinical_trials ct
-            JOIN meditrials.study_sites ss ON ss.trial_id=ct.trial_id
-            JOIN meditrials.patients p ON p.site_id=ss.site_id
-            LEFT JOIN meditrials.patient_visits pv ON pv.patient_id=p.patient_id
-            LEFT JOIN meditrials.ecrf_data ed ON ed.visit_instance_id=pv.visit_instance_id
-            LEFT JOIN meditrials.data_queries dq ON dq.ecrf_instance_id=ed.ecrf_instance_id
-            LEFT JOIN meditrials.protocol_deviations pd ON pd.patient_id=p.patient_id
-            LEFT JOIN meditrials.safety_alerts sa ON sa.patient_id=p.patient_id
-            LEFT JOIN meditrials.adverse_events ae ON ae.patient_id=p.patient_id
-            LEFT JOIN meditrials.serious_adverse_events sae ON sae.ae_id=ae.ae_id
+                EXISTS(SELECT 1 FROM public.data_locks dl WHERE dl.trial_id=ct.trial_id AND dl.unlock_date IS NULL) AS has_active_lock
+            FROM public.clinical_trials ct
+            JOIN public.study_sites ss ON ss.trial_id=ct.trial_id
+            JOIN public.patients p ON p.site_id=ss.site_id
+            LEFT JOIN public.patient_visits pv ON pv.patient_id=p.patient_id
+            LEFT JOIN public.ecrf_data ed ON ed.visit_instance_id=pv.visit_instance_id
+            LEFT JOIN public.data_queries dq ON dq.ecrf_instance_id=ed.ecrf_instance_id
+            LEFT JOIN public.protocol_deviations pd ON pd.patient_id=p.patient_id
+            LEFT JOIN public.safety_alerts sa ON sa.patient_id=p.patient_id
+            LEFT JOIN public.adverse_events ae ON ae.patient_id=p.patient_id
+            LEFT JOIN public.serious_adverse_events sae ON sae.ae_id=ae.ae_id
             WHERE ct.trial_id=$1
             GROUP BY ct.trial_id, ct.trial_title`, [req.params.trialId]);
         if (!rows.length) return res.status(404).json({ error: 'Trial not found' });
@@ -506,9 +506,9 @@ router.get('/locks', async (_req: Request, res: Response) => {
             SELECT dl.lock_id, dl.lock_type, dl.lock_date, dl.unlock_date,
                 dl.snapshot_hash, ct.trial_title, ct.trial_id,
                 u.username AS locked_by_username
-            FROM meditrials.data_locks dl
-            JOIN meditrials.clinical_trials ct ON ct.trial_id=dl.trial_id
-            LEFT JOIN meditrials.users u ON u.user_id=dl.locked_by_user_id
+            FROM public.data_locks dl
+            JOIN public.clinical_trials ct ON ct.trial_id=dl.trial_id
+            LEFT JOIN public.users u ON u.user_id=dl.locked_by_user_id
             ORDER BY dl.lock_date DESC`);
         res.json(rows);
     } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -522,14 +522,14 @@ router.post('/lock', async (req: Request, res: Response) => {
     try {
         await withTransaction(user.user_id, reason || `Initiated ${lock_type} lock`, async (client) => {
             // Call the stored procedure — it validates, generates snapshot_hash, inserts data_locks row
-            await client.query(`CALL meditrials.sp_lock_database($1,$2,$3)`,
+            await client.query(`CALL public.sp_lock_database($1,$2,$3)`,
                 [trial_id, lock_type, user.user_id]);
         });
         // Fetch the newly created lock to return certificate data
         const { rows } = await pool.query(`
             SELECT dl.*, ct.trial_title, u.username AS locked_by_username
-            FROM meditrials.data_locks dl JOIN meditrials.clinical_trials ct ON ct.trial_id=dl.trial_id
-            LEFT JOIN meditrials.users u ON u.user_id=dl.locked_by_user_id
+            FROM public.data_locks dl JOIN public.clinical_trials ct ON ct.trial_id=dl.trial_id
+            LEFT JOIN public.users u ON u.user_id=dl.locked_by_user_id
             WHERE dl.trial_id=$1 AND dl.unlock_date IS NULL ORDER BY dl.lock_date DESC LIMIT 1`, [trial_id]);
         res.status(201).json({ success: true, lock: rows[0],
             procedureNote: 'Results generated by stored procedure: sp_lock_database' });
@@ -549,7 +549,7 @@ router.post('/export/sdtm', async (req: Request, res: Response) => {
     try {
         // CALL procedure with INOUT params — pg returns one row with output param values
         const result = await pool.query(
-            `CALL meditrials.sp_export_cdisc_sdtm($1,NULL::JSONB,NULL::JSONB,NULL::JSONB,NULL::JSONB)`,
+            `CALL public.sp_export_cdisc_sdtm($1,NULL::JSONB,NULL::JSONB,NULL::JSONB,NULL::JSONB)`,
             [trial_id]);
         const row = result.rows[0] ?? {};
         const requested = (domains as string[]).map((d: string) => d.toUpperCase());
@@ -583,7 +583,7 @@ router.post('/export/custom', async (req: Request, res: Response) => {
     for (const col of columns) {
         const [tbl, colName] = col.split('.');
         if (!EXPORT_ALLOWLIST[tbl] || !EXPORT_ALLOWLIST[tbl].includes(colName)) {
-            await pool.query(`INSERT INTO meditrials.audit_trail_21cfr
+            await pool.query(`INSERT INTO public.audit_trail_21cfr
                 (table_name,record_id,action_type,change_reason,data_hash)
                 VALUES('custom_export',0,'INSERT','REJECTED: invalid column: '+$1, md5($1))`, [col]).catch(() => {});
             return res.status(400).json({ error: `Column '${col}' is not in the export allowlist` });
@@ -591,8 +591,8 @@ router.post('/export/custom', async (req: Request, res: Response) => {
     }
     // Build safe SELECT (all identifiers validated above)
     const tables = [...new Set(columns.map((c: string) => c.split('.')[0]))];
-    const selectCols = columns.map((c: string) => `meditrials.${c}`).join(', ');
-    const fromClause = `meditrials.${tables[0]}`;
+    const selectCols = columns.map((c: string) => `public.${c}`).join(', ');
+    const fromClause = `public.${tables[0]}`;
     // Validate and build WHERE conditions
     const whereParts: string[] = [];
     for (const cond of conditions) {
@@ -600,9 +600,9 @@ router.post('/export/custom', async (req: Request, res: Response) => {
         if (!EXPORT_ALLOWLIST[tbl]?.includes(colName)) continue;
         if (!VALID_OPS.includes(cond.operator)) continue;
         if (cond.operator === 'IS NULL' || cond.operator === 'IS NOT NULL') {
-            whereParts.push(`meditrials.${cond.column} ${cond.operator}`);
+            whereParts.push(`public.${cond.column} ${cond.operator}`);
         } else {
-            whereParts.push(`meditrials.${cond.column} ${cond.operator} '${String(cond.value).replace(/'/g,"''")}'`);
+            whereParts.push(`public.${cond.column} ${cond.operator} '${String(cond.value).replace(/'/g,"''")}'`);
         }
     }
     const whereClause = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
@@ -618,7 +618,7 @@ router.get('/datasets', async (req: Request, res: Response) => {
     const { trial_id } = req.query;
     if (!trial_id) return res.status(400).json({ error: 'trial_id required' });
     try {
-        const { rows } = await pool.query(`SELECT * FROM meditrials.analysis_datasets WHERE trial_id=$1 ORDER BY created_at DESC`, [trial_id]);
+        const { rows } = await pool.query(`SELECT * FROM public.analysis_datasets WHERE trial_id=$1 ORDER BY created_at DESC`, [trial_id]);
         res.json(rows);
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -632,12 +632,12 @@ router.post('/datasets', async (req: Request, res: Response) => {
         const result = await withTransaction(user.user_id, `Created analysis dataset: ${dataset_name}`, async (client) => {
             // Call sp_generate_csdr to get the CSDR report JSONB
             const csdrResult = await client.query(
-                `CALL meditrials.sp_generate_csdr($1, NULL::JSONB)`, [trial_id]);
+                `CALL public.sp_generate_csdr($1, NULL::JSONB)`, [trial_id]);
             const csdrReport = csdrResult.rows[0]?.csdr_report ?? {};
             const popCount = csdrReport?.patient_accountability?.enrolled ?? 0;
             // Insert the analysis dataset row with generated results
             const { rows } = await client.query(`
-                INSERT INTO meditrials.analysis_datasets
+                INSERT INTO public.analysis_datasets
                     (trial_id, dataset_name, dataset_type, data_cutoff_date, population_count, analysis_results)
                 VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
                 [trial_id, dataset_name, dataset_type, data_cutoff_date, popCount, JSON.stringify(csdrReport)]);
@@ -650,7 +650,7 @@ router.post('/datasets', async (req: Request, res: Response) => {
 // ── GET /api/data-management/datasets/:datasetId ──────────────────────────────
 router.get('/datasets/:datasetId', async (req: Request, res: Response) => {
     try {
-        const { rows } = await pool.query(`SELECT * FROM meditrials.analysis_datasets WHERE dataset_id=$1`, [req.params.datasetId]);
+        const { rows } = await pool.query(`SELECT * FROM public.analysis_datasets WHERE dataset_id=$1`, [req.params.datasetId]);
         if (!rows.length) return res.status(404).json({ error: 'Dataset not found' });
         res.json(rows[0]);
     } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -677,12 +677,12 @@ router.get('/audit', async (req: Request, res: Response) => {
                 at.old_value, at.new_value, at.change_timestamp, at.change_reason,
                 at.ip_address, at.data_hash,
                 u.username AS changed_by_username, u.role AS changed_by_role
-            FROM meditrials.audit_trail_21cfr at
-            LEFT JOIN meditrials.users u ON u.user_id=at.changed_by_user_id
+            FROM public.audit_trail_21cfr at
+            LEFT JOIN public.users u ON u.user_id=at.changed_by_user_id
             WHERE ${filters.join(' AND ')}
             ORDER BY at.change_timestamp DESC
             LIMIT $${pi++} OFFSET $${pi}`, params);
-        const countRes = await pool.query(`SELECT COUNT(*) FROM meditrials.audit_trail_21cfr at
+        const countRes = await pool.query(`SELECT COUNT(*) FROM public.audit_trail_21cfr at
             WHERE ${filters.join(' AND ')}`, params.slice(0, -2));
         res.setHeader('X-Total-Count', countRes.rows[0].count);
         res.json(rows);
@@ -693,8 +693,8 @@ router.get('/audit', async (req: Request, res: Response) => {
 router.get('/audit/users', async (_req: Request, res: Response) => {
     try {
         const { rows } = await pool.query(`SELECT DISTINCT u.user_id, u.username, u.role
-            FROM meditrials.users u
-            WHERE EXISTS (SELECT 1 FROM meditrials.audit_trail_21cfr at WHERE at.changed_by_user_id=u.user_id)
+            FROM public.users u
+            WHERE EXISTS (SELECT 1 FROM public.audit_trail_21cfr at WHERE at.changed_by_user_id=u.user_id)
             ORDER BY u.username`);
         res.json(rows);
     } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -707,8 +707,8 @@ router.get('/audit/signatures', async (_req: Request, res: Response) => {
             SELECT es.signature_id, es.document_type, es.document_id,
                 es.signature_hash, es.signing_reason, es.signed_at,
                 u.username AS signatory_username
-            FROM meditrials.electronic_signatures es
-            LEFT JOIN meditrials.users u ON u.user_id=es.signatory_user_id
+            FROM public.electronic_signatures es
+            LEFT JOIN public.users u ON u.user_id=es.signatory_user_id
             ORDER BY es.signed_at DESC LIMIT 200`);
         res.json(rows);
     } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -722,8 +722,8 @@ router.get('/protocols/:trialId', async (req: Request, res: Response) => {
                 sp.approval_date, sp.valid_from, sp.valid_to,
                 sp.protocol_document, sp.electronic_signature,
                 u.username AS approved_by_username
-            FROM meditrials.study_protocols sp
-            LEFT JOIN meditrials.users u ON u.user_id=sp.approved_by_user_id
+            FROM public.study_protocols sp
+            LEFT JOIN public.users u ON u.user_id=sp.approved_by_user_id
             WHERE sp.trial_id=$1 ORDER BY sp.valid_from DESC`, [req.params.trialId]);
         res.json(rows);
     } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -738,7 +738,7 @@ router.post('/protocols', async (req: Request, res: Response) => {
         const result = await withTransaction(user.user_id, reason || `Uploaded protocol v${version_number}`, async (client) => {
             const sigHash = `sig_${user.user_id}_${Date.now()}`;
             const { rows } = await client.query(`
-                INSERT INTO meditrials.study_protocols
+                INSERT INTO public.study_protocols
                     (trial_id, version_number, amendment_number, approval_date, approved_by_user_id,
                      protocol_document, electronic_signature, valid_from)
                 VALUES ($1,$2,$3,$4,$5,$6,$7,CURRENT_DATE) RETURNING *`,
@@ -759,7 +759,7 @@ router.get('/protocols/:trialId/compare', async (req: Request, res: Response) =>
     try {
         const { rows } = await pool.query(`
             SELECT protocol_id, version_number, amendment_number, valid_from, valid_to, protocol_document
-            FROM meditrials.study_protocols
+            FROM public.study_protocols
             WHERE trial_id=$1 AND version_number IN ($2,$3)`, [req.params.trialId, v1, v2]);
         if (rows.length < 2) return res.status(404).json({ error: 'One or both versions not found' });
         res.json({ v1: rows.find((r: any) => r.version_number === v1), v2: rows.find((r: any) => r.version_number === v2) });
@@ -771,7 +771,7 @@ router.get('/protocols/:trialId/compare', async (req: Request, res: Response) =>
 router.get('/sites/:siteId/quality-score', async (req: Request, res: Response) => {
     try {
         const { rows } = await pool.query(
-            `SELECT * FROM meditrials.get_site_data_quality_score($1)`, [req.params.siteId]);
+            `SELECT * FROM public.get_site_data_quality_score($1)`, [req.params.siteId]);
         if (!rows.length) return res.status(404).json({ error: 'Site not found or no data' });
         res.json({ ...rows[0], functionNote: 'Results generated by function: get_site_data_quality_score' });
     } catch (err: any) { res.status(500).json({ error: err.message }); }

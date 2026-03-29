@@ -9,8 +9,8 @@ const pool = new Pool({
   database: process.env.DB_NAME,
   password: process.env.DB_PASSWORD,
   port: parseInt(process.env.DB_PORT || '5432'),
-  // Ensures all unqualified table names (e.g. 'users') resolve to meditrials schema
-  options: `--search_path=${process.env.DB_SCHEMA || 'meditrials'}`,
+  // Ensures all unqualified table names (e.g. 'users') resolve to public or meditrials schema
+  options: `--search_path=${process.env.DB_SCHEMA || 'public,meditrials'}`,
 });
 
 // 3. Optional: Add a listener to confirm connection in console
