@@ -7,16 +7,17 @@ import { useAuth } from './contexts/AuthContext';
 // PI pages
 import { PatientRegistry } from './pages/Principal_Investigator/PatientRegistry';
 import { PatientProfile } from './pages/Principal_Investigator/PatientProfile';
+import { LabResults } from './pages/Principal_Investigator/LabResults';
 
-// Coordinator pages
+// Screening (shared PI + coordinator)
 import { Screening } from './pages/Principal_Investigator/Screening';
 import { ScreeningReview } from './pages/Principal_Investigator/ScreeningReview';
 import { ScreeningQueue } from './pages/Principal_Investigator/ScreeningQueue';
-import { LabResults } from './pages/Principal_Investigator/LabResults';
+
+// Coordinator pages
 import { ECRFEntry } from './pages/study_coordinator/ECRFEntry/ECRFEntry';
 import { VisitManagement } from './pages/study_coordinator/VisitManagement';
 import { LabResultsEntry } from './pages/study_coordinator/LabResultsEntry';
-import { CoordinatorDashboard } from './pages/study_coordinator/CoordinatorDashboard';
 
 // Safety Monitor pages
 import { AllPatients } from './pages/safety_monitor/AllPatients';
@@ -56,12 +57,14 @@ import { LockManagement } from './pages/admin/LockManagement';
 import { AdminAuditTrail } from './pages/admin/AdminAuditTrail';
 import { SystemSettings } from './pages/admin/SystemSettings';
 
+/* ── Protected wrapper: redirects to /login if not authenticated ────── */
 const W = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
-  if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: '#6B7280' }}>Loading user session…</div>;
+  if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: '#6B7280' }}>Loading session…</div>;
   if (!user) return <Navigate to="/login" replace />;
   return <MainLayout>{children}</MainLayout>;
 };
+
 function App() {
   const { user } = useAuth();
 
@@ -69,55 +72,29 @@ function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
 
-      {/* Shared */}
+      {/* ── Root & Dashboard ─────────────────────────────── */}
       <Route path="/" element={<W><Navigate to="/dashboard" replace /></W>} />
-      <Route path="/dashboard" element={<W>{user?.role === 'Study_Coordinator' ? <CoordinatorDashboard /> : <Dashboard />}</W>} />
+      <Route path="/dashboard" element={<W><Dashboard /></W>} />
 
-      <Route path="/dashboard" element={
-        <MainLayout>
-          {user?.role === 'Study Coordinator' ? <CoordinatorDashboard /> : <Dashboard />}
-        </MainLayout>
-      } />
-
-      {/* Patient Registry & Screening */}
-      <Route path="/patients" element={<MainLayout><PatientRegistry /></MainLayout>} />
-      <Route path="/patients/screening" element={<MainLayout><ScreeningQueue /></MainLayout>} />
+      {/* ── Patient Registry & Screening ──────────────────── */}
+      <Route path="/patients" element={<W><PatientRegistry /></W>} />
+      <Route path="/patients/screening" element={<W><ScreeningQueue /></W>} />
       <Route path="/patients/screening/:patient_id" element={
-        <MainLayout>
-          {user?.role === 'Principal_Investigator' ? <ScreeningReview /> : <Screening />}
-        </MainLayout>
+        <W>{user?.role === 'Principal_Investigator' ? <ScreeningReview /> : <Screening />}</W>
       } />
-      <Route path="/patients/:patient_id" element={<MainLayout><PatientProfile /></MainLayout>} />
+      <Route path="/patients/:patient_id" element={<W><PatientProfile /></W>} />
 
-      <Route path="/ecrf" element={
-        <MainLayout>
-          <ECRFEntry />
-        </MainLayout>
-      } />
+      {/* ── eCRF ──────────────────────────────────────────── */}
+      <Route path="/ecrf" element={<W><ECRFEntry /></W>} />
 
-      <Route path="/safety" element={
-        <MainLayout>
-          <div className="p-8"><h1>Safety Monitoring (Coming Soon)</h1></div>
-        </MainLayout>
-      } />
+      {/* ── PI: Lab Results ────────────────────────────────── */}
+      <Route path="/labs" element={<W><LabResults /></W>} />
 
-      <Route path="/labs" element={
-        <MainLayout>
-          <LabResults />
-        </MainLayout>
-      } />
-
-      <Route path="/stats" element={
-        <MainLayout>
-          <div className="p-8"><h1>Statistics (Coming Soon)</h1></div>
-        </MainLayout>
-      } />
-
-      {/* Coordinator Routes */}
+      {/* ── Coordinator Routes ────────────────────────────── */}
       <Route path="/visits" element={<W><VisitManagement /></W>} />
       <Route path="/labs/entry" element={<W><LabResultsEntry /></W>} />
 
-      {/* Safety Monitor Routes */}
+      {/* ── Safety Monitor Routes ─────────────────────────── */}
       <Route path="/sm/patients" element={<W><AllPatients /></W>} />
       <Route path="/safety/ae" element={<W><AdverseEvents /></W>} />
       <Route path="/safety/sae" element={<W><SAEManagement /></W>} />
@@ -127,14 +104,14 @@ function App() {
       <Route path="/safety/unblinding" element={<W><Unblinding /></W>} />
       <Route path="/safety/reports" element={<W><SafetyReports /></W>} />
 
-      {/* Data Manager Routes */}
+      {/* ── Data Manager Routes ───────────────────────────── */}
       <Route path="/data-management/queries" element={<W><DataQueries /></W>} />
       <Route path="/data-management/review" element={<W><DataReview /></W>} />
       <Route path="/data-management/lock" element={<W><DatabaseLock /></W>} />
       <Route path="/data-management/export" element={<W><CDISCExport /></W>} />
       <Route path="/protocols" element={<W><Protocols /></W>} />
 
-      {/* Statistician Routes */}
+      {/* ── Statistician Routes ───────────────────────────── */}
       <Route path="/statistics/datasets" element={<W><AnalysisDatasets /></W>} />
       <Route path="/statistics/survival" element={<W><SurvivalAnalysis /></W>} />
       <Route path="/statistics/power" element={<W><PowerAnalysis /></W>} />
@@ -142,11 +119,7 @@ function App() {
       <Route path="/statistics/safety" element={<W><SafetyStatistics /></W>} />
       <Route path="/statistics/interim" element={<W><InterimAnalysis /></W>} />
 
-      {/* Shared stat/DM route */}
-      <Route path="/labs" element={<W><div className="p-8"><h1>Lab Results (Coming Soon)</h1></div></W>} />
-      <Route path="/safety" element={<W><div className="p-8"><h1>Safety Monitoring (Coming Soon)</h1></div></W>} />
-
-      {/* Admin Routes */}
+      {/* ── Admin Routes ──────────────────────────────────── */}
       <Route path="/admin/trials" element={<W><TrialManagement /></W>} />
       <Route path="/admin/trials/new" element={<W><TrialForm /></W>} />
       <Route path="/admin/trials/:trialId" element={<W><TrialDetail /></W>} />
@@ -158,10 +131,11 @@ function App() {
       <Route path="/admin/locks" element={<W><LockManagement /></W>} />
       <Route path="/admin/settings" element={<W><SystemSettings /></W>} />
 
-      {/* Audit Trail — role-aware: DM gets 21 CFR DM view, others get AdminAuditTrail */}
+      {/* ── Shared: Audit Trail (role-aware) ───────────────── */}
       <Route path="/audit" element={<W>{user?.role === 'Data_Manager' ? <AuditTrail /> : <AdminAuditTrail />}</W>} />
 
-      <Route path="*" element={<W><div className="p-8">Page Not Found</div></W>} />
+      {/* ── Catch-all ─────────────────────────────────────── */}
+      <Route path="*" element={<W><div style={{ padding: 32, textAlign: 'center', color: 'var(--gray-500)' }}><h2>404 — Page Not Found</h2><p>The page you're looking for doesn't exist.</p></div></W>} />
     </Routes>
   );
 }

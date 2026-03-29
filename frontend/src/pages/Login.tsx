@@ -150,27 +150,29 @@ export const Login: React.FC = () => {
                     </button>
 
                     {/* Quick Test Buttons */}
-                    <div className="mt-4 pt-4 border-t border-gray-200">
-                        <p className="text-xs text-gray-500 mb-2">Quick fill (Dev):</p>
-                        <div className="flex flex-wrap gap-2">
-                            <button type="button" onClick={() => fillTestCredentials('investigator')} className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded">
-                                PI (pi_site_1)
-                            </button>
-                            <button type="button" onClick={() => fillTestCredentials('coordinator')} className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded">
-                                Coordinator (coord_site_1)
-                            </button>
-                            <button type="button" onClick={() => fillTestCredentials('safety_monitor')} className="text-xs px-2 py-1 bg-red-100 text-red-700 rounded">
-                                Safety (safety_1)
-                            </button>
-                            <button type="button" onClick={() => fillTestCredentials('data_manager')} className="text-xs px-2 py-1 bg-yellow-100 text-yellow-700 rounded">
-                                Data Mgr (datamgr_1)
-                            </button>
-                            <button type="button" onClick={() => fillTestCredentials('statistician')} className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded">
-                                Statistician (stat_1)
-                            </button>
-                            <button type="button" onClick={() => fillTestCredentials('admin')} className="text-xs px-2 py-1 bg-gray-200 text-gray-700 rounded font-semibold">
-                                Admin (admin)
-                            </button>
+                    <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--gray-200)' }}>
+                        <p style={{ fontSize: '0.72rem', color: 'var(--gray-400)', marginBottom: 8 }}>Quick fill (Dev):</p>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                            {[
+                                { key: 'investigator', label: 'PI', bg: '#dbeafe', color: '#1d4ed8' },
+                                { key: 'coordinator', label: 'Coordinator', bg: '#dcfce7', color: '#15803d' },
+                                { key: 'safety_monitor', label: 'Safety', bg: '#fee2e2', color: '#b91c1c' },
+                                { key: 'data_manager', label: 'Data Mgr', bg: '#fef3c7', color: '#92400e' },
+                                { key: 'statistician', label: 'Statistician', bg: '#f3e8ff', color: '#7c3aed' },
+                                { key: 'admin', label: 'Admin', bg: '#e5e7eb', color: '#374151' },
+                            ].map(btn => (
+                                <button key={btn.key} type="button" onClick={() => fillTestCredentials(btn.key)}
+                                    style={{
+                                        fontSize: '0.7rem', padding: '4px 10px', borderRadius: 6, fontWeight: 600,
+                                        background: btn.bg, color: btn.color, border: 'none', cursor: 'pointer',
+                                        transition: 'opacity 0.15s',
+                                    }}
+                                    onMouseEnter={e => (e.currentTarget.style.opacity = '0.8')}
+                                    onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
+                                >
+                                    {btn.label}
+                                </button>
+                            ))}
                         </div>
                     </div>
                 </form>
