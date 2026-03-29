@@ -8,6 +8,7 @@ import { useAuth } from './contexts/AuthContext';
 import { PatientRegistry } from './pages/Principal_Investigator/PatientRegistry';
 import { PatientProfile } from './pages/Principal_Investigator/PatientProfile';
 import { LabResults } from './pages/Principal_Investigator/LabResults';
+import { PISafetyMonitoring } from './pages/Principal_Investigator/PISafetyMonitoring';
 
 // Screening (shared PI + coordinator)
 import { Screening } from './pages/Principal_Investigator/Screening';
@@ -83,6 +84,7 @@ function App() {
         <W>{user?.role === 'Principal_Investigator' ? <ScreeningReview /> : <Screening />}</W>
       } />
       <Route path="/patients/:patient_id" element={<W><PatientProfile /></W>} />
+      <Route path="/safety" element={<W><PISafetyMonitoring /></W>} />
 
       {/* ── eCRF ──────────────────────────────────────────── */}
       <Route path="/ecrf" element={<W><ECRFEntry /></W>} />

@@ -116,10 +116,10 @@ router.get('/safety-monitor', requireSafetyMonitor, async (req: any, res: any) =
         // System events log from audit trail (trigger evidence)
         const systemEvents = await pool.query(
             `SELECT at.audit_id, at.table_name, at.action_type, at.change_reason,
-                    at.changed_at, at.changed_by_user_id
+                    at.change_timestamp, at.changed_by_user_id
              FROM public.audit_trail_21cfr at
              WHERE at.action_type = 'INSERT'
-             ORDER BY at.changed_at DESC LIMIT 10`
+             ORDER BY at.change_timestamp DESC LIMIT 10`
         );
 
         const trialIds: number[] = overviewRows.rows.map((r: any) => r.trial_id);
@@ -769,7 +769,7 @@ router.get('/unblinding/:patientId', requireSafetyMonitor, async (req: any, res:
         const history = await pool.query(
             `SELECT * FROM public.audit_trail_21cfr
              WHERE table_name='randomization_assignments' AND record_id=$1 AND action_type='UPDATE'
-             ORDER BY changed_at DESC`, [rows[0].patient_id]
+             ORDER BY change_timestamp DESC`, [rows[0].patient_id]
         );
         res.json({ patient: rows[0], history: history.rows });
     } catch (err: any) {

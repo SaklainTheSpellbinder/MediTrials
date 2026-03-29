@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 
-// ── Route Imports ─────────────────────────────────────────────────────────────
+// ── Route Imports ─────
 import authRoutes from './routes/authRoutes';
 import patientRoutes from './routes/patientRoutes';
 import patientProfileRoutes from './routes/patientProfileRoutes';
@@ -15,6 +15,7 @@ import safetyMonitorRoutes from './routes/safetyMonitorRoutes';
 import dataManagerRoutes from './routes/dataManagerRoutes';
 import statisticianRoutes from './routes/statisticianRoutes';
 import adminRoutes from './routes/adminRoutes';
+import piSafetyRoutes from './routes/piSafetyRoutes';
 
 dotenv.config();
 
@@ -44,6 +45,9 @@ app.use('/api/labs', labRoutes);
 // Safety Monitor
 app.use('/api/dashboard', safetyMonitorRoutes);
 app.use('/api/safety', safetyMonitorRoutes);
+
+// PI Safety
+app.use('/api/pi-safety', piSafetyRoutes);
 
 // Data Manager
 app.use('/api/dashboard', dataManagerRoutes);
