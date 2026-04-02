@@ -122,6 +122,7 @@ export const PatientRegistry: React.FC = () => {
         setRegSubmitting(true);
         setRegError(null);
         try {
+            //calls patientAPI create function with these params
             await patientAPI.create({
                 full_name: regForm.full_name || undefined,
                 date_of_birth: regForm.date_of_birth,
