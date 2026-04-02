@@ -19,11 +19,18 @@ interface Patient {
 export const PatientRegistry: React.FC = () => {
     const { user } = useAuth();
     const [searchTerm, setSearchTerm] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const ITEMS_PER_PAGE = 10;
     const [patients, setPatients] = useState<Patient[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // Registration modal state
+    //reset to page 1 when search term changes
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm]);
+
+    //registration modal state
     const [showModal, setShowModal] = useState(false);
     const [regForm, setRegForm] = useState({ full_name: '', date_of_birth: '', gender: 'Male' });
     const [regSubmitting, setRegSubmitting] = useState(false);
@@ -35,7 +42,8 @@ export const PatientRegistry: React.FC = () => {
         try {
             setLoading(true);
             setError(null);
-            const data = await patientAPI.getAll();
+            const data = await patientAPI.getAll(); 
+            //this fetches all patients of users site_id
             if (data.success && Array.isArray(data.patients)) {
                 setPatients(data.patients);
             } else {
@@ -59,6 +67,12 @@ export const PatientRegistry: React.FC = () => {
             p.patient_status?.toLowerCase().includes(term)
         );
     });
+
+    const totalPages = Math.max(1, Math.ceil(filteredPatients.length / ITEMS_PER_PAGE));
+    const paginatedPatients = filteredPatients.slice(
+        (currentPage - 1) * ITEMS_PER_PAGE,
+        currentPage * ITEMS_PER_PAGE
+    );
 
     const getStatusColor = (status: string) => {
         const s = (status || '').toLowerCase();
@@ -102,7 +116,7 @@ export const PatientRegistry: React.FC = () => {
         a.href = url; a.download = 'patients.csv'; a.click();
     };
 
-    // ── Registration Modal Submit ────────────────────────────────────
+    // Registration Modal Submit
     const handleRegister = async () => {
         if (!regForm.date_of_birth || !regForm.gender) return;
         setRegSubmitting(true);
@@ -184,7 +198,7 @@ export const PatientRegistry: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredPatients.map((patient) => (
+                            {paginatedPatients.map((patient) => (
                                 <tr key={patient.patient_id}>
                                     <td className="font-mono font-medium">{patient.trial_patient_id}</td>
                                     <td>{patient.full_name || '—'}</td>
@@ -218,17 +232,36 @@ export const PatientRegistry: React.FC = () => {
                 </div>
 
                 <div className="table-footer">
-                    <p>Showing {filteredPatients.length} of {patients.length} patients</p>
+                    <p>
+                        Showing {filteredPatients.length > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0} to {Math.min(currentPage * ITEMS_PER_PAGE, filteredPatients.length)} of {filteredPatients.length} patients {searchTerm && `(filtered from ${patients.length})`}
+                    </p>
                     <div className="pagination">
-                        <button disabled>Previous</button>
-                        <button className="active">1</button>
-                        <button>2</button>
-                        <button>Next</button>
+                        <button 
+                            disabled={currentPage === 1} 
+                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        >
+                            Previous
+                        </button>
+                        {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                            <button 
+                                key={page} 
+                                className={currentPage === page ? 'active' : ''}
+                                onClick={() => setCurrentPage(page)}
+                            >
+                                {page}
+                            </button>
+                        ))}
+                        <button 
+                            disabled={currentPage === totalPages || totalPages === 0} 
+                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        >
+                            Next
+                        </button>
                     </div>
                 </div>
             </div>
 
-            {/* ── Registration Modal ──────────────────────────────────── */}
+            {/*Registration Modal*/}
             {showModal && (
                 <div className="modal-overlay" onClick={() => setShowModal(false)}>
                     <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 440 }}>
@@ -269,7 +302,6 @@ export const PatientRegistry: React.FC = () => {
                                     >
                                         <option value="Male">Male</option>
                                         <option value="Female">Female</option>
-                                        <option value="Other">Other / Prefer not to say</option>
                                     </select>
                                 </div>
                             </div>

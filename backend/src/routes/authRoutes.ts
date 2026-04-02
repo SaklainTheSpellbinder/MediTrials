@@ -11,7 +11,7 @@ router.post('/login', async (req: Request, res: Response) => {
   const { username, password, role } = req.body;
 
   try {
-    // 1. QUERY THE REAL DATABASE
+    //first finding out if any user with that username and role
     const result = await pool.query(
       'SELECT * FROM public.users WHERE username = $1 AND role = $2',
       [username, role]
@@ -54,7 +54,7 @@ router.post('/login', async (req: Request, res: Response) => {
 
     // 3. SUCCESS: UPDATE LAST LOGIN TIME
     await pool.query('UPDATE public.users SET last_login = CURRENT_TIMESTAMP WHERE user_id = $1', [user.user_id]);
-
+    
     // 4. REMOVE PASSWORD BEFORE SENDING
     const { password_hash: _, ...userSafe } = user;
 

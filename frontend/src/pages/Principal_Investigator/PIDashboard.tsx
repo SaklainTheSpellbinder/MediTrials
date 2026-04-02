@@ -19,9 +19,10 @@ export const PIDashboard: React.FC = () => {
     const [, setLoading] = useState(true);
 
     useEffect(() => {
+        //defining fetchDashboardStats function inside the argument of useEffect (argument is an arrow function)
         const fetchDashboardStats = async () => {
             if (!user?.site_id) {
-                // Fallback for demo/dev if no site_id
+                // Use dummy if no site_id
                 setStats({
                     total_patients: 142,
                     active_patients: 89,
@@ -58,16 +59,11 @@ export const PIDashboard: React.FC = () => {
         <div className="dashboard-container">
             <div className="section-header">
                 <div>
-                    <h1 className="page-title">MediTrials Dashboard</h1>
-                    <p className="text-gray-500 text-sm">Last updated: Today, 09:30 AM</p>
-                </div>
-                <div className="flex gap-2">
-                    <button className="btn-secondary">Export Report</button>
-                    <button className="btn-primary">+ Register Subject</button>
+                    <h1 className="page-title">Principal Investigator Dashboard</h1>
                 </div>
             </div>
 
-            {/* Stats Grid */}
+         
             <div className="stats-grid">
                 <StatCard
                     label="Total Patients"
@@ -84,14 +80,12 @@ export const PIDashboard: React.FC = () => {
                 <StatCard
                     label="Screen Failures"
                     value={stats?.screen_failures || 0}
-                    subValue="8% failure rate"
                     icon={UserX}
                     color="warning"
                 />
                 <StatCard
                     label="Retention Rate"
                     value={`${stats?.retention_rate || 0}%`}
-                    subValue="+2% vs target"
                     icon={TrendingUp}
                     color="info"
                 />

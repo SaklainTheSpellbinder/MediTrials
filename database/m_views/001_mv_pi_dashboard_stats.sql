@@ -1,7 +1,7 @@
 -- Materialized View: mv_pi_dashboard_stats
 -- Purpose: Pre-calculate dashboard statistics for Principal Investigators.
--- Scope: Aggregated by site_id.
--- Schema: Based on 'patients' and 'study_sites' tables.
+-- Aggregated by site_id.
+-- Based on 'patients' and 'study_sites' tables.
 
 DROP MATERIALIZED VIEW IF EXISTS mv_pi_dashboard_stats;
 

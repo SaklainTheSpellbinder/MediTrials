@@ -7,13 +7,12 @@ import './Login.css';
 export const Login: React.FC = () => {
     const navigate = useNavigate();
     const { login: authLogin } = useAuth();
-    const [role, setRole] = useState('Principal_Investigator'); // Default to match DB schema
+    const [role, setRole] = useState('Principal_Investigator');
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
-    // Matches the 'role' column in your DB exactly (with underscores)
     const roleOptions = [
         { value: 'Principal_Investigator', label: 'Principal Investigator' },
         { value: 'Study_Coordinator', label: 'Study Coordinator' },
@@ -29,7 +28,6 @@ export const Login: React.FC = () => {
         setError('');
 
         try {
-            // Pass exact DB values
             await authLogin(username, password, role);
             navigate('/dashboard');
         } catch (err: any) {

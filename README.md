@@ -1,73 +1,28 @@
-# React + TypeScript + Vite
+# MediTrials Architecture & Documentation
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This project handles the frontend and backend of the MediTrials clinical trial management system. The frontend is built with React, and the backend with Express + PostgreSQL. Below is a mapping of how the system connects.
 
-Currently, two official plugins are available:
+## Backend Core Setup
+- [**`backend/src/index.ts`**](file:///d:/MediTrials/backend/src/index.ts): The main entry point for the Express server. It configures basic middleware (CORS, JSON payload parsing) and serves as the central router. It mounts feature-specific routers (e.g., `authRoutes`, `patientRoutes`, `screeningRoutes`) under the `/api/` prefix.
+- [**`backend/src/config/db.ts`**](file:///d:/MediTrials/backend/src/config/db.ts): Manages the PostgreSQL database connection using the `pg` library's `Pool`. It securely reads connection parameters (user, host, database, port, and schema mapping) from environment variables via `dotenv` and handles unexpected connection errors.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## API Services (Frontend -> Backend map)
+The frontend uses [**`frontend/src/services/api.ts`**](file:///d:/MediTrials/frontend/src/services/api.ts) to define Axios HTTP calls that interact with the corresponding backend routes.
 
-## React Compiler
+- **PatientRegistry** ([`PatientRegistry.tsx`](file:///d:/MediTrials/frontend/src/pages/Principal_Investigator/PatientRegistry.tsx))  
+  Queries all patients of the current user's `site_id` using the `patientAPI.getAll()` function. This sends a `GET` request to `/api/patients?site_id=...`, which maps to [**`patientRoutes.ts`**](file:///d:/MediTrials/backend/src/routes/patientRoutes.ts) on the backend for querying logic.
+  
+- **Patient Profile** ([e.g. `PatientProfile.tsx`](file:///d:/MediTrials/frontend/src/pages/Principal_Investigator/PatientProfile.tsx))  
+  Fetches various details (header, timeline, docs, clinical) using `patientProfileAPI`. Matches `GET /api/patients/:patientId/profile` and others routed by [**`patientProfileRoutes.ts`**](file:///d:/MediTrials/backend/src/routes/patientProfileRoutes.ts).
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **Screening Queue**  
+  Uses the `screeningAPI` object (calling methods like `getCriteria`, `submitForPiReview`) which triggers requests to `/api/screening/...`. Handled on the backend by [**`screeningRoutes.ts`**](file:///d:/MediTrials/backend/src/routes/screeningRoutes.ts).
 
-## Expanding the ESLint configuration
+- **Lab Results Tracking**  
+  Uses the `labAPI` object to fetch and review results (`/api/labs`). Maps to the backend [**`labRoutes.ts`**](file:///d:/MediTrials/backend/src/routes/labRoutes.ts).
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- **Electronic Case Report Forms (eCRF)**  
+  Uses the `ecrfAPI` (`post /api/ecrf/submit`) which triggers [**`ecrfRoutes.ts`**](file:///d:/MediTrials/backend/src/routes/ecrfRoutes.ts) to store data in the backend.
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+- **Role-based Dashboards**  
+  Specialized dashboards (Safety Monitor, Data Manager, Admin, Statistician) make requests targeting base sub-URLs such as `/api/dashboard`, `/api/safety`, `/api/export`, and others. These are routed appropriately in `index.ts` to [**`safetyMonitorRoutes.ts`**](file:///d:/MediTrials/backend/src/routes/safetyMonitorRoutes.ts), [**`dataManagerRoutes.ts`**](file:///d:/MediTrials/backend/src/routes/dataManagerRoutes.ts), [**`adminRoutes.ts`**](file:///d:/MediTrials/backend/src/routes/adminRoutes.ts) etc.

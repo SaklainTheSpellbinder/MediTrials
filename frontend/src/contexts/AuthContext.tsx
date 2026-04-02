@@ -1,15 +1,14 @@
 import { createContext, useState, useContext, useEffect } from 'react';
 import type { ReactNode } from 'react';
 
-// 1. UPDATED INTERFACE to match PostgreSQL columns
 interface User {
-    user_id: number;      // Changed to user_id to match new DB schema
+    user_id: number;      
     username: string;
-    full_name: string;    // Added this field
+    full_name: string;   
     role: string;
     email: string;
     site_id?: number;
-    institution_name?: string; // Optional, if you JOIN table in backend
+    institution_name?: string; 
 }
 
 interface AuthContextType {

@@ -31,7 +31,7 @@ API.interceptors.response.use(
 
 // Patient API functions
 export const patientAPI = {
-  // Get all patients - filtered by user's site
+  //get all patients of users site id
   getAll: async () => {
     const userStr = localStorage.getItem('user');
     const user = userStr ? JSON.parse(userStr) : null;
