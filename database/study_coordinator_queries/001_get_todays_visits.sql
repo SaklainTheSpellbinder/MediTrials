@@ -1,7 +1,7 @@
 -- Get visits scheduled for today (or specific date) for a site
 
 SELECT 
-    p.full_name,
+    p.trial_patient_id AS full_name,
     p.trial_patient_id,
     vs.visit_name,
     pv.scheduled_date,

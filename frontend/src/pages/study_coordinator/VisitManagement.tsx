@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar as CalendarIcon, Clock, CheckCircle, Search, ChevronLeft, ChevronRight, Plus, UserCheck, AlertTriangle } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, CheckCircle, Search, ChevronLeft, ChevronRight, Plus, UserCheck, AlertTriangle, ArrowRight, User } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import '../Dashboard.css';
+import './Coordinator.css';
 
 interface Visit {
     visit_instance_id: number;
@@ -19,12 +19,12 @@ export const VisitManagement: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [viewMode, setViewMode] = useState<'today' | 'calendar'>('today');
+    const [checkingInId, setCheckingInId] = useState<number | null>(null);
 
     const fetchVisits = async () => {
         if (!user?.site_id) return;
         setLoading(true);
         try {
-            // Reusing the same endpoint that gets today's visits for the list view
             const response = await fetch(`http://localhost:5000/api/coordinator/visits/today?site_id=${user.site_id}`);
             if (response.ok) {
                 const data = await response.json();
@@ -42,6 +42,7 @@ export const VisitManagement: React.FC = () => {
     }, [user?.site_id]);
 
     const handleCheckIn = async (visitInstanceId: number) => {
+        setCheckingInId(visitInstanceId);
         try {
             const response = await fetch(`http://localhost:5000/api/coordinator/visits/checkin?site_id=${user?.site_id}`, {
                 method: 'POST',
@@ -52,58 +53,67 @@ export const VisitManagement: React.FC = () => {
             if (response.ok) {
                 await fetchVisits();
             } else {
-                const err = await response.json();
-                alert(`Check-in failed: ${err.error}`);
+                console.error(`Check-in failed`);
             }
         } catch (error) {
             console.error("Check-in error:", error);
-            alert("Failed to check in patient");
+        } finally {
+            setCheckingInId(null);
         }
     };
 
     const filteredVisits = visits.filter(v =>
-        v.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        v.trial_patient_id.toLowerCase().includes(searchTerm.toLowerCase())
+        v.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        v.trial_patient_id?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     const checkedInCount = visits.filter(v => ['Checked In', 'In Progress', 'Completed'].includes(v.visit_status)).length;
 
-    // --- Mock Calendar Render ---
     const renderCalendar = () => (
-        <div className="card mt-4 p-6">
-            <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-4">
-                    <h2 className="text-xl font-bold text-gray-800">Current Month</h2>
-                    <div className="flex gap-1">
-                        <button className="p-1 hover:bg-gray-100 rounded text-gray-500"><ChevronLeft size={20} /></button>
-                        <button className="p-1 hover:bg-gray-100 rounded text-gray-500"><ChevronRight size={20} /></button>
+        <div className="coord-content-card" style={{ padding: '2rem' }}>
+            <div className="coord-flex-row-between" style={{ marginBottom: '2rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                    <h2 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0 }}>Current Month</h2>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button className="coord-btn-outline" style={{ display: 'flex', padding: '0.5rem', borderRadius: '0.5rem' }}><ChevronLeft size={18} /></button>
+                        <button className="coord-btn-outline" style={{ display: 'flex', padding: '0.5rem', borderRadius: '0.5rem' }}><ChevronRight size={18} /></button>
                     </div>
                 </div>
-                <button className="btn-primary btn-sm flex items-center gap-2">
-                    <Plus size={16} /> New Appointment
+                <button className="coord-btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.25rem', borderRadius: '0.75rem' }}>
+                    <Plus size={18} /> New Appointment
                 </button>
             </div>
 
-            <div className="grid grid-cols-7 gap-px bg-gray-200 border border-gray-200 rounded-lg overflow-hidden">
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                    <div key={day} className="bg-gray-50 py-2 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '1rem' }}>
+                {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map(day => (
+                    <div key={day} style={{ textAlign: 'right', fontSize: '0.75rem', fontWeight: 800, color: '#9ca3af', textTransform: 'uppercase', paddingBottom: '0.5rem' }}>
                         {day}
                     </div>
                 ))}
 
-                {/* Mock Days */}
                 {[...Array(35)].map((_, i) => {
                     const dayNum = (i % 31) + 1;
-                    const isToday = dayNum === new Date().getDate();
+                    const isToday = dayNum === new Date().getDate() && i < 31;
+                    const isNextMonth = i >= 31;
 
                     return (
-                        <div key={i} className={`bg-white min-h-[100px] p-2 ${isToday ? 'bg-blue-50/30 ring-1 ring-inset ring-blue-500' : ''}`}>
-                            <span className={`text-sm font-medium ${isToday ? 'text-blue-600' : 'text-gray-700'}`}>
+                        <div key={i} style={{ 
+                            minHeight: '120px', padding: '0.75rem', borderRadius: '0.75rem', 
+                            border: `2px solid ${isToday ? '#bfdbfe' : '#f3f4f6'}`,
+                            background: isToday ? '#eff6ff' : isNextMonth ? '#f9fafb' : '#ffffff',
+                            color: isNextMonth ? '#d1d5db' : 'inherit'
+                        }}>
+                            <span style={{ fontSize: '0.875rem', fontWeight: 800, display: 'block', marginBottom: '0.5rem', color: isToday ? '#2563eb' : isNextMonth ? '#d1d5db' : '#6b7280' }}>
                                 {dayNum}
                             </span>
                             {isToday && (
-                                <div className="mt-2 text-xs p-1 bg-blue-100 text-blue-800 rounded border border-blue-200 truncate">
-                                    3 Visits Today
+                                <div style={{ fontSize: '0.7rem', padding: '0.3rem 0.5rem', background: '#ffffff', border: '1px solid #bfdbfe', color: '#1d4ed8', fontWeight: 700, borderRadius: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.25rem', marginBottom: '0.3rem' }}>
+                                    <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#3b82f6' }}></span> 3 Scheduled
+                                </div>
+                            )}
+                            {(i === 12 || i === 18) && !isNextMonth && (
+                                <div style={{ fontSize: '0.7rem', padding: '0.3rem 0.5rem', background: '#ffffff', border: '1px solid #e5e7eb', color: '#4b5563', fontWeight: 700, borderRadius: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                    <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#9ca3af' }}></span> 1 Visit
                                 </div>
                             )}
                         </div>
@@ -114,154 +124,177 @@ export const VisitManagement: React.FC = () => {
     );
 
     return (
-        <div className="dashboard-container max-w-6xl mx-auto">
-            <div className="section-header flex-col sm:flex-row items-start sm:items-center gap-4">
+        <div className="coord-container">
+            <div className="coord-flex-row-between" style={{ marginBottom: '2.5rem' }}>
                 <div>
-                    <h1 className="page-title flex items-center gap-2">
-                        <CalendarIcon size={24} className="text-blue-600" />
-                        Visit Management
-                    </h1>
-                    <p className="text-gray-500 text-sm mt-1">Check-in patients and manage the site schedule.</p>
+                    <div className="coord-badge coord-badge-blue" style={{ marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        <CalendarIcon size={12} /> Clinical Workflow
+                    </div>
+                    <h1 className="coord-page-title">Visit Management</h1>
+                    <p className="coord-page-subtitle">Seamlessly coordinate arrivals and patient workflows.</p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-                    <div className="relative flex-1 sm:w-64">
+                <div className="coord-flex-row">
+                    <div style={{ position: 'relative', width: '280px' }}>
                         <input
                             type="text"
-                            placeholder="Search patient..."
-                            className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Find patient..."
+                            className="coord-input-field"
+                            style={{ paddingLeft: '2.5rem', fontSize: '0.95rem' }}
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
-                        <Search className="absolute left-3 top-2.5 text-gray-400" size={16} />
+                        <Search style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} size={18} />
                     </div>
 
-                    {/* View Switcher */}
-                    <div className="bg-gray-100 p-1 rounded-lg flex gap-1 border border-gray-200">
+                    <div style={{ background: '#f3f4f6', padding: '0.25rem', borderRadius: '0.75rem', display: 'flex', gap: '0.25rem', border: '1px solid #e5e7eb' }}>
                         <button
-                            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${viewMode === 'today' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                            style={{ padding: '0.5rem 1rem', borderRadius: '0.5rem', fontSize: '0.875rem', fontWeight: 700, border: 'none', cursor: 'pointer', transition: 'all 0.2s', background: viewMode === 'today' ? '#ffffff' : 'transparent', color: viewMode === 'today' ? '#111827' : '#6b7280', boxShadow: viewMode === 'today' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none' }}
                             onClick={() => setViewMode('today')}
                         >
                             Today's Visits
                         </button>
                         <button
-                            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${viewMode === 'calendar' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                            style={{ padding: '0.5rem 1rem', borderRadius: '0.5rem', fontSize: '0.875rem', fontWeight: 700, border: 'none', cursor: 'pointer', transition: 'all 0.2s', background: viewMode === 'calendar' ? '#ffffff' : 'transparent', color: viewMode === 'calendar' ? '#111827' : '#6b7280', boxShadow: viewMode === 'calendar' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none' }}
                             onClick={() => setViewMode('calendar')}
                         >
-                            Calendar
+                            Calendar View
                         </button>
                     </div>
                 </div>
             </div>
 
             {viewMode === 'calendar' ? renderCalendar() : (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
-                    {/* Left Column - Visit List */}
-                    <div className="lg:col-span-2 space-y-4">
-                        <div className="flex items-center justify-between mb-2">
-                            <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                                <Clock size={18} className="text-gray-500" />
+                <div className="coord-grid-2-layout">
+                    {/* Left Column - Priority List */}
+                    <div className="coord-flex-col" style={{ gap: '1.25rem' }}>
+                        <div className="coord-flex-row-between">
+                            <h2 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 800, color: '#111827', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <Clock size={20} color="#4f46e5" />
                                 Expected Arrivals
                             </h2>
-                            <span className="text-sm font-medium bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
-                                {checkedInCount} / {visits.length} Checked In
-                            </span>
+                            <div style={{ background: '#ffffff', padding: '0.5rem 1rem', borderRadius: '9999px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', fontWeight: 700 }}>
+                                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }}></span>
+                                <span>
+                                    {checkedInCount} <span style={{ color: '#9ca3af', fontWeight: 500 }}>of</span> {visits.length} Checked In
+                                </span>
+                            </div>
                         </div>
 
                         {loading ? (
-                            <div className="card p-12 flex flex-col items-center justify-center text-gray-400">
-                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mb-4"></div>
-                                Loading today's visits...
+                            <div className="coord-empty-state coord-content-card">
+                                <div className="coord-spinner" style={{ width: '2.5rem', height: '2.5rem', color: '#4f46e5', borderWidth: '4px', marginBottom: '1rem' }}></div>
+                                <p style={{ fontWeight: 700 }}>Syncing today's schedule...</p>
                             </div>
                         ) : filteredVisits.length === 0 ? (
-                            <div className="card p-12 text-center text-gray-500">
-                                <CalendarIcon size={48} className="mx-auto text-gray-300 mb-3" />
-                                No visits scheduled for today matching your criteria.
+                            <div className="coord-empty-state coord-content-card" style={{ borderStyle: 'dashed', borderColor: '#d1d5db' }}>
+                                <div className="coord-empty-icon"><CheckCircle size={28} /></div>
+                                <h3>All clear!</h3>
+                                <p>No pending visits matching your criteria.</p>
                             </div>
                         ) : (
-                            filteredVisits.map((visit) => {
-                                const isCheckedIn = ['Checked In', 'In Progress', 'Completed'].includes(visit.visit_status);
+                            <div className="coord-flex-col" style={{ gap: '1rem' }}>
+                                {filteredVisits.map((visit) => {
+                                    const isCheckedIn = ['Checked In', 'In Progress', 'Completed'].includes(visit.visit_status);
+                                    const isCheckingIn = checkingInId === visit.visit_instance_id;
 
-                                return (
-                                    <div key={visit.visit_instance_id} className={`card p-0 overflow-hidden transition-all duration-200 border-l-4 ${isCheckedIn ? 'border-l-green-500 shadow-sm' : 'border-l-blue-500 hover:shadow-md'}`}>
-                                        <div className="p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-
-                                            {/* Patient Info */}
-                                            <div className="flex items-center gap-4">
-                                                <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg flex-shrink-0
-                                                    ${isCheckedIn ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
-                                                    {visit.full_name.charAt(0)}
+                                    return (
+                                        <div key={visit.visit_instance_id} className="coord-action-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.25rem', background: isCheckedIn ? '#f0fdf4' : '#ffffff', borderColor: isCheckedIn ? '#bbf7d0' : '#e5e7eb', flexWrap: 'wrap', gap: '1.5rem' }}>
+                                            
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+                                                {/* Patient Avatar Badge */}
+                                                <div style={{ width: '3.5rem', height: '3.5rem', borderRadius: '1rem', border: `2px solid ${isCheckedIn ? '#ffffff' : '#f3f4f6'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', background: isCheckedIn ? '#dcfce3' : '#f9fafb', color: isCheckedIn ? '#16a34a' : '#6b7280' }}>
+                                                    <User size={24} strokeWidth={2.5} />
                                                 </div>
+                                                
                                                 <div>
-                                                    <div className="flex flex-wrap items-center gap-2 mb-1">
-                                                        <h3 className="font-bold text-gray-900 text-lg">{visit.full_name}</h3>
-                                                        <span className="text-xs font-mono text-gray-500 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-full">
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.25rem' }}>
+                                                        <h3 style={{ margin: 0, fontWeight: 800, fontSize: '1.125rem', color: '#111827' }}>{visit.full_name || visit.trial_patient_id}</h3>
+                                                        <span className="coord-badge coord-badge-blue" style={{ fontSize: '0.65rem' }}>
                                                             {visit.trial_patient_id}
                                                         </span>
                                                     </div>
-                                                    <div className="text-sm text-gray-600 flex flex-wrap items-center gap-x-3 gap-y-1">
-                                                        <span className="flex items-center gap-1 font-medium text-gray-800">
-                                                            <Clock size={14} className="text-gray-400" />
+                                                    
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', fontSize: '0.875rem' }}>
+                                                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontWeight: 700, color: '#374151', background: '#f3f4f6', padding: '0.1rem 0.4rem', borderRadius: '0.25rem' }}>
+                                                            <Clock size={12} color="#6b7280" />
                                                             {visit.scheduled_date ? new Date(visit.scheduled_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'TBD'}
                                                         </span>
-                                                        <span className="w-1 h-1 bg-gray-300 rounded-full hidden sm:block"></span>
-                                                        <span className="font-medium">{visit.visit_name}</span>
-                                                        <span className="w-1 h-1 bg-gray-300 rounded-full hidden sm:block"></span>
-                                                        <span className={`text-xs px-2 py-0.5 rounded ${visit.visit_window_status === 'On Time' ? 'bg-green-100 text-green-700' :
-                                                            visit.visit_window_status === 'Window Closing' ? 'bg-yellow-100 text-yellow-700' :
-                                                                'bg-red-100 text-red-700'
-                                                            }`}>
-                                                            {visit.visit_window_status}
-                                                        </span>
+                                                        <span style={{ fontWeight: 500, color: '#6b7280' }}>{visit.visit_name}</span>
+                                                        
+                                                        {visit.visit_window_status && (
+                                                            <span className={`coord-badge ${
+                                                                visit.visit_window_status.includes('Time') ? 'coord-badge-green' :
+                                                                visit.visit_window_status.includes('Close') ? 'coord-badge-yellow' :
+                                                                'coord-badge-red'}`} style={{ fontSize: '0.65rem' }}>
+                                                                {visit.visit_window_status}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>
 
-                                            {/* Actions */}
-                                            <div className="w-full sm:w-auto border-t sm:border-t-0 border-gray-100 pt-3 sm:pt-0 mt-2 sm:mt-0 flex justify-end">
+                                            <div>
                                                 {isCheckedIn ? (
-                                                    <div className="flex items-center gap-2 text-green-700 font-bold text-sm px-4 py-2 bg-green-50 rounded-lg border border-green-200 w-full sm:w-auto justify-center">
-                                                        <CheckCircle size={18} />
-                                                        {visit.visit_status}
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#15803d', fontWeight: 800, fontSize: '0.875rem', padding: '0.75rem 1.5rem', background: '#dcfce3', borderRadius: '0.75rem', border: '1px solid #bbf7d0' }}>
+                                                        <CheckCircle size={18} strokeWidth={2.5} />
+                                                        Checked In
                                                     </div>
                                                 ) : (
                                                     <button
                                                         onClick={() => handleCheckIn(visit.visit_instance_id)}
-                                                        className="btn-primary w-full sm:w-auto shadow-sm"
+                                                        disabled={isCheckingIn}
+                                                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#111827', color: 'white', padding: '0.75rem 1.5rem', borderRadius: '0.75rem', fontWeight: 800, border: 'none', cursor: 'pointer', transition: 'all 0.2s', opacity: isCheckingIn ? 0.7 : 1 }}
                                                     >
-                                                        Check In Patient
+                                                        {isCheckingIn ? (
+                                                            <><div className="coord-spinner"></div> Processing...</>
+                                                        ) : (
+                                                            <>Check In <ArrowRight size={16} strokeWidth={3} /></>
+                                                        )}
                                                     </button>
                                                 )}
                                             </div>
                                         </div>
-                                    </div>
-                                );
-                            })
+                                    );
+                                })}
+                            </div>
                         )}
                     </div>
 
-                    {/* Right Column - Quick Tools & Alerts */}
-                    <div className="space-y-4">
-                        <div className="card p-5 bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-100 shadow-sm">
-                            <h3 className="font-bold text-blue-900 mb-2 flex items-center gap-2">
-                                <UserCheck size={18} /> Pre-Visit Checklist
-                            </h3>
-                            <ul className="text-sm text-blue-800 space-y-2">
-                                <li className="flex gap-2"><CheckCircle size={16} className="text-blue-500 shrink-0 select-none" /> Verify patient identity (ID/DOB)</li>
-                                <li className="flex gap-2"><CheckCircle size={16} className="text-blue-500 shrink-0 select-none" /> Confirm ICF is signed and valid</li>
-                                <li className="flex gap-2"><CheckCircle size={16} className="text-blue-500 shrink-0 select-none" /> Review concomitant medications</li>
-                                <li className="flex gap-2"><CheckCircle size={16} className="text-blue-500 shrink-0 select-none" /> Confirm fasting status if required</li>
-                            </ul>
+                    {/* Right Column - Coordinator Console */}
+                    <div className="coord-flex-col" style={{ gap: '1.5rem' }}>
+                        <div className="coord-content-card">
+                            <div className="coord-card-header">
+                                <h3><UserCheck size={20} color="#3b82f6" /> Morning Checklist</h3>
+                            </div>
+                            <div className="coord-card-body">
+                                <div className="coord-flex-col" style={{ gap: '0.75rem' }}>
+                                    {[
+                                        'Verify patient identity (ID/DOB)',
+                                        'Confirm active ICF verbiage is signed',
+                                        'Review concomitant medications lock',
+                                        'Prepare laboratory sample kits'
+                                    ].map((item, idx) => (
+                                        <label key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', padding: '0.75rem', borderRadius: '0.5rem', cursor: 'pointer', border: '1px solid transparent' }}>
+                                            <input type="checkbox" style={{ marginTop: '0.2rem', width: '1rem', height: '1rem', accentColor: '#4f46e5', cursor: 'pointer' }} />
+                                            <span style={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151', lineHeight: 1.4 }}>{item}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
                         </div>
 
-                        <div className="card p-0 overflow-hidden shadow-sm">
-                            <div className="bg-amber-50 p-3 border-b border-amber-100 flex items-center gap-2">
-                                <AlertTriangle size={18} className="text-amber-600" />
-                                <h3 className="font-bold text-amber-900 text-sm">Action Needed</h3>
-                            </div>
-                            <div className="p-4">
-                                <p className="text-sm text-gray-600">No overdue visits requiring immediate rescheduling.</p>
-                            </div>
+                        <div className="coord-action-card" style={{ background: 'linear-gradient(135deg, #fffbeb, #fef3c7)', borderColor: '#fde68a' }}>
+                            <div style={{ position: 'absolute', top: '-1rem', right: '-1rem', width: '6rem', height: '6rem', background: 'rgba(245, 158, 11, 0.1)', borderRadius: '50%', filter: 'blur(10px)' }}></div>
+                            <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#92400e', marginBottom: '0.5rem', position: 'relative', zIndex: 10 }}>
+                                <AlertTriangle size={20} color="#f59e0b" /> Action Required
+                            </h3>
+                            <p style={{ fontSize: '0.875rem', fontWeight: 500, color: '#92400e', opacity: 0.8, lineHeight: 1.5, position: 'relative', zIndex: 10 }}>
+                                Pending PK samples from Visit 2 need immediate dispatch to central lab. Courier arrives at 14:00.
+                            </p>
+                            <button style={{ marginTop: '1rem', color: '#b45309', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '0.25rem', background: 'none', border: 'none', cursor: 'pointer', padding: 0, position: 'relative', zIndex: 10 }}>
+                                View details <ArrowRight size={12} strokeWidth={3} />
+                            </button>
                         </div>
                     </div>
                 </div>

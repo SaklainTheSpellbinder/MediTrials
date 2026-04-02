@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { CalendarCheck, Users, TestTube, ArrowRight, Clock } from 'lucide-react';
+import { CalendarCheck, Users, TestTube, ArrowRight, Clock, ShieldAlert, Activity, CalendarDays, CheckCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import '../Dashboard.css'; // Import the shared dashboard styles
+import './Coordinator.css';
 
 export const CoordinatorDashboard: React.FC = () => {
     const { user } = useAuth();
     const [stats, setStats] = useState<any>(null);
     const [todaysVisits, setTodaysVisits] = useState<any[]>([]);
-    const [, setLoading] = useState(true);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const fetchCoordinatorData = async () => {
@@ -18,14 +18,12 @@ export const CoordinatorDashboard: React.FC = () => {
             }
 
             try {
-                // Fetch Stats
                 const statsResponse = await fetch(`http://localhost:5000/api/coordinator/stats?site_id=${user.site_id}`);
                 if (statsResponse.ok) {
                     const data = await statsResponse.json();
                     setStats(data);
                 }
 
-                // Fetch Today's Visits
                 const visitsResponse = await fetch(`http://localhost:5000/api/coordinator/visits/today?site_id=${user.site_id}`);
                 if (visitsResponse.ok) {
                     const data = await visitsResponse.json();
@@ -41,133 +39,155 @@ export const CoordinatorDashboard: React.FC = () => {
         fetchCoordinatorData();
     }, [user?.site_id]);
 
+    if (loading) {
+        return (
+            <div className="coord-empty-state" style={{ minHeight: '60vh' }}>
+                <div className="coord-spinner" style={{ width: '2.5rem', height: '2.5rem', borderWidth: '4px', color: '#4f46e5', marginBottom: '1rem' }}></div>
+                <p>Syncing Coordinator Hub...</p>
+            </div>
+        );
+    }
+
     return (
-        <div className="dashboard-container">
+        <div className="coord-container">
             {/* Header Section */}
-            <div className="section-header">
+            <div className="coord-flex-row-between" style={{ marginBottom: '2.5rem' }}>
                 <div>
-                    <h1 className="page-title">Welcome back, {user?.full_name || 'Coordinator'}</h1>
-                    <p className="text-gray-500 text-sm">Here is your daily summary</p>
+                    <h1 className="coord-page-title">
+                        Welcome back, <span style={{ color: '#4f46e5' }}>{user?.full_name || 'Coordinator'}</span>
+                    </h1>
+                    <p className="coord-page-subtitle">Here is your clinical command center for today.</p>
                 </div>
-                <div className="flex gap-2">
-                    <button className="btn-secondary">View Calendar</button>
-                </div>
-            </div>
-
-            {/* Quick Actions Grid */}
-            <h2 className="text-xl font-bold mb-4 px-1">Quick Actions</h2>
-            <div className="stats-grid mb-8">
-                <Link to="/checkin" className="card p-6 hover:shadow-md transition group border-l-4 border-l-blue-500 block text-left">
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition">
-                            <CalendarCheck size={24} />
-                        </div>
-                        <ArrowRight className="text-gray-300 group-hover:text-blue-500 transition" />
-                    </div>
-                    <h3 className="font-bold text-lg mb-1 text-gray-800">Patient Check-In</h3>
-                    <p className="text-sm text-gray-500">{stats?.today_visits || 0} visits scheduled today</p>
-                </Link>
-
-                <Link to="/schedule" className="card p-6 hover:shadow-md transition group border-l-4 border-l-purple-500 block text-left">
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center text-purple-600 group-hover:bg-purple-600 group-hover:text-white transition">
-                            <Users size={24} />
-                        </div>
-                        <ArrowRight className="text-gray-300 group-hover:text-purple-500 transition" />
-                    </div>
-                    <h3 className="font-bold text-lg mb-1 text-gray-800">Schedule Visit</h3>
-                    <p className="text-sm text-gray-500">Manage appointments</p>
-                </Link>
-
-                <Link to="/labs/entry" className="card p-6 hover:shadow-md transition group border-l-4 border-l-green-500 block text-left">
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center text-green-600 group-hover:bg-green-600 group-hover:text-white transition">
-                            <TestTube size={24} />
-                        </div>
-                        <ArrowRight className="text-gray-300 group-hover:text-green-500 transition" />
-                    </div>
-                    <h3 className="font-bold text-lg mb-1 text-gray-800">Enter Lab Results</h3>
-                    <p className="text-sm text-gray-500">{stats?.pending_labs || 0} labs pending entry</p>
+                <Link to="/visits" className="coord-btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', border: '1px solid #c7d2fe', backgroundColor: '#e0e7ff', color: '#4338ca', fontWeight: 'bold' }}>
+                    <CalendarDays size={18} /> View Master Calendar
                 </Link>
             </div>
 
-            {/* Dashboard Content Layout */}
-            <div className="dashboard-layout">
+            {/* Quick Actions Grid using Vanilla Premium Classes */}
+            <h2 className="coord-section-title">Quick Operation Links</h2>
+            <div className="coord-grid-3">
+                <Link to="/visits" className="coord-action-card coord-card-blue">
+                    <div className="coord-flex-row-between" style={{ marginBottom: '1.5rem', alignItems: 'flex-start' }}>
+                        <div className="coord-action-icon"><CalendarCheck size={28} /></div>
+                        <ArrowRight size={18} style={{ color: '#9ca3af' }} />
+                    </div>
+                    <h3>Patient Check-In</h3>
+                    <p>
+                        <span className="coord-highlight">{stats?.today_visits || 0}</span> visits scheduled today
+                    </p>
+                </Link>
+
+                <Link to="/visits" className="coord-action-card coord-card-purple">
+                    <div className="coord-flex-row-between" style={{ marginBottom: '1.5rem', alignItems: 'flex-start' }}>
+                        <div className="coord-action-icon"><Users size={28} /></div>
+                        <ArrowRight size={18} style={{ color: '#9ca3af' }} />
+                    </div>
+                    <h3>Schedule Visit</h3>
+                    <p>Manage patient future appointments</p>
+                </Link>
+
+                <Link to="/labs/entry" className="coord-action-card coord-card-teal">
+                    <div className="coord-flex-row-between" style={{ marginBottom: '1.5rem', alignItems: 'flex-start' }}>
+                        <div className="coord-action-icon"><TestTube size={28} /></div>
+                        <ArrowRight size={18} style={{ color: '#9ca3af' }} />
+                    </div>
+                    <h3>Post Lab Results</h3>
+                    <p>
+                        <span className="coord-highlight">{stats?.pending_labs || 0}</span> labs await entry
+                    </p>
+                </Link>
+            </div>
+
+            {/* Content Layout */}
+            <div className="coord-grid-2-layout">
                 {/* Left Column: Tasks */}
-                <div className="dash-col-left">
-                    <div className="card h-full">
-                        <div className="card-header">
-                            <h3 className="card-title">
-                                Today's Tasks
-                            </h3>
-                            <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full font-bold">
-                                {((stats?.incomplete_ecrfs || 0) + (stats?.open_queries || 0))} Pending
+                <div className="coord-flex-col" style={{ gap: '1.5rem' }}>
+                    <div className="coord-content-card">
+                        <div className="coord-card-header">
+                            <h3><ShieldAlert size={20} color="#f59e0b" /> Administrative Backlog</h3>
+                            <span className="coord-badge coord-badge-red">
+                                {((stats?.incomplete_ecrfs || 0) + (stats?.open_queries || 0))} Issues
                             </span>
                         </div>
-                        <div className="p-0">
-                            {/* Incomplete eCRF Task */}
+                        
+                        <div className="coord-card-body no-padding">
                             {stats?.incomplete_ecrfs > 0 && (
-                                <div className="p-4 border-b border-gray-100 hover:bg-gray-50 flex items-center gap-4 transition">
-                                    <div className="w-2 h-2 rounded-full bg-yellow-500 flex-shrink-0"></div>
-                                    <div className="flex-1">
-                                        <h4 className="font-medium text-gray-800 text-sm">{stats.incomplete_ecrfs} Incomplete eCRFs</h4>
-                                        <p className="text-xs text-gray-500 mt-1">Data entry required</p>
+                                <div className="coord-list-item">
+                                    <div className="coord-item-icon coord-icon-warning"><Activity size={20} /></div>
+                                    <div className="coord-item-content">
+                                        <h4 className="coord-item-title">{stats.incomplete_ecrfs} Incomplete eCRFs</h4>
+                                        <p className="coord-item-desc">Missing required patient trial signatures</p>
                                     </div>
-                                    <Link to="/ecrf" className="btn-xs border-blue-200 text-blue-600 hover:bg-blue-50 text-center">Resume</Link>
+                                    <Link to="/ecrf" className="coord-item-action coord-btn-outline" style={{ color: '#4f46e5', borderColor: '#c7d2fe' }}>Resolve</Link>
                                 </div>
                             )}
 
-                            {/* Open Queries Task */}
                             {stats?.open_queries > 0 && (
-                                <div className="p-4 border-b border-gray-100 hover:bg-gray-50 flex items-center gap-4 transition">
-                                    <div className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0"></div>
-                                    <div className="flex-1">
-                                        <h4 className="font-medium text-gray-800 text-sm">{stats.open_queries} Open Data Queries</h4>
-                                        <p className="text-xs text-gray-500 mt-1">Monitor attention needed</p>
+                                <div className="coord-list-item">
+                                    <div className="coord-item-icon coord-icon-danger"><ShieldAlert size={20} /></div>
+                                    <div className="coord-item-content">
+                                        <h4 className="coord-item-title">{stats.open_queries} Open Data Queries</h4>
+                                        <p className="coord-item-desc">Data Manager has flagged discrepancies</p>
                                     </div>
-                                    <Link to="/ecrf" className="btn-xs border-blue-200 text-blue-600 hover:bg-blue-50 text-center">Resolve</Link>
+                                    <Link to="/ecrf" className="coord-item-action coord-btn-outline" style={{ color: '#4f46e5', borderColor: '#c7d2fe' }}>Review</Link>
                                 </div>
                             )}
 
-                            {/* Static Fallback Task if empty */}
                             {!stats?.incomplete_ecrfs && !stats?.open_queries && (
-                                <div className="p-4 flex items-center justify-center text-gray-400">
-                                    No pending tasks found
+                                <div className="coord-empty-state">
+                                    <div className="coord-empty-icon" style={{ background: '#dcfce3', color: '#16a34a' }}><CheckCircle size={32} /></div>
+                                    <h4>You are completely caught up!</h4>
+                                    <p>No pending queries or eCRF backlogs.</p>
                                 </div>
                             )}
                         </div>
                     </div>
                 </div>
 
-                {/* Right Column: Schedule */}
-                <div className="dash-col-right">
-                    <div className="card h-full">
-                        <div className="card-header">
-                            <h3 className="card-title">
-                                <Clock size={18} />
-                                Today's Schedule
-                            </h3>
+                {/* Right Column: Schedule Agenda */}
+                <div className="coord-flex-col" style={{ gap: '1.5rem' }}>
+                    <div className="coord-content-card" style={{ height: '100%' }}>
+                         <div className="coord-card-header">
+                            <h3><Clock size={20} color="#3b82f6" /> Today's Itinerary</h3>
+                            <Link to="/visits" style={{ fontSize: '0.875rem', fontWeight: 'bold', color: '#4f46e5', textDecoration: 'none' }}>Complete View &rarr;</Link>
                         </div>
-                        <div className="p-6">
+                        
+                        <div className="coord-card-body" style={{ background: '#f9fafb' }}>
                             {todaysVisits.length === 0 ? (
-                                <p className="text-gray-400 text-center py-4">No visits scheduled for today.</p>
+                                <div className="coord-empty-state" style={{ padding: '2rem 1rem' }}>
+                                    <div className="coord-empty-icon"><CalendarDays size={28} /></div>
+                                    <h4>No patients booked</h4>
+                                    <p>Enjoy the peaceful itinerary today.</p>
+                                </div>
                             ) : (
-                                todaysVisits.map((visit: any, index: number) => (
-                                    <div key={index} className="flex items-start gap-4 mb-6 last:mb-0">
-                                        <div className="flex-none w-14 text-center">
-                                            <span className="block text-xs uppercase font-bold text-gray-400 mb-1">Today</span>
-                                            {/* Assuming time is not strictly set in mock data yet, using dummy or fetched time if available */}
-                                            <span className="block text-lg font-bold text-gray-800">09:00</span>
+                                <div className="coord-timeline">
+                                    {todaysVisits.map((visit: any, index: number) => {
+                                        const isDone = ['Checked In', 'In Progress', 'Completed'].includes(visit.visit_status);
+                                        return (
+                                        <div key={index} className={`coord-timeline-item ${isDone ? 'done' : ''}`}>
+                                            <div className="coord-timeline-dot"></div>
+                                            
+                                            <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+                                                <div style={{ flex: '0 0 70px' }}>
+                                                    <div className="coord-timeline-time">
+                                                        {visit.scheduled_date ? new Date(visit.scheduled_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'TBD'}
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="coord-timeline-card" style={{ flex: 1 }}>
+                                                    <div>
+                                                        <h4 className="coord-timeline-name">
+                                                            {visit.full_name} <span className="coord-badge coord-badge-gray" style={{ marginLeft: '0.5rem' }}>{visit.trial_patient_id}</span>
+                                                        </h4>
+                                                        <div className="coord-timeline-details">
+                                                            <Activity size={14} /> {visit.visit_name} &bull; {visit.visit_status}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div className={`flex-1 p-3 rounded-lg border relative ${visit.visit_status === 'Completed' ? 'bg-green-50 border-green-100' : 'bg-blue-50 border-blue-100'}`}>
-                                            <div className={`absolute left-0 top-3 bottom-3 w-1 rounded-r ${visit.visit_status === 'Completed' ? 'bg-green-400' : 'bg-blue-400'}`}></div>
-                                            <h4 className={`font-bold pl-2 text-sm ${visit.visit_status === 'Completed' ? 'text-green-900' : 'text-blue-900'}`}>{visit.visit_name}: {visit.full_name}</h4>
-                                            <p className={`text-xs pl-2 mt-1 flex items-center gap-1 ${visit.visit_status === 'Completed' ? 'text-green-700' : 'text-blue-700'}`}>
-                                                <Clock size={12} /> {visit.visit_status} ({visit.visit_window_status})
-                                            </p>
-                                        </div>
-                                    </div>
-                                ))
+                                    )})}
+                                </div>
                             )}
                         </div>
                     </div>

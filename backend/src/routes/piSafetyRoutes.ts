@@ -58,7 +58,7 @@ router.get('/dashboard', requirePI, async (req: any, res: any) => {
 
         // 3. Recent AEs
         const aeQuery = `
-            SELECT ae.ae_id, ae.ae_term, ae.severity_grade, ae.ae_start_date, ae.causality_relationship, ae.outcome as status, ae.treatment_related,
+            SELECT ae.ae_id, ae.ae_term, ae.severity_grade, ae.ae_start_date, ae.causality_relationship, ae.treatment_related,
                    p.trial_patient_id,
                    sae.sae_report_number
             FROM public.adverse_events ae
