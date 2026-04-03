@@ -1,7 +1,7 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
-
+import cookieParser from 'cookie-parser';
 // ── Route Imports ─────
 import authRoutes from './routes/authRoutes';
 import patientRoutes from './routes/patientRoutes';
@@ -16,8 +16,9 @@ import dataManagerRoutes from './routes/dataManagerRoutes';
 import statisticianRoutes from './routes/statisticianRoutes';
 import adminRoutes from './routes/adminRoutes';
 import piSafetyRoutes from './routes/piSafetyRoutes';
+import { authMiddleware } from './middleware/authMiddleware';
 
-dotenv.config();
+
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -27,13 +28,16 @@ app.use(cors({
   origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-User-Data'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 app.options(/.*/, cors());
 app.use(express.json());
+app.use(cookieParser());
 
 // ── Route Mounting ────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
+
+app.use(authMiddleware);
 app.use('/api/patients', patientRoutes);
 app.use('/api/patients', patientProfileRoutes);
 app.use('/api/screening', screeningRoutes);
@@ -43,23 +47,18 @@ app.use('/api/ecrf', ecrfRoutes);
 app.use('/api/labs', labRoutes);
 
 // Safety Monitor
-app.use('/api/dashboard', safetyMonitorRoutes);
 app.use('/api/safety', safetyMonitorRoutes);
 
 // PI Safety
 app.use('/api/pi-safety', piSafetyRoutes);
 
 // Data Manager
-app.use('/api/dashboard', dataManagerRoutes);
 app.use('/api/data-management', dataManagerRoutes);
 
 // Statistician
-app.use('/api/dashboard', statisticianRoutes);
 app.use('/api/statistics', statisticianRoutes);
-app.use('/api/export', statisticianRoutes);
 
 // Admin
-app.use('/api/dashboard', adminRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/audit', adminRoutes);
 

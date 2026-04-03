@@ -38,7 +38,10 @@ export const PIDashboard: React.FC = () => {
 
             try {
                 // Fetch from the Materialized View endpoint
-                const response = await fetch(`http://localhost:5000/api/dashboard/stats?site_id=${user.site_id}`);
+                //this dashboard/stats is in dashboardRoutes
+                const response = await fetch(`http://localhost:5000/api/dashboard/stats`, {
+                    credentials: 'include', // Include httpOnly cookie
+                });
                 if (response.ok) {
                     const data = await response.json();
                     setStats(data);

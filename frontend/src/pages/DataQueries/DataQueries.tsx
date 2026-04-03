@@ -1,23 +1,14 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
 import { useAuth } from '../../contexts/AuthContext';
 import {
     AlertCircle, Plus, X, ChevronRight, Search, Clock, CheckCircle,
-    XCircle, Filter, Download, TrendingUp, Users
+    XCircle, Download, TrendingUp
 } from 'lucide-react';
 import '../Dashboard.css';
-
-// ── Axios instance (X-User-Data auth pattern) ─────────────────────────────────
-const api = axios.create({ baseURL: 'http://localhost:5000' });
-api.interceptors.request.use(cfg => {
-    const raw = localStorage.getItem('user');
-    if (raw) cfg.headers['X-User-Data'] = btoa(raw);
-    return cfg;
-});
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-interface Query {
+import { dataManagerAPI } from '../../services/api';
+// --- Type Interfaces ---
+export interface Query {
     query_id: number;
     field_name: string;
     query_text_short: string;
@@ -35,6 +26,56 @@ interface Query {
     raised_by_username: string;
     resolved_by_username: string | null;
 }
+
+export interface ThreadEntry {
+    action_type: string;
+    change_timestamp: string;
+    change_reason: string;
+    new_value: any;
+    username: string | null;
+}
+
+export interface QueryDetail extends Query {
+    ecrf_schema: Record<string, any>;
+    thread: ThreadEntry[];
+}
+
+export interface PatientData {
+    patient_id: number;
+    trial_patient_id: string;
+    site_name: string;
+}
+
+export interface VisitData {
+    visit_instance_id: number;
+    visit_name: string;
+    visit_status: string;
+}
+
+export interface FormData {
+    ecrf_instance_id: number;
+    ecrf_name: string;
+    form_status: string;
+    ecrf_schema: Record<string, any>;
+}
+
+export interface SiteData {
+    site_id: number;
+    institution_name: string;
+}
+
+export interface SitePerformanceData {
+    site_id: number;
+    resolution_rank: number;
+    institution_name: string;
+    country: string;
+    total_queries: number | string;
+    open_queries: number | string;
+    resolved_queries: number | string;
+    avg_days_to_resolve: number | string;
+    median_days: number | string;
+}
+// ------------------------
 
 // ── Badge helpers ──────────────────────────────────────────────────────────────
 const statusColors: Record<string, { bg: string; color: string }> = {
@@ -91,18 +132,18 @@ const RaiseQueryModal: React.FC<{ onClose: () => void; onSuccess: () => void }> 
     const [queryText, setQueryText] = useState('');
     const [msg, setMsg]             = useState('');
 
-    const { data: patients = [] } = useQuery({ queryKey: ['dm-patients'], queryFn: () => api.get('/api/data-management/patients').then(r => r.data) });
-    const { data: visits = [] }   = useQuery({ queryKey: ['dm-visits', patientId], queryFn: () => patientId ? api.get(`/api/data-management/patients/${patientId}/visits`).then(r => r.data) : [], enabled: !!patientId });
-    const { data: forms = [] }    = useQuery({ queryKey: ['dm-forms', visitId], queryFn: () => visitId ? api.get(`/api/data-management/visits/${visitId}/forms`).then(r => r.data) : [], enabled: !!visitId });
+    const { data: patients = [] } = useQuery<PatientData[]>({ queryKey: ['dm-patients'], queryFn: () => dataManagerAPI.getPatients() });
+    const { data: visits = [] }   = useQuery<VisitData[]>({ queryKey: ['dm-visits', patientId], queryFn: () => dataManagerAPI.getPatientVisits(patientId), enabled: !!patientId });
+    const { data: forms = [] }    = useQuery<FormData[]>({ queryKey: ['dm-forms', visitId], queryFn: () => dataManagerAPI.getVisitForms(visitId), enabled: !!visitId });
 
-    const selectedForm = forms.find((f: any) => f.ecrf_instance_id === parseInt(ecrfId));
+    const selectedForm = forms.find(f => f.ecrf_instance_id === parseInt(ecrfId));
     const schemaKeys   = selectedForm?.ecrf_schema ? Object.keys(selectedForm.ecrf_schema) : [];
     const charLeft     = 500 - queryText.length;
 
     const submit = async () => {
         if (!ecrfId || !fieldName || queryText.length < 20) { setMsg('Please fill all required fields (query text min 20 chars)'); return; }
         try {
-            await api.post('/api/data-management/queries', { ecrf_instance_id: parseInt(ecrfId), field_name: fieldName, query_text: queryText });
+            await dataManagerAPI.raiseQuery({ ecrf_instance_id: parseInt(ecrfId), field_name: fieldName, query_text: queryText });
             onSuccess();
             onClose();
         } catch (e: any) { setMsg(e.response?.data?.error ?? e.message); }
@@ -120,21 +161,21 @@ const RaiseQueryModal: React.FC<{ onClose: () => void; onSuccess: () => void }> 
                         <label className="form-label">Patient <span style={{ color: '#DC2626' }}>*</span></label>
                         <select className="form-select" value={patientId} onChange={e => { setPatientId(e.target.value); setVisitId(''); setEcrfId(''); }}>
                             <option value="">Select patient…</option>
-                            {(patients as any[]).map((p: any) => <option key={p.patient_id} value={p.patient_id}>{p.trial_patient_id} — {p.site_name}</option>)}
+                            {patients.map(p => <option key={p.patient_id} value={p.patient_id}>{p.trial_patient_id} — {p.site_name}</option>)}
                         </select>
                     </div>
                     <div>
                         <label className="form-label">Visit Instance <span style={{ color: '#DC2626' }}>*</span></label>
                         <select className="form-select" value={visitId} onChange={e => { setVisitId(e.target.value); setEcrfId(''); }} disabled={!patientId}>
                             <option value="">Select visit…</option>
-                            {(visits as any[]).map((v: any) => <option key={v.visit_instance_id} value={v.visit_instance_id}>{v.visit_name} — {v.visit_status}</option>)}
+                            {visits.map(v => <option key={v.visit_instance_id} value={v.visit_instance_id}>{v.visit_name} — {v.visit_status}</option>)}
                         </select>
                     </div>
                     <div>
                         <label className="form-label">eCRF Form <span style={{ color: '#DC2626' }}>*</span></label>
                         <select className="form-select" value={ecrfId} onChange={e => setEcrfId(e.target.value)} disabled={!visitId}>
                             <option value="">Select form…</option>
-                            {(forms as any[]).map((f: any) => <option key={f.ecrf_instance_id} value={f.ecrf_instance_id}>{f.ecrf_name} [{f.form_status}]</option>)}
+                            {forms.map(f => <option key={f.ecrf_instance_id} value={f.ecrf_instance_id}>{f.ecrf_name} [{f.form_status}]</option>)}
                         </select>
                     </div>
                     <div>
@@ -169,14 +210,14 @@ const RaiseQueryModal: React.FC<{ onClose: () => void; onSuccess: () => void }> 
 // ── Query Detail Side Panel ────────────────────────────────────────────────────
 const QueryDetailPanel: React.FC<{ queryId: number; onClose: () => void }> = ({ queryId, onClose }) => {
     const qc = useQueryClient();
-    const { data: q, isLoading } = useQuery({ queryKey: ['query-detail', queryId], queryFn: () => api.get(`/api/data-management/queries/${queryId}`).then(r => r.data) });
+    const { data: q, isLoading } = useQuery<QueryDetail>({ queryKey: ['query-detail', queryId], queryFn: () => dataManagerAPI.getQueryDetail(queryId) });
     const [action, setAction]     = useState<string | null>(null);
     const [rejComment, setRejComment] = useState('');
     const [msg, setMsg]           = useState('');
 
     const updateMut = useMutation({
         mutationFn: ({ act, reason }: { act: string; reason: string }) =>
-            api.put(`/api/data-management/queries/${queryId}`, { action: act, rejection_comment: rejComment, reason }),
+            dataManagerAPI.updateQuery(queryId, { action: act, rejection_comment: rejComment, reason }),
         onSuccess: () => { qc.invalidateQueries({ queryKey: ['queries'] }); qc.invalidateQueries({ queryKey: ['query-detail', queryId] }); setAction(null); setMsg(''); },
         onError: (e: any) => setMsg(e.response?.data?.error ?? e.message),
     });
@@ -285,7 +326,7 @@ const QueryDetailPanel: React.FC<{ queryId: number; onClose: () => void }> = ({ 
                     <div>
                         <p style={{ margin: '0 0 8px', fontSize: 10, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.05em' }}>History</p>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            {q.thread.map((t: any, i: number) => (
+                            {q.thread.map((t, i) => (
                                 <div key={i} style={{ display: 'flex', gap: 10, padding: '6px 0', borderBottom: '1px solid #F3F4F6' }}>
                                     <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#3B82F6', marginTop: 6, flexShrink: 0 }} />
                                     <div>
@@ -332,12 +373,13 @@ export const DataQueries: React.FC = () => {
     const [page, setPage]                   = useState(1);
     const [selectedQueryId, setSelectedQueryId] = useState<number | null>(null);
     const [showRaiseModal, setShowRaiseModal]   = useState(false);
-
+    
+const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     // Debounce search 300ms
     const handleSearchChange = useCallback((val: string) => {
         setSearch(val);
-        clearTimeout((handleSearchChange as any)._timer);
-        (handleSearchChange as any)._timer = setTimeout(() => setDebouncedSearch(val), 300);
+        if (debounceTimer.current) clearTimeout(debounceTimer.current);
+        debounceTimer.current = setTimeout(() => setDebouncedSearch(val), 300);
     }, []);
 
     const params = useMemo(() => ({
@@ -351,18 +393,18 @@ export const DataQueries: React.FC = () => {
 
     const { data, isLoading } = useQuery({
         queryKey: ['queries', params],
-        queryFn: () => api.get('/api/data-management/queries', { params }).then(r => r.data),
+        queryFn: () => dataManagerAPI.getQueries(params),
     });
-    const { data: sites = [] } = useQuery({ queryKey: ['dm-sites'], queryFn: () => api.get('/api/data-management/sites').then(r => r.data) });
-    const { data: sitePerf = [] } = useQuery({ queryKey: ['site-performance'], queryFn: () => api.get('/api/data-management/site-performance').then(r => r.data) });
+    const { data: sites = [] } = useQuery<SiteData[]>({ queryKey: ['dm-sites'], queryFn: () => dataManagerAPI.getSites() });
+    const { data: sitePerf = [] } = useQuery<SitePerformanceData[]>({ queryKey: ['site-performance'], queryFn: () => dataManagerAPI.getSitePerformance() });
 
     const queries: Query[] = data?.queries ?? [];
     const statusCounts: Record<string, number> = data?.statusCounts ?? {};
-    const totalAll = Object.values(statusCounts).reduce((a: any, b: any) => a + parseInt(b as string), 0);
+    const totalAll = Object.values(statusCounts).reduce((a, b) => a + b, 0);
 
     const handleExportCsv = () => {
         const csv = ['Query ID,Patient,Site,Visit,Form,Field,Status,Days Open,Raised Date,Raised By',
-            ...queries.map((q: Query) =>
+            ...queries.map((q) =>
                 `${q.query_id},${q.trial_patient_id},${q.site_name},${q.visit_name},"${q.ecrf_name}","${q.field_name}",${q.query_status},${q.days_open},${q.raised_date?.split('T')[0]},${q.raised_by_username}`
             )].join('\n');
         const b = new Blob([csv], { type: 'text/csv' });
@@ -409,7 +451,7 @@ export const DataQueries: React.FC = () => {
                         <label className="form-label" style={{ fontSize: 11 }}>Site</label>
                         <select className="form-select" value={siteId} onChange={e => { setSiteId(e.target.value); setPage(1); }}>
                             <option value="">All Sites</option>
-                            {(sites as any[]).map((s: any) => <option key={s.site_id} value={s.site_id}>{s.institution_name}</option>)}
+                            {sites.map(s => <option key={s.site_id} value={s.site_id}>{s.institution_name}</option>)}
                         </select>
                     </div>
                     <div style={{ flex: '0 0 140px' }}>
@@ -457,7 +499,7 @@ export const DataQueries: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {queries.map((q: Query, idx: number) => (
+                                {queries.map((q, idx) => (
                                     <tr key={q.query_id} onClick={() => setSelectedQueryId(q.query_id)}
                                         style={{ cursor: 'pointer', background: selectedQueryId === q.query_id ? '#EFF6FF' : idx % 2 === 0 ? 'white' : '#FAFAFA', transition: 'background 0.15s' }}
                                         onMouseEnter={e => { if (selectedQueryId !== q.query_id) (e.currentTarget as HTMLElement).style.background = '#F8FAFC'; }}
@@ -509,16 +551,16 @@ export const DataQueries: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {(sitePerf as any[]).map((s: any, i: number) => (
+                                {sitePerf.map((s, i) => (
                                     <tr key={s.site_id} style={{ background: i % 2 === 0 ? 'white' : '#FAFAFA' }}>
                                         <td style={{ padding: '8px 12px', fontWeight: 700, color: s.resolution_rank <= 3 ? '#16A34A' : '#374151' }}>#{s.resolution_rank}</td>
                                         <td style={{ padding: '8px 12px', fontWeight: 600 }}>{s.institution_name}</td>
                                         <td style={{ padding: '8px 12px', color: '#6B7280' }}>{s.country}</td>
                                         <td style={{ padding: '8px 12px' }}>{s.total_queries}</td>
-                                        <td style={{ padding: '8px 12px', color: parseInt(s.open_queries) > 0 ? '#DC2626' : '#16A34A', fontWeight: 600 }}>{s.open_queries}</td>
+                                        <td style={{ padding: '8px 12px', color: parseInt(String(s.open_queries)) > 0 ? '#DC2626' : '#16A34A', fontWeight: 600 }}>{s.open_queries}</td>
                                         <td style={{ padding: '8px 12px', color: '#16A34A' }}>{s.resolved_queries}</td>
                                         <td style={{ padding: '8px 12px' }}>
-                                            <span style={{ background: daysColor(parseFloat(s.avg_days_to_resolve)) === '#DC2626' ? '#FEE2E2' : '#D1FAE5', color: daysColor(parseFloat(s.avg_days_to_resolve)), padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 700 }}>
+                                            <span style={{ background: daysColor(parseFloat(String(s.avg_days_to_resolve))) === '#DC2626' ? '#FEE2E2' : '#D1FAE5', color: daysColor(parseFloat(String(s.avg_days_to_resolve))), padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 700 }}>
                                                 {s.avg_days_to_resolve ?? '—'}d
                                             </span>
                                         </td>

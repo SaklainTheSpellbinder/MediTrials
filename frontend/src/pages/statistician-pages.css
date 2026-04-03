@@ -1,0 +1,685 @@
+/* ================================================================
+   Statistician Pages — Shared CSS
+   Used by: AnalysisDatasets, SurvivalAnalysis, PowerAnalysis,
+            RandomizationBalance, SafetyStatistics, InterimAnalysis,
+            StatCDISCExport
+   ================================================================ */
+
+/* ── Procedure caption ──────────────────────────────────────────── */
+.proc-caption {
+    font-size: 11px;
+    color: #9CA3AF;
+    font-style: italic;
+    margin-top: 6px;
+}
+
+/* ── Top controls bar ────────────────────────────────────────────── */
+.stat-controls-bar {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 14px 20px;
+    background: white;
+    border: 1px solid #E5E7EB;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+.stat-controls-bar label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #6B7280;
+    margin-bottom: 4px;
+    display: block;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.stat-controls-bar select,
+.stat-controls-bar input {
+    padding: 7px 10px;
+    border: 1px solid #D1D5DB;
+    border-radius: 7px;
+    font-size: 13px;
+    color: #111827;
+    background: white;
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+.stat-controls-bar select:focus,
+.stat-controls-bar input:focus {
+    border-color: #3B82F6;
+    box-shadow: 0 0 0 2px rgba(59,130,246,0.12);
+}
+
+/* ── Page split layout (60/40 or 70/30) ─────────────────────────── */
+.stat-split-layout {
+    display: grid;
+    gap: 20px;
+    align-items: start;
+}
+.stat-split-70-30 { grid-template-columns: 70fr 30fr; }
+.stat-split-60-40 { grid-template-columns: 60fr 40fr; }
+.stat-split-40-60 { grid-template-columns: 40fr 60fr; }
+.stat-split-50-50 { grid-template-columns: 1fr 1fr; }
+
+@media (max-width: 1100px) {
+    .stat-split-70-30,
+    .stat-split-60-40,
+    .stat-split-40-60,
+    .stat-split-50-50 {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ── Card inner padding ──────────────────────────────────────────── */
+.card-body {
+    padding: 16px 20px;
+}
+
+/* ── KPI row ─────────────────────────────────────────────────────── */
+.stat-kpi-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 20px;
+}
+@media (max-width: 1100px) { .stat-kpi-row { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 600px)  { .stat-kpi-row { grid-template-columns: 1fr; } }
+
+.stat-kpi-card {
+    background: white;
+    border: 1px solid #E5E7EB;
+    border-radius: 10px;
+    padding: 16px 18px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.stat-kpi-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #9CA3AF;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+}
+
+.stat-kpi-value {
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: #111827;
+    line-height: 1;
+}
+
+.stat-kpi-sub {
+    font-size: 11px;
+    color: #6B7280;
+    margin-top: 4px;
+}
+
+/* ── Side Panel (dataset detail) ─────────────────────────────────── */
+.stat-side-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 520px;
+    height: 100vh;
+    background: white;
+    box-shadow: -6px 0 40px rgba(0,0,0,0.13);
+    z-index: 1100;
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid #E5E7EB;
+    overflow: hidden;
+}
+
+.stat-panel-header {
+    padding: 18px 20px;
+    border-bottom: 1px solid #E5E7EB;
+    background: #F9FAFB;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-shrink: 0;
+}
+
+.stat-panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.stat-panel-section {
+    border-radius: 8px;
+    border: 1px solid #E5E7EB;
+    overflow: hidden;
+}
+
+.stat-panel-section-header {
+    padding: 9px 14px;
+    background: #F9FAFB;
+    font-size: 11px;
+    font-weight: 700;
+    color: #6B7280;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid #E5E7EB;
+}
+
+.stat-panel-section-body {
+    padding: 12px 14px;
+}
+
+/* ── Results grid (key-value pairs in cards) ─────────────────────── */
+.stat-result-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+}
+
+.stat-result-item {
+    background: #F9FAFB;
+    border: 1px solid #F3F4F6;
+    border-radius: 6px;
+    padding: 8px 10px;
+}
+
+.stat-result-key {
+    font-size: 10px;
+    color: #9CA3AF;
+    text-transform: capitalize;
+    margin-bottom: 2px;
+}
+
+.stat-result-val {
+    font-size: 13px;
+    font-weight: 700;
+    color: #111827;
+}
+
+/* ── Significance badges ─────────────────────────────────────────── */
+.sig-badge-sig {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #D1FAE5;
+    color: #065F46;
+    padding: 3px 10px;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 700;
+}
+.sig-badge-not {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #F3F4F6;
+    color: #6B7280;
+    padding: 3px 10px;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 700;
+}
+.sig-badge-pending {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #DBEAFE;
+    color: #1D4ED8;
+    padding: 3px 10px;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+/* Dataset type badges */
+.ds-badge-Safety        { background: #FEE2E2; color: #991B1B; }
+.ds-badge-Efficacy      { background: #DBEAFE; color: #1D4ED8; }
+.ds-badge-ITT           { background: #EDE9FE; color: #6D28D9; }
+.ds-badge-PerProtocol   { background: #CCFBF1; color: #0F766E; }
+.ds-badge-Exploratory   { background: #FEF3C7; color: #92400E; }
+
+/* Signal strength */
+.sig-high   { background: #FEE2E2; color: #991B1B; }
+.sig-medium { background: #FEF3C7; color: #92400E; }
+.sig-low    { background: #D1FAE5; color: #065F46; }
+
+/* Power adequacy */
+.power-adequate  { background: #D1FAE5; color: #065F46; }
+.power-marginal  { background: #FEF3C7; color: #92400E; }
+.power-inadequate { background: #FEE2E2; color: #991B1B; }
+
+/* ── P-value display ─────────────────────────────────────────────── */
+.pval-large {
+    font-size: 2.5rem;
+    font-weight: 900;
+    font-family: 'Courier New', monospace;
+    letter-spacing: -0.02em;
+}
+.pval-large.pval-sig { color: #065F46; }
+.pval-large.pval-notsig { color: #6B7280; }
+
+/* ── KM Chart container ──────────────────────────────────────────── */
+.km-chart-wrap {
+    width: 100%;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+/* ── At-risk table ───────────────────────────────────────────────── */
+.at-risk-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    margin-top: 6px;
+}
+.at-risk-table th,
+.at-risk-table td {
+    padding: 6px 10px;
+    text-align: center;
+    border: 1px solid #E5E7EB;
+}
+.at-risk-table thead th {
+    background: #F9FAFB;
+    font-size: 10px;
+    font-weight: 700;
+    color: #9CA3AF;
+    text-transform: uppercase;
+}
+.at-risk-arm-a td:first-child { background: #EFF6FF; color: #1D4ED8; font-weight: 700; }
+.at-risk-arm-b td:first-child { background: #FFF1F2; color: #BE123C; font-weight: 700; }
+
+/* ── Forest plot container ───────────────────────────────────────── */
+.forest-plot-wrap {
+    overflow-x: auto;
+    padding: 12px 0;
+}
+
+/* ── Power gauge overlay ─────────────────────────────────────────── */
+.power-gauge-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.power-gauge-center {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -30%);
+    text-align: center;
+    pointer-events: none;
+}
+.power-gauge-pct {
+    font-size: 1.8rem;
+    font-weight: 900;
+    line-height: 1;
+}
+.power-gauge-label {
+    font-size: 10px;
+    color: #6B7280;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* ── Sensitivity table ───────────────────────────────────────────── */
+.sensitivity-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+.sensitivity-table th,
+.sensitivity-table td {
+    padding: 8px 12px;
+    border: 1px solid #E5E7EB;
+    text-align: center;
+}
+.sensitivity-table thead th {
+    background: #F9FAFB;
+    font-size: 11px;
+    font-weight: 700;
+    color: #374151;
+}
+.sensitivity-table tbody tr:nth-child(even) td {
+    background: #FAFAFA;
+}
+.sensitivity-table td.current-cell {
+    border: 2px solid #3B82F6;
+    font-weight: 800;
+    color: #1D4ED8;
+    background: #EFF6FF !important;
+}
+.sensitivity-table td.row-label {
+    font-weight: 700;
+    color: #374151;
+    text-align: left;
+    background: #F9FAFB;
+}
+
+/* ── SMD chart ───────────────────────────────────────────────────── */
+.smd-chart-wrap { width: 100%; }
+
+/* ── Balance alert ───────────────────────────────────────────────── */
+.balance-alert {
+    padding: 12px 18px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 16px;
+}
+.balance-alert-ok {
+    background: #D1FAE5;
+    color: #065F46;
+    border: 1px solid #A7F3D0;
+}
+.balance-alert-warn {
+    background: #FEF3C7;
+    color: #92400E;
+    border: 1px solid #FDE68A;
+}
+
+/* ── Interim analysis ────────────────────────────────────────────── */
+.interim-boundary-row.current-interim {
+    background: #EFF6FF !important;
+    border-left: 3px solid #3B82F6;
+    font-weight: 700;
+}
+
+.interim-decision-banner {
+    padding: 18px 22px;
+    border-radius: 10px;
+    text-align: center;
+    font-size: 1.1rem;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    margin: 12px 0;
+}
+.interim-decision-stop {
+    background: #FEE2E2;
+    color: #991B1B;
+    border: 2px solid #FCA5A5;
+}
+.interim-decision-continue {
+    background: #D1FAE5;
+    color: #065F46;
+    border: 2px solid #6EE7B7;
+}
+
+/* ── NNH Calculator ──────────────────────────────────────────────── */
+.nnh-result-card {
+    background: #F9FAFB;
+    border: 1px solid #E5E7EB;
+    border-radius: 10px;
+    padding: 20px 24px;
+}
+.nnh-big-number {
+    font-size: 3rem;
+    font-weight: 900;
+    line-height: 1;
+}
+.nnh-interpretation {
+    font-size: 13px;
+    color: #374151;
+    margin-top: 8px;
+    line-height: 1.5;
+}
+
+/* ── Audit mini log ──────────────────────────────────────────────── */
+.audit-mini-item {
+    padding: 8px 0;
+    border-bottom: 1px solid #F3F4F6;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+}
+.audit-mini-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #3B82F6;
+    margin-top: 5px;
+    flex-shrink: 0;
+}
+.audit-mini-action {
+    font-size: 12px;
+    color: #374151;
+}
+.audit-mini-meta {
+    font-size: 10px;
+    color: #9CA3AF;
+    margin-top: 2px;
+}
+
+/* ── Skeleton loader ─────────────────────────────────────────────── */
+@keyframes shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+.skeleton-row {
+    height: 14px;
+    border-radius: 4px;
+    background: linear-gradient(90deg, #F3F4F6 25%, #E5E7EB 50%, #F3F4F6 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    margin-bottom: 10px;
+}
+.skeleton-chart {
+    height: 300px;
+    border-radius: 8px;
+    background: linear-gradient(90deg, #F3F4F6 25%, #E5E7EB 50%, #F3F4F6 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+}
+
+/* ── Table with sticky header ────────────────────────────────────── */
+.stat-table-container {
+    overflow-x: auto;
+    border-radius: 8px;
+    border: 1px solid #E5E7EB;
+}
+.stat-data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.stat-data-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+.stat-data-table thead th {
+    background: #F9FAFB;
+    padding: 10px 12px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+    color: #9CA3AF;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1.5px solid #E5E7EB;
+    white-space: nowrap;
+}
+.stat-data-table tbody td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #F3F4F6;
+    color: #374151;
+    vertical-align: middle;
+}
+.stat-data-table tbody tr:nth-child(even) td { background: #FAFAFA; }
+.stat-data-table tbody tr:hover td { background: #EFF6FF; cursor: pointer; }
+.stat-data-table tbody tr.selected td { background: #DBEAFE; }
+
+/* ── Modal overlay ───────────────────────────────────────────────── */
+.stat-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.45);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(2px);
+}
+.stat-modal-box {
+    background: white;
+    border-radius: 14px;
+    padding: 24px;
+    width: 520px;
+    max-width: 95vw;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 24px 60px rgba(0,0,0,.22);
+}
+
+/* ── Toast notifications ─────────────────────────────────────────── */
+.stat-toast-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.stat-toast {
+    min-width: 280px;
+    max-width: 400px;
+    padding: 12px 16px;
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.12);
+    font-size: 13px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    animation: slideInRight 0.25s ease;
+}
+.stat-toast-success { background: #065F46; color: white; }
+.stat-toast-error   { background: #991B1B; color: white; }
+.stat-toast-info    { background: #1D4ED8; color: white; }
+@keyframes slideInRight {
+    from { transform: translateX(40px); opacity: 0; }
+    to   { transform: translateX(0);    opacity: 1; }
+}
+
+/* ── Empty state ─────────────────────────────────────────────────── */
+.stat-empty-state {
+    padding: 48px 24px;
+    text-align: center;
+    color: #9CA3AF;
+}
+.stat-empty-state svg {
+    margin-bottom: 12px;
+    opacity: 0.3;
+}
+.stat-empty-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #6B7280;
+    margin-bottom: 4px;
+}
+.stat-empty-sub {
+    font-size: 13px;
+    margin: 0;
+}
+
+/* ── Effect size slider ──────────────────────────────────────────── */
+.effect-slider-wrap {
+    position: relative;
+}
+.effect-slider {
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    -webkit-appearance: none;
+    background: linear-gradient(to right, #3B82F6, #3B82F6);
+    outline: none;
+    cursor: pointer;
+}
+.effect-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #3B82F6;
+    border: 3px solid white;
+    box-shadow: 0 2px 6px rgba(0,0,0,.2);
+    cursor: pointer;
+}
+.slider-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: #9CA3AF;
+    margin-top: 4px;
+}
+
+/* ── Option radio button group ───────────────────────────────────── */
+.radio-group {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.radio-option {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 16px;
+    border: 1.5px solid #E5E7EB;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.15s;
+    background: white;
+}
+.radio-option.selected {
+    border-color: #3B82F6;
+    background: #EFF6FF;
+    color: #1D4ED8;
+    font-weight: 700;
+}
+
+/* ── Enrollment gap progress bar ─────────────────────────────────── */
+.enroll-gap-bar {
+    height: 10px;
+    background: #F3F4F6;
+    border-radius: 5px;
+    overflow: hidden;
+    margin: 6px 0;
+}
+.enroll-gap-fill {
+    height: 100%;
+    border-radius: 5px;
+    transition: width 0.4s ease;
+}
+
+/* ── Chi-square table ────────────────────────────────────────────── */
+.chisq-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+.chisq-table th,
+.chisq-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #F3F4F6;
+    text-align: left;
+}
+.chisq-table thead th {
+    background: #F9FAFB;
+    font-size: 11px;
+    font-weight: 700;
+    color: #9CA3AF;
+    text-transform: uppercase;
+    border-bottom: 1.5px solid #E5E7EB;
+}

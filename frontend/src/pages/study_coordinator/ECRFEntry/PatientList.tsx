@@ -1,18 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Search, FileText, ChevronRight, User } from 'lucide-react';
 import { patientAPI } from '../../../services/api';
-import '../../Principal_Investigator/PatientRegistry.css'; // Reusing the registry styles
+import '../../Principal_Investigator/PatientRegistry.css'; 
 
-// Shared Interface
+
 export interface Patient {
-  patient_id: string; // This will hold the trial_patient_id (e.g., PT-00123)
+  patient_id: string; // the trial_patient_id
   initials: string;
   siteId: string;
   status: 'Screening' | 'Enrolled' | 'Completed' | 'Withdrawn';
   lastVisit: string;
   enrollmentDate: string;
-  // We keep the internal DB id if needed for routing, spread it in if necessary, 
-  // but for this UI interface, patient_id refers to the display ID.
   db_id?: number;
 }
 
@@ -24,6 +22,13 @@ export const PatientList: React.FC<PatientListProps> = ({ onSelectPatient }) => 
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
+
+  // Reset to page 1 when search term changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
 
   // Fetch Patients
   useEffect(() => {
@@ -83,6 +88,12 @@ export const PatientList: React.FC<PatientListProps> = ({ onSelectPatient }) => 
     );
   });
 
+  const totalPages = Math.max(1, Math.ceil(filteredPatients.length / ITEMS_PER_PAGE));
+  const paginatedPatients = filteredPatients.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
   return (
     <div className="registry-container">
       {/* Header Section */}
@@ -109,7 +120,7 @@ export const PatientList: React.FC<PatientListProps> = ({ onSelectPatient }) => 
           </div>
 
           <div className="text-sm text-gray-500">
-            Showing <strong>{filteredPatients.length}</strong> available subjects
+            Showing <strong>{filteredPatients.length > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0}</strong> to <strong>{Math.min(currentPage * ITEMS_PER_PAGE, filteredPatients.length)}</strong> of <strong>{filteredPatients.length}</strong> subjects
           </div>
         </div>
 
@@ -136,7 +147,7 @@ export const PatientList: React.FC<PatientListProps> = ({ onSelectPatient }) => 
                   <td colSpan={6} className="text-center py-8 text-gray-500">No patients found matching "{searchTerm}"</td>
                 </tr>
               ) : (
-                filteredPatients.map((patient) => (
+                paginatedPatients.map((patient) => (
                   <tr key={patient.patient_id}>
                     <td className="font-mono font-medium">
                       {patient.patient_id}
@@ -177,9 +188,27 @@ export const PatientList: React.FC<PatientListProps> = ({ onSelectPatient }) => 
             {loading ? 'Checking records...' : `Total ${patients.length} records`}
           </p>
           <div className="pagination">
-            <button disabled>Previous</button>
-            <button className="active">1</button>
-            <button disabled>Next</button>
+            <button 
+              disabled={currentPage === 1} 
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            >
+              Previous
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+              <button 
+                key={page} 
+                className={currentPage === page ? 'active' : ''}
+                onClick={() => setCurrentPage(page)}
+              >
+                {page}
+              </button>
+            ))}
+            <button 
+              disabled={currentPage === totalPages || totalPages === 0} 
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            >
+              Next
+            </button>
           </div>
         </div>
 

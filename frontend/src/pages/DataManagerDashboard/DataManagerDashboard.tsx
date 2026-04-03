@@ -1,6 +1,5 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import axios from 'axios';
 import { useAuth } from '../../contexts/AuthContext';
 import { StatCard } from '../../components/dashboard/StatCard';
 import {
@@ -10,24 +9,53 @@ import {
 import { Link } from 'react-router-dom';
 import '../Dashboard.css';
 import './DataManagerDashboard.css';
+import { dataManagerAPI } from '../../services/api';
 
-// ── Axios helper ─────────────────────────────────────────────────────────────
-const dmApi = axios.create({ baseURL: 'http://localhost:5000' });
-dmApi.interceptors.request.use(cfg => {
-    const raw = localStorage.getItem('user');
-    if (raw) cfg.headers['X-User-Data'] = btoa(raw);
-    return cfg;
-});
+export interface QueryAgeDistribution {
+    bucket_0_3: number;
+    bucket_4_7: number;
+    bucket_8_14: number;
+    bucket_14plus: number;
+}
 
-// ── Colour helpers ────────────────────────────────────────────────────────────
+export interface SiteQueryPerformance {
+    institution_name: string;
+    open_queries: number;
+    resolved_queries: number;
+    avg_days_to_resolve: string | number;
+}
+
+export interface LockReadinessInfo {
+    trial_id: number;
+    trial_title: string;
+    open_queries: number | string;
+    unsigned_forms: number | string;
+    missing_data_pct: number | string;
+    deviations_undocumented: number | string;
+    has_active_lock: boolean;
+}
+
+export interface DataManagerDashboardData {
+    openQueriesTotal: number;
+    openQueriesTrend: 'up' | 'down' | 'flat';
+    avgResolutionDays: number;
+    missingDataRate: number;
+    unsignedFormsCount: number;
+    deviationsThisMonth: number;
+    queryAgeDistribution: QueryAgeDistribution;
+    siteQueryComparison: SiteQueryPerformance[];
+    lockReadiness: LockReadinessInfo[];
+}
+
+//Colour helpers 
 const resolutionColor = (d: number) => d < 5 ? 'success' : d <= 10 ? 'warning' : 'danger';
 const missingColor = (p: number) => p < 2 ? 'success' : p <= 5 ? 'warning' : 'danger';
 const openColor = (n: number) => n > 0 ? 'danger' : 'success';
 const unsignedColor = (n: number) => n > 0 ? 'warning' : 'success';
 const pillClass = (passing: boolean) => passing ? 'dm-pill dm-pill-green' : 'dm-pill dm-pill-amber';
 
-// ── Query Age horizontal bar chart ───────────────────────────────────────────
-const QueryAgeChart: React.FC<{ dist: { bucket_0_3: number; bucket_4_7: number; bucket_8_14: number; bucket_14plus: number } }> = ({ dist }) => {
+//Query Age horizontal bar chart
+const QueryAgeChart: React.FC<{ dist: QueryAgeDistribution }> = ({ dist }) => {
     const rows = [
         { label: '0–3 days', count: dist.bucket_0_3, color: '#10B981' },
         { label: '4–7 days', count: dist.bucket_4_7, color: '#3B82F6' },
@@ -50,8 +78,8 @@ const QueryAgeChart: React.FC<{ dist: { bucket_0_3: number; bucket_4_7: number; 
     );
 };
 
-// ── Site performance table ────────────────────────────────────────────────────
-const SiteTable: React.FC<{ rows: any[] }> = ({ rows }) => {
+//Site performance table
+const SiteTable: React.FC<{ rows: SiteQueryPerformance[] }> = ({ rows }) => {
     const cellColor = (d: number) => d < 5 ? '#D1FAE5' : d <= 10 ? '#FEF3C7' : '#FEE2E2';
     return (
         <div className="dm-site-table-wrap">
@@ -69,8 +97,8 @@ const SiteTable: React.FC<{ rows: any[] }> = ({ rows }) => {
                             <td className="dm-site-name">{r.institution_name}</td>
                             <td>{r.open_queries}</td>
                             <td>{r.resolved_queries}</td>
-                            <td style={{ background: cellColor(parseFloat(r.avg_days_to_resolve)), fontWeight: 600 }}>
-                                {parseFloat(r.avg_days_to_resolve).toFixed(1)}d
+                            <td style={{ background: cellColor(parseFloat(String(r.avg_days_to_resolve))), fontWeight: 600 }}>
+                                {parseFloat(String(r.avg_days_to_resolve)).toFixed(1)}d
                             </td>
                         </tr>
                     ))}
@@ -80,12 +108,12 @@ const SiteTable: React.FC<{ rows: any[] }> = ({ rows }) => {
     );
 };
 
-// ── Lock Readiness row ────────────────────────────────────────────────────────
-const LockReadinessRow: React.FC<{ t: any }> = ({ t }) => {
-    const queriesOk = parseInt(t.open_queries) === 0;
-    const unsignedOk = parseInt(t.unsigned_forms) === 0;
-    const missingOk = parseFloat(t.missing_data_pct) < 2;
-    const devOk = parseInt(t.deviations_undocumented) === 0;
+//Lock Readiness row 
+const LockReadinessRow: React.FC<{ t: LockReadinessInfo }> = ({ t }) => {
+    const queriesOk = parseInt(String(t.open_queries)) === 0;
+    const unsignedOk = parseInt(String(t.unsigned_forms)) === 0;
+    const missingOk = parseFloat(String(t.missing_data_pct)) < 2;
+    const devOk = parseInt(String(t.deviations_undocumented)) === 0;
     const readyToLock = queriesOk && unsignedOk && missingOk && devOk && !t.has_active_lock;
 
     return (
@@ -103,7 +131,7 @@ const LockReadinessRow: React.FC<{ t: any }> = ({ t }) => {
                 {t.has_active_lock ? (
                     <span className="dm-badge-locked">🔒 Locked</span>
                 ) : readyToLock ? (
-                    <Link to="/data-management/lock" className="dm-btn-lock">Ready to Lock →</Link>
+                    <Link to="/data-management/lock" className="dm-btn-lock" style={{ textDecoration: 'none' }}>Ready to Lock →</Link>
                 ) : (
                     <span className="dm-badge-unlocked">Unlocked</span>
                 )}
@@ -112,14 +140,14 @@ const LockReadinessRow: React.FC<{ t: any }> = ({ t }) => {
     );
 };
 
-// ── Main Dashboard ────────────────────────────────────────────────────────────
+//Main Dashboard
 export const DataManagerDashboard: React.FC = () => {
     const { user } = useAuth();
 
-    const { data, isLoading, isError } = useQuery({
+    const { data, isLoading, isError } = useQuery<DataManagerDashboardData>({
         queryKey: ['dashboard', 'data-manager'],
-        queryFn: () => dmApi.get('/api/dashboard/data-manager').then(r => r.data),
-        refetchInterval: 60000,
+        queryFn: () => dataManagerAPI.getDashboard(),
+        refetchInterval: 60000, // 60s
     });
 
     if (isLoading) return (
@@ -144,8 +172,9 @@ export const DataManagerDashboard: React.FC = () => {
                     <p className="text-gray-500 text-sm">Welcome, {user?.full_name} · All trials · Refreshes every 60s</p>
                 </div>
                 <div className="flex gap-2">
-                    <Link to="/data-management/queries" className="btn-secondary">View All Queries</Link>
-                    <Link to="/data-management/export" className="btn-primary">Export SDTM</Link>
+                    <Link to="/data-management/queries" className="btn-secondary" style={{ textDecoration: 'none' }}>View All Queries</Link>
+                    {/* Note: This export link correctly points to the Data Manager's specific CDISC Export page */}
+                    <Link to="/data-management/export" className="btn-primary" style={{ textDecoration: 'none' }}>Export SDTM</Link>
                 </div>
             </div>
 
@@ -178,7 +207,7 @@ export const DataManagerDashboard: React.FC = () => {
                 <div className="card">
                     <div className="card-header">
                         <h3 className="card-title"><LinkIcon size={18} /> Site Query Performance</h3>
-                        <Link to="/data-management/queries" className="sm-link">All Queries →</Link>
+                        <Link to="/data-management/queries" className="sm-link" style={{ textDecoration: 'none' }}>All Queries →</Link>
                     </div>
                     <SiteTable rows={data.siteQueryComparison} />
                 </div>
@@ -188,12 +217,12 @@ export const DataManagerDashboard: React.FC = () => {
             <div className="card">
                 <div className="card-header">
                     <h3 className="card-title">🔒 Trial Lock Readiness</h3>
-                    <Link to="/data-management/lock" className="sm-link">Manage Locks →</Link>
+                    <Link to="/data-management/lock" className="sm-link" style={{ textDecoration: 'none' }}>Manage Locks →</Link>
                 </div>
                 <div className="dm-lock-list">
                     {data.lockReadiness?.length === 0 ? (
                         <div className="sm-empty">No trials found</div>
-                    ) : data.lockReadiness?.map((t: any) => (
+                    ) : data.lockReadiness?.map((t) => (
                         <LockReadinessRow key={t.trial_id} t={t} />
                     ))}
                 </div>

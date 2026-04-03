@@ -1,13 +1,37 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
-import { Download, Eye, Plus, RefreshCw, X, Database, FileText, FlaskConical } from 'lucide-react';
+import { Download, Eye, Plus, X, Database, FlaskConical } from 'lucide-react';
 import '../Dashboard.css';
+import { dataManagerAPI } from '../../services/api';
+//belongs to dataManager role
 
-const api = axios.create({ baseURL: 'http://localhost:5000' });
-api.interceptors.request.use(cfg => { const raw = localStorage.getItem('user'); if (raw) cfg.headers['X-User-Data'] = btoa(raw); return cfg; });
+export interface TrialData {
+    trial_id: number;
+    trial_title: string;
+}
 
-// ── Sub-tab 1: CDISC SDTM Export ──────────────────────────────────────────────
+export interface ExportCondition {
+    column: string;
+    operator: string;
+    value: string;
+}
+
+export interface AnalysisDataset {
+    dataset_id: number;
+    trial_id: number;
+    dataset_name: string;
+    dataset_type: string;
+    snapshot_date: string;
+    data_cutoff_date: string;
+    population_count: number | null;
+    p_value: string | null;
+    statistical_significance: boolean | null;
+    analysis_results: Record<string, any>;
+    created_at: string;
+}
+
+
+//Sub-tab 1: CDISC SDTM Export
 const DOMAINS = [
     { key: 'DM', label: 'Demographics', desc: 'Patient baseline data' },
     { key: 'AE', label: 'Adverse Events', desc: 'All AE records' },
@@ -26,9 +50,17 @@ const CDISCExportTab: React.FC<{ trialId: string }> = ({ trialId }) => {
         if (!trialId || !selected.length) return;
         setPreviewLoading(true);
         try {
-            const res = await api.post('/api/data-management/export/sdtm', { trial_id: parseInt(trialId), domains: selected, cutoff_date: cutoff });
-            setPreviewData(res.data.data);
-        } catch (e) { console.error(e); } finally { setPreviewLoading(false); }
+            const res = await dataManagerAPI.generateDMSDTMExport({ 
+                trial_id: parseInt(trialId), 
+                domains: selected, 
+                cutoff_date: cutoff 
+            });
+            setPreviewData(res.data);
+        } catch (e) { 
+            console.error(e); 
+        } finally { 
+            setPreviewLoading(false); 
+        }
     };
 
     const exportData = () => {
@@ -140,7 +172,7 @@ const CDISCExportTab: React.FC<{ trialId: string }> = ({ trialId }) => {
     );
 };
 
-// ── Sub-tab 2: Custom Export Builder ──────────────────────────────────────────
+//Sub-tab 2: Custom Export Builder
 const EXPORT_TABLES: Record<string, string[]> = {
     patients: ['patient_id','trial_patient_id','patient_status','date_of_birth','gender','enrollment_date','site_id'],
     adverse_events: ['ae_id','patient_id','ae_term','ae_start_date','ae_end_date','severity_grade','causality_relationship','treatment_related'],
@@ -156,18 +188,18 @@ const OPERATORS = ['=','!=','>','<','>=','<=','ILIKE','IS NULL','IS NOT NULL'];
 const CustomExportTab: React.FC = () => {
     const [activeTable, setActiveTable]   = useState('patients');
     const [selectedCols, setSelectedCols] = useState<string[]>([]);
-    const [conditions, setConditions]     = useState<{ column: string; operator: string; value: string }[]>([]);
+    const [conditions, setConditions]     = useState<ExportCondition[]>([]);
     const [previewData, setPreviewData]   = useState<any[] | null>(null);
     const [loading, setLoading]           = useState(false);
     const [templateName, setTemplateName] = useState('');
-    const [savedTemplates, setSavedTemplates] = useState<Record<string, { columns: string[]; conditions: any[] }>>(() => {
+    const [savedTemplates, setSavedTemplates] = useState<Record<string, { columns: string[]; conditions: ExportCondition[] }>>(() => {
         try { return JSON.parse(localStorage.getItem('dm_export_templates') ?? '{}'); } catch { return {}; }
     });
 
     const addCol = (col: string) => { const key = `${activeTable}.${col}`; if (!selectedCols.includes(key)) setSelectedCols(s => [...s, key]); };
     const removeCol = (col: string) => setSelectedCols(s => s.filter(c => c !== col));
     const addCondition = () => setConditions(s => [...s, { column: selectedCols[0] ?? '', operator: '=', value: '' }]);
-    const updateCondition = (i: number, patch: Partial<{ column: string; operator: string; value: string }>) =>
+    const updateCondition = (i: number, patch: Partial<ExportCondition>) =>
         setConditions(s => s.map((c, idx) => idx === i ? { ...c, ...patch } : c));
 
     const saveTemplate = () => {
@@ -182,18 +214,26 @@ const CustomExportTab: React.FC = () => {
     const doPreview = async () => {
         setLoading(true);
         try {
-            const res = await api.post('/api/data-management/export/custom', { columns: selectedCols, conditions, preview: true });
-            setPreviewData(res.data.data);
-        } catch (e: any) { alert(e.response?.data?.error ?? e.message); } finally { setLoading(false); }
+            const res = await dataManagerAPI.generateCustomExport({ columns: selectedCols, conditions, preview: true });
+            setPreviewData(res.data);
+        } catch (e: any) { 
+            alert(e.response?.data?.error ?? e.message); 
+        } finally { 
+            setLoading(false); 
+        }
     };
 
     const exportCsv = async () => {
-        const res = await api.post('/api/data-management/export/custom', { columns: selectedCols, conditions, preview: false });
-        const rows: any[] = res.data.data;
-        if (!rows.length) return;
-        const headers = Object.keys(rows[0]).join(',');
-        const csv = [headers, ...rows.map(r => Object.values(r).map(v => `"${v ?? ''}"`).join(','))].join('\n');
-        const b = new Blob([csv], { type: 'text/csv' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'custom_export.csv'; a.click();
+        try {
+            const res = await dataManagerAPI.generateCustomExport({ columns: selectedCols, conditions, preview: false });
+            const rows: any[] = res.data;
+            if (!rows.length) return;
+            const headers = Object.keys(rows[0]).join(',');
+            const csv = [headers, ...rows.map(r => Object.values(r).map(v => `"${v ?? ''}"`).join(','))].join('\n');
+            const b = new Blob([csv], { type: 'text/csv' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'custom_export.csv'; a.click();
+        } catch (e: any) {
+            alert(e.response?.data?.error ?? e.message);
+        }
     };
 
     const previewCols = previewData?.length ? Object.keys(previewData[0]) : [];
@@ -318,22 +358,22 @@ const CustomExportTab: React.FC = () => {
     );
 };
 
-// ── Sub-tab 3: Analysis Datasets ───────────────────────────────────────────────
+//Sub-tab 3: Analysis Datasets
 const AnalysisDatasetsTab: React.FC<{ trialId: string }> = ({ trialId }) => {
     const qc = useQueryClient();
     const [showCreate, setShowCreate] = useState(false);
-    const [viewDataset, setViewDataset] = useState<any | null>(null);
+    const [viewDataset, setViewDataset] = useState<AnalysisDataset | null>(null);
     const [form, setForm] = useState({ dataset_name: '', dataset_type: 'Safety', data_cutoff_date: new Date().toISOString().split('T')[0], population_definition: '' });
     const [msg, setMsg] = useState('');
 
-    const { data: datasets = [], isLoading } = useQuery({
+    const { data: datasets = [], isLoading } = useQuery<AnalysisDataset[]>({
         queryKey: ['datasets', trialId],
-        queryFn: () => api.get('/api/data-management/datasets', { params: { trial_id: trialId } }).then(r => r.data),
+        queryFn: () => dataManagerAPI.getDatasets(trialId),
         enabled: !!trialId,
     });
 
     const createMut = useMutation({
-        mutationFn: () => api.post('/api/data-management/datasets', { ...form, trial_id: parseInt(trialId) }),
+        mutationFn: () => dataManagerAPI.createDataset({ ...form, trial_id: parseInt(trialId) }),
         onSuccess: () => { qc.invalidateQueries({ queryKey: ['datasets', trialId] }); setShowCreate(false); setMsg(''); },
         onError: (e: any) => setMsg(e.response?.data?.error ?? e.message),
     });
@@ -378,7 +418,7 @@ const AnalysisDatasetsTab: React.FC<{ trialId: string }> = ({ trialId }) => {
                 </div>
                 {isLoading ? (
                     <div style={{ padding: '2rem', textAlign: 'center', color: '#9CA3AF' }}>Loading datasets…</div>
-                ) : (datasets as any[]).length === 0 ? (
+                ) : datasets.length === 0 ? (
                     <div style={{ padding: '3rem', textAlign: 'center', color: '#9CA3AF' }}>
                         <FlaskConical size={36} style={{ marginBottom: 10, opacity: 0.3 }} />
                         <p style={{ margin: 0 }}>No analysis datasets yet — create one above.</p>
@@ -394,7 +434,7 @@ const AnalysisDatasetsTab: React.FC<{ trialId: string }> = ({ trialId }) => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {(datasets as any[]).map((d: any, i: number) => (
+                                {datasets.map((d, i) => (
                                     <tr key={d.dataset_id} style={{ background: i % 2 === 0 ? 'white' : '#FAFAFA' }}>
                                         <td style={{ padding: '10px 12px', fontWeight: 600 }}>{d.dataset_name}</td>
                                         <td style={{ padding: '10px 12px' }}><span style={{ background: '#F3F4F6', color: '#374151', padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 600 }}>{d.dataset_type}</span></td>
@@ -479,7 +519,10 @@ const SUB_TABS = ['CDISC SDTM Export', 'Custom Export Builder', 'Analysis Datase
 export const CDISCExport: React.FC = () => {
     const [activeTab, setActiveTab] = useState<string>('CDISC SDTM Export');
     const [trialId, setTrialId]     = useState('');
-    const { data: trials = [] } = useQuery({ queryKey: ['dm-trials'], queryFn: () => api.get('/api/data-management/trials').then(r => r.data) });
+    const { data: trials = [] } = useQuery<TrialData[]>({ 
+        queryKey: ['dm-trials'], 
+        queryFn: () => dataManagerAPI.getTrials() 
+    });
 
     return (
         <div className="dashboard-container">
@@ -493,7 +536,7 @@ export const CDISCExport: React.FC = () => {
                         <label className="form-label" style={{ fontSize: 11 }}>Trial</label>
                         <select className="form-select" value={trialId} onChange={e => setTrialId(e.target.value)}>
                             <option value="">Select trial…</option>
-                            {(trials as any[]).map((t: any) => <option key={t.trial_id} value={t.trial_id}>{t.trial_title}</option>)}
+                            {trials.map((t) => <option key={t.trial_id} value={t.trial_id}>{t.trial_title}</option>)}
                         </select>
                     </div>
                 )}

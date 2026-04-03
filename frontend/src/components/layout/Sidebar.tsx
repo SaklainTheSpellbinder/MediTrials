@@ -8,9 +8,9 @@ import {
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useQuery } from '@tanstack/react-query';
-import axios from 'axios';
 import './Sidebar.css';
 import { SidebarUserSection } from './SidebarUserSection';
+import { safetyManagerAPI, dataManagerAPI } from '../../services/api';
 
 interface SidebarProps {
     isCollapsed?: boolean;
@@ -20,23 +20,29 @@ export const Sidebar: React.FC<SidebarProps> = () => {
     const location = useLocation();
     const { user } = useAuth();
 
-    const headers = () => { const raw = localStorage.getItem('user'); return raw ? { 'X-User-Data': btoa(raw) } : {}; };
-
-    // Safety Monitor: critical alert badge
+    // Safety Monitor: critical alert badge (using central API)
     const { data: smBadge } = useQuery({
         queryKey: ['sm-badge-count'],
-        queryFn: async () => (await axios.get('http://localhost:5000/api/dashboard/safety-monitor', { headers: headers() })).data?.criticalAlerts ?? 0,
+        queryFn: async () => {
+            const data = await safetyManagerAPI.getSafetyMonitorDashboard();
+            return data?.criticalAlerts ?? 0;
+        },
         enabled: user?.role === 'Safety_Monitor',
-        refetchInterval: 30000, retry: false,
+        refetchInterval: 30000, 
+        retry: false,
     });
     const alertBadge = smBadge ?? 0;
 
-    // Data Manager: open queries badge
+    // Data Manager: open queries badge (using central API)
     const { data: dmBadge } = useQuery({
         queryKey: ['dm-badge-count'],
-        queryFn: async () => (await axios.get('http://localhost:5000/api/dashboard/data-manager', { headers: headers() })).data?.openQueriesTotal ?? 0,
+        queryFn: async () => {
+            const data = await dataManagerAPI.getDashboard();
+            return data?.openQueriesTotal ?? 0;
+        },
         enabled: user?.role === 'Data_Manager',
-        refetchInterval: 60000, retry: false,
+        refetchInterval: 60000, 
+        retry: false,
     });
     const openQueriesBadge = dmBadge ?? 0;
 
@@ -95,7 +101,7 @@ export const Sidebar: React.FC<SidebarProps> = () => {
         { label: 'Randomization Balance', icon: GitBranch, path: '/statistics/balance' },
         { label: 'Safety Statistics', icon: FlaskConical, path: '/statistics/safety' },
         { label: 'Interim Analysis', icon: BarChart2, path: '/statistics/interim' },
-        { label: 'CDISC Export', icon: Database, path: '/data-management/export' },
+        { label: 'CDISC Export', icon: Database, path: '/statistics/export' }, // Fixed path!
     ];
 
     // Admin nav items

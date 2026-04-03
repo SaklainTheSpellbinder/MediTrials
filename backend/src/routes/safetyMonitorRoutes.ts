@@ -1,25 +1,10 @@
 import { Router } from 'express';
+import type { Request, Response } from 'express';
 import { pool } from '../config/db';
+import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 
 const router = Router();
-
-// ── Inject req.user from X-User-Data header ───────────────────────────────────
-router.use((req: any, _res: any, next: any) => {
-    try {
-        const header = req.headers['x-user-data'];
-        if (header) {
-            req.user = JSON.parse(Buffer.from(header as string, 'base64').toString('utf-8'));
-        }
-    } catch (_) { }
-    next();
-});
-
-const requireSafetyMonitor = (req: any, res: any, next: any) => {
-    if (!req.user || req.user.role !== 'Safety_Monitor') {
-        return res.status(403).json({ error: 'Forbidden' });
-    }
-    next();
-};
+router.use(requireRole(['Safety_Monitor']));
 
 // Helper: set 21 CFR Part 11 session vars on a client
 const set21CFRVars = async (client: any, userId: number, reason: string) => {
@@ -27,8 +12,8 @@ const set21CFRVars = async (client: any, userId: number, reason: string) => {
     await client.query(`SET LOCAL app.change_reason = '${reason.replace(/'/g, "''")}'`);
 };
 
-// ── GET /api/dashboard/safety-monitor ────────────────────────────────────────
-router.get('/safety-monitor', requireSafetyMonitor, async (req: any, res: any) => {
+//GET /api/dashboard/safety-monitor
+router.get('/safety-monitor', async (req: Request, res: Response) => {
     try {
         const overviewRows = await pool.query(
             `SELECT trial_id, trial_title, trial_status, total_ae, grade3plus_ae,
@@ -174,7 +159,7 @@ router.get('/safety-monitor', requireSafetyMonitor, async (req: any, res: any) =
 });
 
 // ── GET /api/safety/patients — cross-site patient list ────────────────────────
-router.get('/patients', requireSafetyMonitor, async (req: any, res: any) => {
+router.get('/patients', async (req: Request, res: Response) => {
     try {
         const { site_id, status, has_alerts, search, date_from, date_to, page = '1', limit = '50' } = req.query;
         const offset = (Math.max(1, parseInt(page as string)) - 1) * Math.min(100, parseInt(limit as string));
@@ -224,7 +209,7 @@ router.get('/patients', requireSafetyMonitor, async (req: any, res: any) => {
 });
 
 // ── GET /api/safety/patients/:patientId/ae-summary — uses DB function ─────────
-router.get('/patients/:patientId/ae-summary', requireSafetyMonitor, async (req: any, res: any) => {
+router.get('/patients/:patientId/ae-summary', async (req: any, res: any) => {
     try {
         const { rows } = await pool.query(
             `SELECT * FROM public.get_patient_ae_summary($1)`,
@@ -237,8 +222,8 @@ router.get('/patients/:patientId/ae-summary', requireSafetyMonitor, async (req: 
     }
 });
 
-// ── GET /api/safety/alerts ────────────────────────────────────────────────────
-router.get('/alerts', requireSafetyMonitor, async (req: any, res: any) => {
+// ── GET /api/safety/alerts
+router.get('/alerts', async (req: any, res: any) => {
     try {
         const { severity, status, site_id, date_from, date_to, page = '1', limit = '50' } = req.query;
         const offset = (Math.max(1, parseInt(page as string)) - 1) * Math.min(100, parseInt(limit as string));
@@ -287,7 +272,7 @@ router.get('/alerts', requireSafetyMonitor, async (req: any, res: any) => {
 });
 
 // ── PUT /api/safety/alerts/:alertId/acknowledge ───────────────────────────────
-router.put('/alerts/:alertId/acknowledge', requireSafetyMonitor, async (req: any, res: any) => {
+router.put('/alerts/:alertId/acknowledge', async (req: any, res: any) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
@@ -315,7 +300,7 @@ router.put('/alerts/:alertId/acknowledge', requireSafetyMonitor, async (req: any
 });
 
 // ── PUT /api/safety/alerts/:alertId/escalate ──────────────────────────────────
-router.put('/alerts/:alertId/escalate', requireSafetyMonitor, async (req: any, res: any) => {
+router.put('/alerts/:alertId/escalate', async (req: any, res: any) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
@@ -345,7 +330,7 @@ router.put('/alerts/:alertId/escalate', requireSafetyMonitor, async (req: any, r
 });
 
 // ── PUT /api/safety/alerts/:alertId/dismiss ───────────────────────────────────
-router.put('/alerts/:alertId/dismiss', requireSafetyMonitor, async (req: any, res: any) => {
+router.put('/alerts/:alertId/dismiss', async (req: any, res: any) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
@@ -372,7 +357,7 @@ router.put('/alerts/:alertId/dismiss', requireSafetyMonitor, async (req: any, re
 });
 
 // ── GET /api/safety/ae ────────────────────────────────────────────────────────
-router.get('/ae', requireSafetyMonitor, async (req: any, res: any) => {
+router.get('/ae', async (req: any, res: any) => {
     try {
         const { trial_id, site_id, severity_min, severity_max, causality, sae_only, treatment_related, date_from, date_to, page = '1', limit = '50' } = req.query;
         const offset = (Math.max(1, parseInt(page as string)) - 1) * Math.min(100, parseInt(limit as string));
@@ -419,7 +404,7 @@ router.get('/ae', requireSafetyMonitor, async (req: any, res: any) => {
 });
 
 // ── GET /api/safety/ae/:aeId ──────────────────────────────────────────────────
-router.get('/ae/:aeId', requireSafetyMonitor, async (req: any, res: any) => {
+router.get('/ae/:aeId', async (req: any, res: any) => {
     try {
         const { rows } = await pool.query(
             `SELECT ae.*, p.trial_patient_id, ss.institution_name AS site_name, ct.trial_title,
@@ -445,7 +430,7 @@ router.get('/ae/:aeId', requireSafetyMonitor, async (req: any, res: any) => {
 });
 
 // ── PUT /api/safety/ae/:aeId — update causality/outcome only ─────────────────
-router.put('/ae/:aeId', requireSafetyMonitor, async (req: any, res: any) => {
+router.put('/ae/:aeId', async (req: any, res: any) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
@@ -481,7 +466,7 @@ router.put('/ae/:aeId', requireSafetyMonitor, async (req: any, res: any) => {
 });
 
 // ── GET /api/safety/sae ───────────────────────────────────────────────────────
-router.get('/sae', requireSafetyMonitor, async (req: any, res: any) => {
+router.get('/sae', async (req: any, res: any) => {
     try {
         const { trial_id, sae_status, page = '1', limit = '50' } = req.query;
         const offset = (Math.max(1, parseInt(page as string)) - 1) * Math.min(100, parseInt(limit as string));
@@ -522,7 +507,7 @@ router.get('/sae', requireSafetyMonitor, async (req: any, res: any) => {
 });
 
 // ── GET /api/safety/sae/:saeId ────────────────────────────────────────────────
-router.get('/sae/:saeId', requireSafetyMonitor, async (req: any, res: any) => {
+router.get('/sae/:saeId', async (req: any, res: any) => {
     try {
         const { rows } = await pool.query(
             `SELECT sae.*, p.trial_patient_id, ss.institution_name AS site_name, ct.trial_title,
@@ -546,7 +531,7 @@ router.get('/sae/:saeId', requireSafetyMonitor, async (req: any, res: any) => {
 });
 
 // ── PUT /api/safety/sae/:saeId ────────────────────────────────────────────────
-router.put('/sae/:saeId', requireSafetyMonitor, async (req: any, res: any) => {
+router.put('/sae/:saeId', async (req: any, res: any) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
@@ -587,7 +572,7 @@ router.put('/sae/:saeId', requireSafetyMonitor, async (req: any, res: any) => {
 });
 
 // ── GET /api/safety/signals ───────────────────────────────────────────────────
-router.get('/signals', requireSafetyMonitor, async (req: any, res: any) => {
+router.get('/signals', async (req: any, res: any) => {
     try {
         const trialId = req.query.trial_id;
         if (!trialId) return res.status(400).json({ error: 'trial_id required' });
@@ -603,7 +588,7 @@ router.get('/signals', requireSafetyMonitor, async (req: any, res: any) => {
 });
 
 // ── GET /api/safety/signals/drilldown?ae_term=X&trial_id=Y ───────────────────
-router.get('/signals/drilldown', requireSafetyMonitor, async (req: any, res: any) => {
+router.get('/signals/drilldown', async (req: any, res: any) => {
     try {
         const { ae_term, trial_id } = req.query;
         const { rows } = await pool.query(
@@ -639,7 +624,7 @@ router.get('/signals/drilldown', requireSafetyMonitor, async (req: any, res: any
 });
 
 // ── GET /api/safety/site-comparison?trial_id=N (Complex Query 3) ──────────────
-router.get('/site-comparison', requireSafetyMonitor, async (req: any, res: any) => {
+router.get('/site-comparison', async (req: any, res: any) => {
     try {
         const { trial_id } = req.query;
         if (!trial_id) return res.status(400).json({ error: 'trial_id required' });
@@ -668,7 +653,7 @@ router.get('/site-comparison', requireSafetyMonitor, async (req: any, res: any) 
 });
 
 // ── GET /api/safety/dsmb ─────────────────────────────────────────────────────
-router.get('/dsmb', requireSafetyMonitor, async (req: any, res: any) => {
+router.get('/dsmb', async (req: any, res: any) => {
     try {
         const { rows } = await pool.query(
             `SELECT dm.*, ct.trial_title
@@ -683,7 +668,7 @@ router.get('/dsmb', requireSafetyMonitor, async (req: any, res: any) => {
 });
 
 // ── POST /api/safety/dsmb ────────────────────────────────────────────────────
-router.post('/dsmb', requireSafetyMonitor, async (req: any, res: any) => {
+router.post('/dsmb', async (req: any, res: any) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
@@ -704,7 +689,7 @@ router.post('/dsmb', requireSafetyMonitor, async (req: any, res: any) => {
 });
 
 // ── GET /api/safety/dsmb/:meetingId ──────────────────────────────────────────
-router.get('/dsmb/:meetingId', requireSafetyMonitor, async (req: any, res: any) => {
+router.get('/dsmb/:meetingId', async (req: any, res: any) => {
     try {
         const { rows } = await pool.query(
             `SELECT dm.*, ct.trial_title FROM public.dsmb_meetings dm
@@ -724,7 +709,7 @@ router.get('/dsmb/:meetingId', requireSafetyMonitor, async (req: any, res: any) 
 });
 
 // ── PUT /api/safety/dsmb/:meetingId ──────────────────────────────────────────
-router.put('/dsmb/:meetingId', requireSafetyMonitor, async (req: any, res: any) => {
+router.put('/dsmb/:meetingId', async (req: any, res: any) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
@@ -750,7 +735,7 @@ router.put('/dsmb/:meetingId', requireSafetyMonitor, async (req: any, res: any) 
 });
 
 // ── GET /api/safety/unblinding/:patientId ────────────────────────────────────
-router.get('/unblinding/:patientId', requireSafetyMonitor, async (req: any, res: any) => {
+router.get('/unblinding/:patientId', async (req: any, res: any) => {
     try {
         const { rows } = await pool.query(
             `SELECT p.patient_id, p.trial_patient_id, p.patient_status, p.enrollment_date,
@@ -778,7 +763,7 @@ router.get('/unblinding/:patientId', requireSafetyMonitor, async (req: any, res:
 });
 
 // ── POST /api/safety/unblind ─────────────────────────────────────────────────
-router.post('/unblind', requireSafetyMonitor, async (req: any, res: any) => {
+router.post('/unblind', async (req: any, res: any) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
@@ -816,7 +801,7 @@ router.post('/unblind', requireSafetyMonitor, async (req: any, res: any) => {
 });
 
 // ── POST /api/safety/verify-password ─────────────────────────────────────────
-router.post('/verify-password', requireSafetyMonitor, async (req: any, res: any) => {
+router.post('/verify-password', async (req: any, res: any) => {
     try {
         const { password } = req.body;
         const username = req.user?.username;
@@ -833,7 +818,7 @@ router.post('/verify-password', requireSafetyMonitor, async (req: any, res: any)
 });
 
 // ── GET /api/safety/reports/generate ─────────────────────────────────────────
-router.get('/reports/generate', requireSafetyMonitor, async (req: any, res: any) => {
+router.get('/reports/generate', async (req: any, res: any) => {
     try {
         const { trial_id, cutoff_date } = req.query;
         if (!trial_id) return res.status(400).json({ error: 'trial_id required' });
@@ -882,7 +867,7 @@ router.get('/reports/generate', requireSafetyMonitor, async (req: any, res: any)
 });
 
 // ── GET /api/safety/trials — list all trials for selectors ───────────────────
-router.get('/trials', requireSafetyMonitor, async (_req: any, res: any) => {
+router.get('/trials', async (_req: any, res: any) => {
     try {
         const { rows } = await pool.query(
             `SELECT trial_id, trial_title, trial_status FROM public.clinical_trials ORDER BY trial_title`
@@ -894,7 +879,7 @@ router.get('/trials', requireSafetyMonitor, async (_req: any, res: any) => {
 });
 
 // ── GET /api/safety/sites — list all sites for selectors ─────────────────────
-router.get('/sites', requireSafetyMonitor, async (_req: any, res: any) => {
+router.get('/sites', async (_req: any, res: any) => {
     try {
         const { rows } = await pool.query(
             `SELECT site_id, institution_name, country, trial_id FROM public.study_sites ORDER BY institution_name`

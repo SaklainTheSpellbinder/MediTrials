@@ -2,8 +2,10 @@ import { Router } from 'express';
 import { pool } from '../config/db';
 import fs from 'fs';
 import path from 'path';
+import { requireRole } from '../middleware/authMiddleware';
 
 const router = Router();
+router.use(requireRole(['Study_Coordinator']));
 
 const queriesDir = path.join(__dirname, '../../../database/study_coordinator_queries');
 const getQuery = (filename: string) => fs.readFileSync(path.join(queriesDir, filename), 'utf8');

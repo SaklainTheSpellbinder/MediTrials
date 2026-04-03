@@ -1,6 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
 import { useAuth } from '../../contexts/AuthContext';
 import { StatCard } from '../../components/dashboard/StatCard';
 import { Link } from 'react-router-dom';
@@ -10,13 +9,62 @@ import {
 } from 'lucide-react';
 import '../Dashboard.css';
 import './AdminDashboard.css';
+import { adminAPI } from '../../services/api';
 
-const adminApi = axios.create({ baseURL: 'http://localhost:5000' });
-adminApi.interceptors.request.use(cfg => {
-    const raw = localStorage.getItem('user');
-    if (raw) cfg.headers['X-User-Data'] = btoa(raw);
-    return cfg;
-});
+// --- Type Interfaces ---
+export interface TrialPortfolioItem {
+    trial_id: number;
+    trial_nct_id: string;
+    trial_status: string;
+    trial_phase: string;
+    trial_title: string;
+    enrollmentPct: string | number;
+    currentEnrollment: number;
+    target_enrollment: number | null;
+    site_count: number;
+    enrollmentVelocity: string | number | null;
+    projectedCompletion: string | null;
+    activeAlerts: number;
+    totalSae: number;
+    criticalDeviations: number;
+}
+
+export interface AuditItemData {
+    audit_id: number;
+    change_timestamp: string;
+    table_name: string;
+    action_type: string;
+    changed_by: string;
+    change_reason: string;
+    new_values?: any;
+}
+
+export interface UserActivityData {
+    logged_in_today: number | string;
+    logged_in_7d: number | string;
+    inactive_users: number | string;
+    failed_logins_24h: number | string;
+}
+
+export interface DataQualitySummary {
+    trial_id: number;
+    total_patients: number;
+    signed_pct: string | number;
+    total_open_queries: string | number;
+}
+
+export interface AdminDashboardData {
+    activeTrials: number;
+    activeUsers: number;
+    totalPatients: number;
+    unacknowledgedCritical: number;
+    trialPortfolio: TrialPortfolioItem[];
+    recentAdminActivity: AuditItemData[];
+    userActivity: UserActivityData;
+    activeLocks: number;
+    dataQualitySummary: DataQualitySummary[];
+}
+// ------------------------
 
 const statusColor: Record<string, string> = {
     Active: 'admin-badge-green', Recruiting: 'admin-badge-blue',
@@ -26,8 +74,8 @@ const statusColor: Record<string, string> = {
 const actionColor: Record<string, string> = { INSERT: '#10B981', UPDATE: '#3B82F6', DELETE: '#DC2626' };
 
 // ── Trial Portfolio Card ──────────────────────────────────────────────────────
-const TrialCard: React.FC<{ t: any }> = ({ t }) => {
-    const pct = Math.min(100, parseFloat(t.enrollmentPct) || 0);
+const TrialCard: React.FC<{ t: TrialPortfolioItem }> = ({ t }) => {
+    const pct = Math.min(100, parseFloat(String(t.enrollmentPct)) || 0);
     const barColor = pct >= 80 ? '#10B981' : pct >= 50 ? '#3B82F6' : '#F59E0B';
     return (
         <div className="admin-trial-card">
@@ -47,7 +95,7 @@ const TrialCard: React.FC<{ t: any }> = ({ t }) => {
             </div>
             <div className="admin-trial-meta">
                 <span>🏥 {t.site_count} sites</span>
-                {t.enrollmentVelocity != null && <span>📈 {parseFloat(t.enrollmentVelocity).toFixed(1)} pts/wk</span>}
+                {t.enrollmentVelocity != null && <span>📈 {parseFloat(String(t.enrollmentVelocity)).toFixed(1)} pts/wk</span>}
                 {t.projectedCompletion && <span>🗓 {String(t.projectedCompletion).split('T')[0]}</span>}
             </div>
             <div className="admin-trial-safety">
@@ -60,17 +108,17 @@ const TrialCard: React.FC<{ t: any }> = ({ t }) => {
                 </span>
             </div>
             <div className="admin-trial-actions">
-                <Link to={`/admin/trials/${t.trial_id}/edit`} className="admin-act-btn">Edit Trial</Link>
-                <Link to={`/admin/sites?trial_id=${t.trial_id}`} className="admin-act-btn">View Sites</Link>
-                <Link to={`/admin/trials/${t.trial_id}`} className="admin-act-btn admin-act-primary">Details</Link>
+                <Link to={`/admin/trials/${t.trial_id}/edit`} className="admin-act-btn" style={{ textDecoration: 'none' }}>Edit Trial</Link>
+                <Link to={`/admin/sites?trial_id=${t.trial_id}`} className="admin-act-btn" style={{ textDecoration: 'none' }}>View Sites</Link>
+                <Link to={`/admin/trials/${t.trial_id}`} className="admin-act-btn admin-act-primary" style={{ textDecoration: 'none' }}>Details</Link>
             </div>
         </div>
     );
 };
 
 // ── Audit item ────────────────────────────────────────────────────────────────
-const AuditItem: React.FC<{ r: any }> = ({ r }) => {
-    const [open, setOpen] = React.useState(false);
+const AuditItem: React.FC<{ r: AuditItemData }> = ({ r }) => {
+    const [open, setOpen] = useState(false);
     return (
         <div className="admin-audit-item" onClick={() => setOpen(o => !o)}>
             <div className="admin-audit-row">
@@ -92,14 +140,14 @@ export const AdminDashboard: React.FC = () => {
     const { user } = useAuth();
     const qc = useQueryClient();
 
-    const { data, isLoading, isError } = useQuery({
+    const { data, isLoading, isError } = useQuery<AdminDashboardData>({
         queryKey: ['dashboard', 'admin'],
-        queryFn: () => adminApi.get('/api/dashboard/admin').then(r => r.data),
+        queryFn: () => adminAPI.getDashboard(),
         refetchInterval: 60000,
     });
 
     const refreshMV = useMutation({
-        mutationFn: () => adminApi.post('/api/admin/mv/refresh'),
+        mutationFn: () => adminAPI.refreshMVs(),
         onSuccess: () => qc.invalidateQueries({ queryKey: ['dashboard', 'admin'] }),
     });
 
@@ -120,8 +168,8 @@ export const AdminDashboard: React.FC = () => {
                     <button onClick={() => refreshMV.mutate()} disabled={refreshMV.isPending} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <RefreshCw size={14} className={refreshMV.isPending ? 'sm-spin' : ''} /> Refresh MVs
                     </button>
-                    <Link to="/admin/trials/new" className="btn-primary">+ New Trial</Link>
-                    <Link to="/admin/users" className="btn-primary">+ New User</Link>
+                    <Link to="/admin/trials/new" className="btn-primary" style={{ textDecoration: 'none' }}>+ New Trial</Link>
+                    <Link to="/admin/users" className="btn-primary" style={{ textDecoration: 'none' }}>+ New User</Link>
                 </div>
             </div>
 
@@ -138,12 +186,12 @@ export const AdminDashboard: React.FC = () => {
             <div className="card">
                 <div className="card-header">
                     <h3 className="card-title"><Shield size={18} /> Trial Portfolio</h3>
-                    <Link to="/admin/trials" className="sm-link">Manage All Trials →</Link>
+                    <Link to="/admin/trials" className="sm-link" style={{ textDecoration: 'none' }}>Manage All Trials →</Link>
                 </div>
                 <div className="admin-trial-grid">
                     {data.trialPortfolio?.length === 0 ? (
-                        <div className="sm-empty">No trials found. <Link to="/admin/trials/new">Create one →</Link></div>
-                    ) : data.trialPortfolio?.map((t: any) => <TrialCard key={t.trial_id} t={t} />)}
+                        <div className="sm-empty">No trials found. <Link to="/admin/trials/new" style={{ textDecoration: 'none' }}>Create one →</Link></div>
+                    ) : data.trialPortfolio?.map((t) => <TrialCard key={t.trial_id} t={t} />)}
                 </div>
             </div>
 
@@ -153,12 +201,12 @@ export const AdminDashboard: React.FC = () => {
                 <div className="card">
                     <div className="card-header">
                         <h3 className="card-title"><Activity size={18} /> Recent Admin Activity</h3>
-                        <Link to="/audit" className="sm-link">Full Audit Trail →</Link>
+                        <Link to="/audit" className="sm-link" style={{ textDecoration: 'none' }}>Full Audit Trail →</Link>
                     </div>
                     <div className="admin-audit-list">
                         {data.recentAdminActivity?.length === 0 ? (
                             <div className="sm-empty">No admin actions recorded yet.</div>
-                        ) : data.recentAdminActivity?.map((r: any) => <AuditItem key={r.audit_id} r={r} />)}
+                        ) : data.recentAdminActivity?.map((r) => <AuditItem key={r.audit_id} r={r} />)}
                     </div>
                 </div>
 
@@ -166,7 +214,7 @@ export const AdminDashboard: React.FC = () => {
                 <div className="card">
                     <div className="card-header">
                         <h3 className="card-title"><Users size={18} /> User Activity &amp; Security</h3>
-                        <Link to="/admin/users" className="sm-link">Manage Users →</Link>
+                        <Link to="/admin/users" className="sm-link" style={{ textDecoration: 'none' }}>Manage Users →</Link>
                     </div>
                     <div className="admin-user-stats">
                         <div className="admin-user-stat-row">
@@ -178,14 +226,14 @@ export const AdminDashboard: React.FC = () => {
                             <span className="admin-user-val">{ua?.logged_in_7d ?? 0}</span>
                         </div>
                         <div className="admin-user-stat-row">
-                            <XCircle size={16} color={parseInt(ua?.inactive_users) > 0 ? '#F59E0B' : '#D1D5DB'} />
+                            <XCircle size={16} color={parseInt(String(ua?.inactive_users)) > 0 ? '#F59E0B' : '#D1D5DB'} />
                             <span>Inactive &gt;90 days</span>
-                            <span className="admin-user-val" style={{ color: parseInt(ua?.inactive_users) > 0 ? '#F59E0B' : undefined }}>{ua?.inactive_users ?? 0}</span>
+                            <span className="admin-user-val" style={{ color: parseInt(String(ua?.inactive_users)) > 0 ? '#F59E0B' : undefined }}>{ua?.inactive_users ?? 0}</span>
                         </div>
                         <div className="admin-user-stat-row">
-                            <AlertCircle size={16} color={parseInt(ua?.failed_logins_24h) > 0 ? '#DC2626' : '#D1D5DB'} />
+                            <AlertCircle size={16} color={parseInt(String(ua?.failed_logins_24h)) > 0 ? '#DC2626' : '#D1D5DB'} />
                             <span>Failed logins (24 h)</span>
-                            <span className="admin-user-val" style={{ color: parseInt(ua?.failed_logins_24h) > 0 ? '#DC2626' : undefined }}>{ua?.failed_logins_24h ?? 0}</span>
+                            <span className="admin-user-val" style={{ color: parseInt(String(ua?.failed_logins_24h)) > 0 ? '#DC2626' : undefined }}>{ua?.failed_logins_24h ?? 0}</span>
                         </div>
                     </div>
                     <div style={{ padding: '8px 0' }}>
@@ -194,7 +242,7 @@ export const AdminDashboard: React.FC = () => {
                             <span className="admin-user-val">{data.activeLocks}</span>
                         </div>
                     </div>
-                    <Link to="/admin/locks" className="admin-link-block">View Lock Management →</Link>
+                    <Link to="/admin/locks" className="admin-link-block" style={{ textDecoration: 'none' }}>View Lock Management →</Link>
                 </div>
             </div>
 
@@ -208,9 +256,9 @@ export const AdminDashboard: React.FC = () => {
                     <tbody>
                         {data.dataQualitySummary?.length === 0 ? (
                             <tr><td colSpan={4} style={{ textAlign: 'center', color: '#9CA3AF', padding: 14 }}>No data quality data</td></tr>
-                        ) : data.dataQualitySummary?.map((r: any) => {
-                            const pct = parseFloat(r.signed_pct ?? 0);
-                            const oq = parseInt(r.total_open_queries ?? 0);
+                        ) : data.dataQualitySummary?.map((r) => {
+                            const pct = parseFloat(String(r.signed_pct ?? 0));
+                            const oq = parseInt(String(r.total_open_queries ?? 0));
                             return (
                                 <tr key={r.trial_id}>
                                     <td>Trial #{r.trial_id}</td>

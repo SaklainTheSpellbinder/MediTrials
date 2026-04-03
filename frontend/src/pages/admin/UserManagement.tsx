@@ -1,13 +1,10 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
 import { Plus, Search } from 'lucide-react';
 import '../Dashboard.css';
 import '../admin/AdminDashboard.css';
-
-const adminApi = axios.create({ baseURL: 'http://localhost:5000' });
-adminApi.interceptors.request.use(cfg => { const raw = localStorage.getItem('user'); if (raw) cfg.headers['X-User-Data'] = btoa(raw); return cfg; });
+import { adminAPI } from '../../services/api'; // Centralized API import
 
 const ROLES = ['Principal_Investigator', 'Study_Coordinator', 'Safety_Monitor', 'Data_Manager', 'Statistician', 'System_Admin'];
 const ROLE_NEEDS_SITE = (r: string) => ['Principal_Investigator', 'Study_Coordinator'].includes(r);
@@ -24,8 +21,8 @@ const SlideOver: React.FC<{ initial?: any; onClose: () => void; sites: any[] }> 
         mutationFn: () => {
             const body = { ...form, site_id: ROLE_NEEDS_SITE(form.role) ? (form.site_id || null) : null };
             return isEdit
-                ? adminApi.put(`/api/admin/users/${initial.user_id}`, body).then(r => r.data)
-                : adminApi.post('/api/admin/users', body).then(r => r.data);
+                ? adminAPI.updateUser(initial.user_id, body)
+                : adminAPI.createUser(body);
         },
         onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin', 'users'] }); onClose(); },
         onError: (e: any) => setErr(e.response?.data?.error ?? e.message),
@@ -87,22 +84,22 @@ export const UserManagement: React.FC = () => {
 
     const { data: users = [], isLoading } = useQuery({
         queryKey: ['admin', 'users', filters],
-        queryFn: () => adminApi.get('/api/admin/users', { params: filters }).then(r => r.data),
+        queryFn: () => adminAPI.getUsers(filters),
     });
 
     const { data: sites = [] } = useQuery({
         queryKey: ['admin', 'sites'],
-        queryFn: () => adminApi.get('/api/admin/sites').then(r => r.data),
+        queryFn: () => adminAPI.getSites(),
     });
 
     const toggleActive = useMutation({
         mutationFn: ({ id, active }: { id: number; active: boolean }) =>
-            adminApi.put(`/api/admin/users/${id}/${active ? 'activate' : 'deactivate'}`),
+            adminAPI.toggleUserStatus(id, active),
         onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'users'] }),
     });
 
     const resetPwd = useMutation({
-        mutationFn: ({ id, pwd }: { id: number; pwd: string }) => adminApi.post(`/api/admin/users/${id}/reset-password`, { new_password: pwd }),
+        mutationFn: ({ id, pwd }: { id: number; pwd: string }) => adminAPI.resetUserPassword(id, pwd),
         onSuccess: () => { setResetModal(null); setNewPwd(''); qc.invalidateQueries({ queryKey: ['admin', 'users'] }); },
     });
 

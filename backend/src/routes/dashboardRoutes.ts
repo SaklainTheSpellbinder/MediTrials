@@ -6,7 +6,11 @@ const router = Router();
 // GET /api/dashboard/stats
 router.get('/stats', async (req, res) => {
     try {
-        const siteId = req.query.site_id;
+        const role = req.user?.role;
+        const tokenSiteId = req.user?.site_id;
+        const querySiteId = req.query.site_id;
+        const isSiteScopedRole = role === 'Principal_Investigator' || role === 'Study_Coordinator';
+        const siteId = isSiteScopedRole ? tokenSiteId : querySiteId;
 
         if (!siteId) {
             return res.status(400).json({ error: 'Missing site_id' });

@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import { pool } from '../config/db';
+import {requireRole } from '../middleware/authMiddleware';
 
 const router = Router();
+router.use(requireRole(['Principal_Investigator','Study_Coordinator']));
 
 // Middleware to ensure site_id is provided
 const requireSiteId = (req: any, res: any, next: any) => {
@@ -12,17 +14,17 @@ const requireSiteId = (req: any, res: any, next: any) => {
 };
 
 // GET /api/labs
-// Retrieves all lab results for patients at the specified site
+// Retrieves all lab results at the specified site
 router.get('/', requireSiteId, async (req, res) => {
     try {
         const siteId = req.query.site_id;
 
-        // Query logic from 008_get_site_lab_results.sql
+        //008_get_site_lab_results.sql
         const query = `
             SELECT 
                 lr.result_id,
                 p.trial_patient_id,
-                p.trial_patient_id AS full_name,
+                p.full_name AS full_name,
                 lt.test_name,
                 lr.result_value,
                 lr.result_date,

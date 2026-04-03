@@ -1,20 +1,75 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
     ResponsiveContainer
 } from 'recharts';
 import { RefreshCw, Bell, Shield, CheckCircle, XCircle, BarChart2, X } from 'lucide-react';
 import '../Dashboard.css';
+import { dataManagerAPI } from '../../services/api';
 
-const api = axios.create({ baseURL: 'http://localhost:5000' });
-api.interceptors.request.use(cfg => { const raw = localStorage.getItem('user'); if (raw) cfg.headers['X-User-Data'] = btoa(raw); return cfg; });
+// --- Type Interfaces ---
+export interface TrialData {
+    trial_id: number;
+    trial_title: string;
+}
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-interface CompletenessRow { patient_id: number; trial_patient_id: string; site_id: number; site_name: string; visit_id: number; visit_name: string; visit_number: number; visit_instance_id: number | null; visit_status: string | null; form_count: number; locked_count: number; signed_count: number; completed_count: number; in_progress_count: number; required_forms_count: number; }
-interface MissingRow { trial_patient_id: string; institution_name: string; total_required_forms: number; completed_forms: number; signed_forms: number; completion_pct: number; missing_field_flags: number; open_queries: number; last_activity: string | null; }
-interface DeviationRow { deviation_id: number; deviation_type: 'Minor' | 'Major' | 'Critical'; deviation_date: string; description: string; corrective_action: string | null; reported_to_irb: boolean; trial_patient_id: string; site_name: string; reported_by_username: string; }
+export interface SiteData {
+    site_id: number;
+    institution_name: string;
+}
+
+export interface CompletenessRow { 
+    patient_id: number; 
+    trial_patient_id: string; 
+    site_id: number; 
+    site_name: string; 
+    visit_id: number; 
+    visit_name: string; 
+    visit_number: number; 
+    visit_instance_id: number | null; 
+    visit_status: string | null; 
+    form_count: number; 
+    locked_count: number; 
+    signed_count: number; 
+    completed_count: number; 
+    in_progress_count: number; 
+    required_forms_count: number; 
+}
+
+export interface TrendRow {
+    week: string;
+    forms_entered: number | string;
+    forms_signed: number | string;
+    queries_raised: number | string;
+    queries_resolved: number | string;
+    weekly_sign_rate: number | string;
+}
+
+export interface MissingRow { 
+    trial_patient_id: string; 
+    institution_name: string; 
+    total_required_forms: number; 
+    completed_forms: number; 
+    signed_forms: number; 
+    completion_pct: number | string; 
+    missing_field_flags: number; 
+    open_queries: number; 
+    last_activity: string | null; 
+}
+
+export interface DeviationRow { 
+    deviation_id: number; 
+    deviation_type: 'Minor' | 'Major' | 'Critical'; 
+    deviation_date: string; 
+    description: string; 
+    corrective_action: string | null; 
+    reported_to_irb: boolean; 
+    trial_patient_id: string; 
+    site_name: string; 
+    reported_by_username: string; 
+}
+// ------------------------
 
 // ── Shared helpers ─────────────────────────────────────────────────────────────
 const devColors: Record<string, { bg: string; color: string }> = {
@@ -61,26 +116,26 @@ const ESignModal: React.FC<{ title: string; onConfirm: (reason: string) => void;
 
 // ── Sub-tab 1: eCRF Completeness Matrix ────────────────────────────────────────
 const ECRFCompletenessMatrix: React.FC<{ trialId: string }> = ({ trialId }) => {
-    const { data: rows = [], isLoading, refetch } = useQuery({
+    const { data: rows = [], isLoading, refetch } = useQuery<CompletenessRow[]>({
         queryKey: ['ecrf-completeness', trialId],
-        queryFn: () => api.get('/api/data-management/completeness', { params: { trial_id: trialId } }).then(r => r.data),
+        queryFn: () => dataManagerAPI.getCompleteness(trialId),
         enabled: !!trialId,
     });
-    const { data: trendData = [] } = useQuery({
+    const { data: trendData = [] } = useQuery<TrendRow[]>({
         queryKey: ['trend', trialId],
-        queryFn: () => api.get(`/api/data-management/trend/${trialId}`).then(r => r.data),
+        queryFn: () => dataManagerAPI.getCompletenessTrend(trialId),
         enabled: !!trialId,
     });
 
     // Build matrix: unique patients × unique visits
-    const patients = [...new Map((rows as CompletenessRow[]).map(r => [r.patient_id, { id: r.patient_id, pid: r.trial_patient_id, site: r.site_name }])).values()];
-    const visits   = [...new Map((rows as CompletenessRow[]).map(r => [r.visit_id, { id: r.visit_id, name: r.visit_name, num: r.visit_number }])).values()].sort((a, b) => a.num - b.num);
-    const cellMap: Map<string, CompletenessRow> = new Map((rows as CompletenessRow[]).map(r => [`${r.patient_id}-${r.visit_id}`, r]));
+    const patients = [...new Map(rows.map(r => [r.patient_id, { id: r.patient_id, pid: r.trial_patient_id, site: r.site_name }])).values()];
+    const visits   = [...new Map(rows.map(r => [r.visit_id, { id: r.visit_id, name: r.visit_name, num: r.visit_number }])).values()].sort((a, b) => a.num - b.num);
+    const cellMap: Map<string, CompletenessRow> = new Map(rows.map(r => [`${r.patient_id}-${r.visit_id}`, r]));
 
-    const totalForms     = (rows as CompletenessRow[]).reduce((s: number, r: CompletenessRow) => s + r.form_count, 0);
-    const completedForms = (rows as CompletenessRow[]).reduce((s: number, r: CompletenessRow) => s + r.completed_count + r.signed_count + r.locked_count, 0);
-    const signedForms    = (rows as CompletenessRow[]).reduce((s: number, r: CompletenessRow) => s + r.signed_count, 0);
-    const visitInstances = new Set((rows as CompletenessRow[]).filter((r: CompletenessRow) => r.visit_instance_id).map((r: CompletenessRow) => r.visit_instance_id)).size;
+    const totalForms     = rows.reduce((s, r) => s + Number(r.form_count), 0);
+    const completedForms = rows.reduce((s, r) => s + Number(r.completed_count) + Number(r.signed_count) + Number(r.locked_count), 0);
+    const signedForms    = rows.reduce((s, r) => s + Number(r.signed_count), 0);
+    const visitInstances = new Set(rows.filter(r => r.visit_instance_id).map(r => r.visit_instance_id)).size;
 
     if (!trialId) return <div style={{ padding: '3rem', textAlign: 'center', color: '#9CA3AF' }}>Select a trial to view the completeness matrix.</div>;
 
@@ -99,10 +154,13 @@ const ECRFCompletenessMatrix: React.FC<{ trialId: string }> = ({ trialId }) => {
                         <ResponsiveContainer width="100%" height={220}>
                             <LineChart data={trendData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
-                                <XAxis dataKey="week" tickFormatter={(v: string) => v ? new Date(v).toLocaleDateString('en', { month: 'short', day: 'numeric' }) : ''} style={{ fontSize: 11 }} stroke="#D1D5DB" />
-                                <YAxis yAxisId="left" domain={[0, 100]} tickFormatter={(v: number) => `${v}%`} style={{ fontSize: 11 }} stroke="#D1D5DB" />
+                                <XAxis dataKey="week" tickFormatter={(v) => v ? new Date(v).toLocaleDateString('en', { month: 'short', day: 'numeric' }) : ''} style={{ fontSize: 11 }} stroke="#D1D5DB" />
+                                <YAxis yAxisId="left" domain={[0, 100]} tickFormatter={(v) => `${v}%`} style={{ fontSize: 11 }} stroke="#D1D5DB" />
                                 <YAxis yAxisId="right" orientation="right" style={{ fontSize: 11 }} stroke="#D1D5DB" />
-                                <Tooltip formatter={(val: any, name: string) => name.includes('rate') ? `${val}%` : val} labelFormatter={(l: string) => new Date(l).toLocaleDateString()} />
+                                <Tooltip 
+    formatter={(val: any, name: string | undefined) => name?.includes('rate') ? `${val}%` : val} 
+    labelFormatter={(label: any) => label ? new Date(label).toLocaleDateString() : ''} 
+/>
                                 <Legend />
                                 <Line yAxisId="left" type="monotone" dataKey="weekly_sign_rate" name="Sign Rate %" stroke="#16A34A" strokeWidth={2} dot={false} />
                                 <Line yAxisId="right" type="monotone" dataKey="queries_raised" name="Queries Raised" stroke="#DC2626" strokeWidth={2} dot={false} strokeDasharray="4 2" />
@@ -190,9 +248,9 @@ const ECRFCompletenessMatrix: React.FC<{ trialId: string }> = ({ trialId }) => {
 // ── Sub-tab 2: Missing Data Report ─────────────────────────────────────────────
 const MissingDataReport: React.FC<{ trialId: string }> = ({ trialId }) => {
     const [remindMsg, setRemindMsg] = useState('');
-    const { data: rows = [], isLoading } = useQuery({
+    const { data: rows = [], isLoading } = useQuery<MissingRow[]>({
         queryKey: ['missing-data', trialId],
-        queryFn: () => api.get('/api/data-management/missing-data', { params: { trial_id: trialId } }).then(r => r.data),
+        queryFn: () => dataManagerAPI.getMissingData(trialId),
         enabled: !!trialId,
     });
 
@@ -227,8 +285,8 @@ const MissingDataReport: React.FC<{ trialId: string }> = ({ trialId }) => {
                             </tr>
                         </thead>
                         <tbody>
-                            {(rows as MissingRow[]).map((r, i) => {
-                                const pct = parseFloat(r.completion_pct as any) || 0;
+                            {rows.map((r, i) => {
+                                const pct = parseFloat(String(r.completion_pct)) || 0;
                                 const barColor = pct >= 80 ? '#16A34A' : pct >= 50 ? '#F59E0B' : '#DC2626';
                                 return (
                                     <tr key={i} style={{ background: i % 2 === 0 ? 'white' : '#FAFAFA' }}>
@@ -276,16 +334,19 @@ const ProtocolDeviations: React.FC<{ trialId: string }> = ({ trialId }) => {
 
     const params = { trial_id: trialId, type: devType || undefined, site_id: siteId || undefined, irb_reported: irbFilter || undefined, date_from: dateFrom || undefined, date_to: dateTo || undefined };
 
-    const { data: rows = [], isLoading } = useQuery({
+    const { data: rows = [], isLoading } = useQuery<DeviationRow[]>({
         queryKey: ['deviations', params],
-        queryFn: () => api.get('/api/data-management/deviations', { params }).then(r => r.data),
+        queryFn: () => dataManagerAPI.getDeviations(params),
         enabled: !!trialId,
     });
-    const { data: sites = [] } = useQuery({ queryKey: ['dm-sites'], queryFn: () => api.get('/api/data-management/sites').then(r => r.data) });
+    const { data: sites = [] } = useQuery<SiteData[]>({ 
+        queryKey: ['dm-sites'], 
+        queryFn: () => dataManagerAPI.getSites() 
+    });
 
     const toggleMut = useMutation({
         mutationFn: ({ id, val, reason }: { id: number; val: boolean; reason: string }) =>
-            api.put(`/api/data-management/deviations/${id}`, { reported_to_irb: val, reason }),
+            dataManagerAPI.updateDeviation(id, { reported_to_irb: val, reason }),
         onSuccess: () => { qc.invalidateQueries({ queryKey: ['deviations'] }); setPendingToggle(null); },
     });
 
@@ -307,7 +368,7 @@ const ProtocolDeviations: React.FC<{ trialId: string }> = ({ trialId }) => {
                         <label className="form-label" style={{ fontSize: 11 }}>Site</label>
                         <select className="form-select" value={siteId} onChange={e => setSiteId(e.target.value)}>
                             <option value="">All Sites</option>
-                            {(sites as any[]).map((s: any) => <option key={s.site_id} value={s.site_id}>{s.institution_name}</option>)}
+                            {sites.map((s) => <option key={s.site_id} value={s.site_id}>{s.institution_name}</option>)}
                         </select>
                     </div>
                     <div style={{ flex: '0 0 160px' }}>
@@ -349,7 +410,7 @@ const ProtocolDeviations: React.FC<{ trialId: string }> = ({ trialId }) => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {(rows as DeviationRow[]).map((d, i) => (
+                                {rows.map((d, i) => (
                                     <tr key={d.deviation_id} style={{ background: i % 2 === 0 ? 'white' : '#FAFAFA' }}>
                                         <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontSize: 11, color: '#6B7280' }}>#{d.deviation_id}</td>
                                         <td style={{ padding: '10px 12px', fontWeight: 700 }}>{d.trial_patient_id}</td>
@@ -391,7 +452,10 @@ export const DataReview: React.FC = () => {
     const [activeTab, setActiveTab] = useState<string>('eCRF Completeness');
     const [trialId, setTrialId]     = useState('');
 
-    const { data: trials = [] } = useQuery({ queryKey: ['dm-trials'], queryFn: () => api.get('/api/data-management/trials').then(r => r.data) });
+    const { data: trials = [] } = useQuery<TrialData[]>({ 
+        queryKey: ['dm-trials'], 
+        queryFn: () => dataManagerAPI.getTrials() 
+    });
 
     return (
         <div className="dashboard-container">
@@ -404,7 +468,7 @@ export const DataReview: React.FC = () => {
                     <label className="form-label" style={{ fontSize: 11 }}>Trial</label>
                     <select className="form-select" value={trialId} onChange={e => setTrialId(e.target.value)}>
                         <option value="">Select trial…</option>
-                        {(trials as any[]).map((t: any) => <option key={t.trial_id} value={t.trial_id}>{t.trial_title}</option>)}
+                        {trials.map((t) => <option key={t.trial_id} value={t.trial_id}>{t.trial_title}</option>)}
                     </select>
                 </div>
             </div>

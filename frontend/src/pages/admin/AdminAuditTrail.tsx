@@ -4,8 +4,11 @@ import axios from 'axios';
 import '../Dashboard.css';
 import '../admin/AdminDashboard.css';
 
-const adminApi = axios.create({ baseURL: 'http://localhost:5000' });
-adminApi.interceptors.request.use(cfg => { const raw = localStorage.getItem('user'); if (raw) cfg.headers['X-User-Data'] = btoa(raw); return cfg; });
+const adminApi = axios.create({ 
+    baseURL: 'http://localhost:5000',
+    withCredentials: true, // Include httpOnly cookie
+});
+// No need to set X-User-Data header; auth is via httpOnly cookie
 
 const TABLES = ['users', 'clinical_trials', 'study_sites', 'data_locks', 'study_protocols', 'patients', 'adverse_events', 'lab_results', 'ecrf_data'];
 const ACTIONS = ['INSERT', 'UPDATE', 'DELETE'];

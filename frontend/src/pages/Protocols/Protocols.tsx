@@ -1,16 +1,34 @@
 import React, { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { FileText, Upload, GitCompare, AlertTriangle, CheckCircle, Clock, ChevronRight, X } from 'lucide-react';
 import '../Dashboard.css';
+import { dataManagerAPI } from '../../services/api';
+//page of dataManager
+export interface Protocol { 
+    protocol_id: number; 
+    version_number: string; 
+    amendment_number: number; 
+    approval_date: string | null; 
+    valid_from: string | null; 
+    valid_to: string | null; 
+    protocol_document: Record<string, any>; 
+    electronic_signature: string; 
+    approved_by_username: string | null; 
+}
 
-const api = axios.create({ baseURL: 'http://localhost:5000' });
-api.interceptors.request.use(cfg => { const raw = localStorage.getItem('user'); if (raw) cfg.headers['X-User-Data'] = btoa(raw); return cfg; });
+export interface TrialData {
+    trial_id: number;
+    trial_title: string;
+}
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-interface Protocol { protocol_id: number; version_number: string; amendment_number: number; approval_date: string | null; valid_from: string | null; valid_to: string | null; protocol_document: any; electronic_signature: string; approved_by_username: string | null; }
+export interface AuditUser {
+    user_id: number;
+    username: string;
+    role: string;
+}
 
-// ── Section badge (valid_to=null → active) ────────────────────────────────────
+
+// Section badge (valid_to=null → active)
 const VersionBadge = ({ p }: { p: Protocol }) => {
     const isActive = !p.valid_to;
     return (
@@ -20,7 +38,7 @@ const VersionBadge = ({ p }: { p: Protocol }) => {
     );
 };
 
-// ── JSON Diff for protocol comparison ─────────────────────────────────────────
+//JSON Diff for protocol comparison
 const ProtocolCompare: React.FC<{ v1: Protocol; v2: Protocol; onClose: () => void }> = ({ v1, v2, onClose }) => {
     const doc1 = v1.protocol_document ?? {};
     const doc2 = v2.protocol_document ?? {};
@@ -76,9 +94,13 @@ const ProtocolCompare: React.FC<{ v1: Protocol; v2: Protocol; onClose: () => voi
     );
 };
 
-// ── Upload New Protocol Modal ─────────────────────────────────────────────────
+// Upload New Protocol Modal
 const UploadProtocolModal: React.FC<{ trialId: string; onClose: () => void; onSuccess: () => void }> = ({ trialId, onClose, onSuccess }) => {
-    const { data: users = [] } = useQuery({ queryKey: ['dm-all-users'], queryFn: () => api.get('/api/data-management/audit/users').then(r => r.data) });
+    const { data: users = [] } = useQuery<AuditUser[]>({ 
+        queryKey: ['dm-all-users'], 
+        queryFn: () => dataManagerAPI.getAuditUsers() 
+    });
+    
     const [form, setForm] = useState({ version_number: '', amendment_number: '0', approval_date: '', approved_by_user_id: '', reason: '' });
     const [docFields, setDocFields] = useState<{ key: string; value: string }[]>([{ key: 'title', value: '' }, { key: 'phase', value: '' }, { key: 'indication', value: '' }]);
     const [msg, setMsg] = useState('');
@@ -91,11 +113,14 @@ const UploadProtocolModal: React.FC<{ trialId: string; onClose: () => void; onSu
         if (!form.version_number || !form.approved_by_user_id || !form.reason) { setMsg('Version, approver, and reason are required'); return; }
         const protocol_document = Object.fromEntries(docFields.filter(f => f.key).map(f => [f.key, f.value]));
         try {
-            await api.post('/api/data-management/protocols', {
-                trial_id: parseInt(trialId), version_number: form.version_number,
+            await dataManagerAPI.uploadProtocol({
+                trial_id: parseInt(trialId), 
+                version_number: form.version_number,
                 amendment_number: parseInt(form.amendment_number) || 0,
-                approval_date: form.approval_date || null, approved_by_user_id: parseInt(form.approved_by_user_id),
-                protocol_document, reason: form.reason,
+                approval_date: form.approval_date || null, 
+                approved_by_user_id: parseInt(form.approved_by_user_id),
+                protocol_document, 
+                reason: form.reason,
             });
             onSuccess();
             onClose();
@@ -129,7 +154,7 @@ const UploadProtocolModal: React.FC<{ trialId: string; onClose: () => void; onSu
                             <label className="form-label">Approved By <span style={{ color: '#DC2626' }}>*</span></label>
                             <select className="form-select" value={form.approved_by_user_id} onChange={e => setFld('approved_by_user_id', e.target.value)}>
                                 <option value="">Select user…</option>
-                                {(users as any[]).map((u: any) => <option key={u.user_id} value={u.user_id}>{u.username} ({u.role?.replace(/_/g,' ')})</option>)}
+                                {users.map((u) => <option key={u.user_id} value={u.user_id}>{u.username} ({u.role?.replace(/_/g,' ')})</option>)}
                             </select>
                         </div>
                     </div>
@@ -171,7 +196,7 @@ const UploadProtocolModal: React.FC<{ trialId: string; onClose: () => void; onSu
     );
 };
 
-// ── Protocol Detail Panel (right side) ────────────────────────────────────────
+//Protocol Detail Panel (right side)
 const ProtocolDetail: React.FC<{ protocol: Protocol }> = ({ protocol: p }) => {
     const doc = p.protocol_document ?? {};
     return (
@@ -225,7 +250,7 @@ const ProtocolDetail: React.FC<{ protocol: Protocol }> = ({ protocol: p }) => {
     );
 };
 
-// ── Main Protocols Page ────────────────────────────────────────────────────────
+// Main Protocols Page
 export const Protocols: React.FC = () => {
     const qc = useQueryClient();
     const [trialId, setTrialId]       = useState('');
@@ -234,21 +259,24 @@ export const Protocols: React.FC = () => {
     const [compareIds, setCompareIds] = useState<[number | null, number | null]>([null, null]);
     const [showCompare, setShowCompare] = useState(false);
 
-    const { data: trials = [] } = useQuery({ queryKey: ['dm-trials'], queryFn: () => api.get('/api/data-management/trials').then(r => r.data) });
-    const { data: protocols = [], isLoading } = useQuery({
+    const { data: trials = [] } = useQuery<TrialData[]>({ 
+        queryKey: ['dm-trials'], 
+        queryFn: () => dataManagerAPI.getTrials() 
+    });
+    
+    const { data: protocols = [], isLoading } = useQuery<Protocol[]>({
         queryKey: ['protocols', trialId],
-        queryFn: () => api.get(`/api/data-management/protocols/${trialId}`).then(r => r.data),
+        queryFn: () => dataManagerAPI.getProtocols(trialId),
         enabled: !!trialId,
     });
 
-    const protos = protocols as Protocol[];
-    const selectedProto = protos.find(p => p.protocol_id === selectedId);
-    const compareV1 = protos.find(p => p.protocol_id === compareIds[0]);
-    const compareV2 = protos.find(p => p.protocol_id === compareIds[1]);
+    const selectedProto = protocols.find(p => p.protocol_id === selectedId);
+    const compareV1 = protocols.find(p => p.protocol_id === compareIds[0]);
+    const compareV2 = protocols.find(p => p.protocol_id === compareIds[1]);
 
     const handleCompare = () => {
-        if (protos.length >= 2) {
-            setCompareIds([protos[0].protocol_id, protos[1].protocol_id]);
+        if (protocols.length >= 2) {
+            setCompareIds([protocols[0].protocol_id, protocols[1].protocol_id]);
             setShowCompare(true);
         }
     };
@@ -266,10 +294,10 @@ export const Protocols: React.FC = () => {
                         <label className="form-label" style={{ fontSize: 11 }}>Trial</label>
                         <select className="form-select" value={trialId} onChange={e => { setTrialId(e.target.value); setSelectedId(null); }}>
                             <option value="">Select trial…</option>
-                            {(trials as any[]).map((t: any) => <option key={t.trial_id} value={t.trial_id}>{t.trial_title}</option>)}
+                            {trials.map((t) => <option key={t.trial_id} value={t.trial_id}>{t.trial_title}</option>)}
                         </select>
                     </div>
-                    {protos.length >= 2 && (
+                    {protocols.length >= 2 && (
                         <button className="btn-secondary" onClick={handleCompare} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             <GitCompare size={14} /> Compare Versions
                         </button>
@@ -295,18 +323,18 @@ export const Protocols: React.FC = () => {
                         <div className="card">
                             <div className="card-header">
                                 <h3 className="card-title"><FileText size={15} /> Protocol Versions</h3>
-                                <span style={{ background: '#F3F4F6', color: '#374151', padding: '2px 10px', borderRadius: 99, fontSize: 12, fontWeight: 700 }}>{protos.length}</span>
+                                <span style={{ background: '#F3F4F6', color: '#374151', padding: '2px 10px', borderRadius: 99, fontSize: 12, fontWeight: 700 }}>{protocols.length}</span>
                             </div>
                             {isLoading ? (
                                 <div style={{ padding: '1.5rem', textAlign: 'center', color: '#9CA3AF' }}>Loading…</div>
-                            ) : protos.length === 0 ? (
+                            ) : protocols.length === 0 ? (
                                 <div style={{ padding: '3rem 1.5rem', textAlign: 'center', color: '#9CA3AF' }}>
                                     <FileText size={32} style={{ marginBottom: 10, opacity: 0.3 }} />
                                     <p style={{ margin: 0, fontSize: '0.875rem' }}>No protocol versions found. Upload the first one.</p>
                                 </div>
                             ) : (
                                 <div>
-                                    {protos.map((p) => {
+                                    {protocols.map((p) => {
                                         const isActive = !p.valid_to;
                                         const isSelected = selectedId === p.protocol_id;
                                         return (
@@ -332,15 +360,15 @@ export const Protocols: React.FC = () => {
                         </div>
 
                         {/* Amendment timeline */}
-                        {protos.length > 0 && (
+                        {protocols.length > 0 && (
                             <div className="card" style={{ marginTop: '1rem' }}>
                                 <div className="card-header"><h3 className="card-title" style={{ fontSize: '0.875rem' }}><Clock size={14} /> Amendment Timeline</h3></div>
                                 <div style={{ padding: '0.875rem 1rem' }}>
-                                    {protos.map((p, i) => (
+                                    {protocols.map((p, i) => (
                                         <div key={p.protocol_id} style={{ display: 'flex', gap: 10, paddingBottom: 12, position: 'relative' }}>
                                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                                                 <div style={{ width: 12, height: 12, borderRadius: '50%', background: !p.valid_to ? '#16A34A' : '#D1D5DB', flexShrink: 0, marginTop: 2 }} />
-                                                {i < protos.length - 1 && <div style={{ width: 2, flex: 1, background: '#E5E7EB', marginTop: 2 }} />}
+                                                {i < protocols.length - 1 && <div style={{ width: 2, flex: 1, background: '#E5E7EB', marginTop: 2 }} />}
                                             </div>
                                             <div>
                                                 <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: 700, color: !p.valid_to ? '#16A34A' : '#374151' }}>v{p.version_number}</p>

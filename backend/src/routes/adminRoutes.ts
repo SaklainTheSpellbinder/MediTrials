@@ -2,17 +2,11 @@ import { Router } from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcrypt';
 import { pool } from '../config/db';
+import {  requireRole } from '../middleware/authMiddleware';
 
 const router = Router();
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-function decodeUser(req: Request, res: Response): any | null {
-    const header = req.headers['x-user-data'];
-    if (!header) { res.status(401).json({ error: 'Unauthorized' }); return null; }
-    try { return JSON.parse(Buffer.from(header as string, 'base64').toString('utf8')); }
-    catch { res.status(401).json({ error: 'Unauthorized' }); return null; }
-}
-
 async function auditLog(tableName: string, recordId: number, action: string, newValues: any, userId: number, reason: string) {
     try {
         await pool.query(`
@@ -24,34 +18,14 @@ async function auditLog(tableName: string, recordId: number, action: string, new
         console.warn('audit log warning:', e.message);
     }
 }
-
+router.use(requireRole(['System_Admin']));
 async function refreshMVs() {
     await pool.query(`SELECT public.refresh_all_materialized_views()`);
 }
-
-// ── Auth helpers ──────────────────────────────────────────────────────────────
-// Inject req.user from X-User-Data header — non-blocking (just extracts user)
-router.use((req: Request, _res: Response, next) => {
-    const header = req.headers['x-user-data'];
-    if (header) {
-        try { (req as any).user = JSON.parse(Buffer.from(header as string, 'base64').toString('utf8')); }
-        catch { /* ignore malformed */ }
-    }
-    next();
-});
-
-// Per-route guard: only System_Admin passes
-const requireAdmin = (req: Request, res: Response, next: any) => {
-    const u = (req as any).user;
-    if (!u) return res.status(401).json({ error: 'Unauthorized' });
-    if (u.role !== 'System_Admin') return res.status(403).json({ error: 'Forbidden — System Admin only' });
-    next();
-};
-
 // ═══════════════════════════════════════════════════════
 // DASHBOARD
 // ═══════════════════════════════════════════════════════
-router.get('/admin', requireAdmin, async (req: Request, res: Response) => {
+router.get('/admin', async (req: Request, res: Response) => {
     try {
         // Step 1: Trial portfolio
         const trialsRaw = await pool.query(`
@@ -167,7 +141,7 @@ router.get('/admin', requireAdmin, async (req: Request, res: Response) => {
 // ═══════════════════════════════════════════════════════
 // TRIAL MANAGEMENT
 // ═══════════════════════════════════════════════════════
-router.get('/trials', requireAdmin, async (req: Request, res: Response) => {
+router.get('/trials', async (req: Request, res: Response) => {
     try {
         const { rows } = await pool.query(`
             SELECT ct.*, COUNT(DISTINCT ss.site_id) AS site_count,
@@ -181,7 +155,7 @@ router.get('/trials', requireAdmin, async (req: Request, res: Response) => {
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/trials', requireAdmin, async (req: Request, res: Response) => {
+router.post('/trials', async (req: Request, res: Response) => {
     const user = (req as any).user;
     const { trial_nct_id, trial_title, trial_phase, therapeutic_area, trial_status, start_date, estimated_completion_date, target_enrollment } = req.body;
     try {
@@ -196,7 +170,7 @@ router.post('/trials', requireAdmin, async (req: Request, res: Response) => {
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.get('/trials/:trialId', requireAdmin, async (req: Request, res: Response) => {
+router.get('/trials/:trialId', async (req: Request, res: Response) => {
     const { trialId } = req.params;
     try {
         const [trial, sites, protocols, arms, eligibility, visits, ecrfDefs, labTests] = await Promise.all([
@@ -214,7 +188,7 @@ router.get('/trials/:trialId', requireAdmin, async (req: Request, res: Response)
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.put('/trials/:trialId', requireAdmin, async (req: Request, res: Response) => {
+router.put('/trials/:trialId', async (req: Request, res: Response) => {
     const user = (req as any).user;
     const { trialId } = req.params;
     const { trial_nct_id, trial_title, trial_phase, therapeutic_area, trial_status, start_date, estimated_completion_date, target_enrollment } = req.body;
@@ -231,7 +205,7 @@ router.put('/trials/:trialId', requireAdmin, async (req: Request, res: Response)
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.delete('/trials/:trialId', requireAdmin, async (req: Request, res: Response) => {
+router.delete('/trials/:trialId', async (req: Request, res: Response) => {
     const user = (req as any).user;
     const { trialId } = req.params;
     try {
@@ -242,7 +216,7 @@ router.delete('/trials/:trialId', requireAdmin, async (req: Request, res: Respon
 });
 
 // ── Trial child endpoints ──────────────────────────────────────────────────────
-router.post('/trials/:trialId/sites', requireAdmin, async (req: Request, res: Response) => {
+router.post('/trials/:trialId/sites', async (req: Request, res: Response) => {
     const user = (req as any).user;
     const { trialId } = req.params;
     const { institution_name, country, target_enrollment, initiation_date } = req.body;
@@ -257,7 +231,7 @@ router.post('/trials/:trialId/sites', requireAdmin, async (req: Request, res: Re
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/trials/:trialId/protocols', requireAdmin, async (req: Request, res: Response) => {
+router.post('/trials/:trialId/protocols', async (req: Request, res: Response) => {
     const { trialId } = req.params;
     const { version_number, amendment_number, effective_date, protocol_document } = req.body;
     try {
@@ -269,7 +243,7 @@ router.post('/trials/:trialId/protocols', requireAdmin, async (req: Request, res
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/trials/:trialId/arms', requireAdmin, async (req: Request, res: Response) => {
+router.post('/trials/:trialId/arms', async (req: Request, res: Response) => {
     const { trialId } = req.params;
     const { arm_code, arm_description, blinding_level } = req.body;
     try {
@@ -281,7 +255,7 @@ router.post('/trials/:trialId/arms', requireAdmin, async (req: Request, res: Res
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.put('/trials/:trialId/arms/:armId', requireAdmin, async (req: Request, res: Response) => {
+router.put('/trials/:trialId/arms/:armId', async (req: Request, res: Response) => {
     const { armId } = req.params;
     const { arm_description, blinding_level } = req.body;
     try {
@@ -292,7 +266,7 @@ router.put('/trials/:trialId/arms/:armId', requireAdmin, async (req: Request, re
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/trials/:trialId/eligibility', requireAdmin, async (req: Request, res: Response) => {
+router.post('/trials/:trialId/eligibility', async (req: Request, res: Response) => {
     const { trialId } = req.params;
     const { criterion_text, criterion_type, criterion_order } = req.body;
     try {
@@ -304,7 +278,7 @@ router.post('/trials/:trialId/eligibility', requireAdmin, async (req: Request, r
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.delete('/trials/:trialId/eligibility/:criterionId', requireAdmin, async (req: Request, res: Response) => {
+router.delete('/trials/:trialId/eligibility/:criterionId', async (req: Request, res: Response) => {
     const { trialId, criterionId } = req.params;
     try {
         await pool.query(`DELETE FROM public.eligibility_criteria WHERE criterion_id=$1 AND trial_id=$2`, [criterionId, trialId]);
@@ -312,7 +286,7 @@ router.delete('/trials/:trialId/eligibility/:criterionId', requireAdmin, async (
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/trials/:trialId/visits', requireAdmin, async (req: Request, res: Response) => {
+router.post('/trials/:trialId/visits', async (req: Request, res: Response) => {
     const { trialId } = req.params;
     const { visit_name, visit_day, window_before_days, window_after_days, is_required } = req.body;
     try {
@@ -324,7 +298,7 @@ router.post('/trials/:trialId/visits', requireAdmin, async (req: Request, res: R
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/trials/:trialId/lab-tests', requireAdmin, async (req: Request, res: Response) => {
+router.post('/trials/:trialId/lab-tests', async (req: Request, res: Response) => {
     const { trialId } = req.params;
     const { test_name, test_code_loinc, unit_of_measure, reference_low, reference_high, critical_low_value, critical_high_value } = req.body;
     try {
@@ -340,7 +314,7 @@ router.post('/trials/:trialId/lab-tests', requireAdmin, async (req: Request, res
 // ═══════════════════════════════════════════════════════
 // SITE MANAGEMENT
 // ═══════════════════════════════════════════════════════
-router.get('/sites', requireAdmin, async (req: Request, res: Response) => {
+router.get('/sites', async (req: Request, res: Response) => {
     const { trial_id } = req.query;
     try {
         const filter = trial_id ? 'WHERE mse.trial_id = $1' : '';
@@ -357,7 +331,7 @@ router.get('/sites', requireAdmin, async (req: Request, res: Response) => {
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.get('/sites/:siteId', requireAdmin, async (req: Request, res: Response) => {
+router.get('/sites/:siteId', async (req: Request, res: Response) => {
     const { siteId } = req.params;
     try {
         const [site, enrollment, siteUsers, queryRes] = await Promise.all([
@@ -375,7 +349,7 @@ router.get('/sites/:siteId', requireAdmin, async (req: Request, res: Response) =
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.put('/sites/:siteId', requireAdmin, async (req: Request, res: Response) => {
+router.put('/sites/:siteId', async (req: Request, res: Response) => {
     const user = (req as any).user;
     const { siteId } = req.params;
     const { institution_name, country, target_enrollment, site_status, initiation_date } = req.body;
@@ -390,7 +364,7 @@ router.put('/sites/:siteId', requireAdmin, async (req: Request, res: Response) =
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.put('/sites/:siteId/suspend', requireAdmin, async (req: Request, res: Response) => {
+router.put('/sites/:siteId/suspend', async (req: Request, res: Response) => {
     const user = (req as any).user;
     const { siteId } = req.params;
     const { reason } = req.body;
@@ -404,7 +378,7 @@ router.put('/sites/:siteId/suspend', requireAdmin, async (req: Request, res: Res
 // ═══════════════════════════════════════════════════════
 // USER MANAGEMENT
 // ═══════════════════════════════════════════════════════
-router.get('/users', requireAdmin, async (req: Request, res: Response) => {
+router.get('/users', async (req: Request, res: Response) => {
     const { role, is_active, site_id, page = '1', limit = '25' } = req.query;
     const offset = (parseInt(page as string) - 1) * parseInt(limit as string);
     try {
@@ -424,7 +398,7 @@ router.get('/users', requireAdmin, async (req: Request, res: Response) => {
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/users', requireAdmin, async (req: Request, res: Response) => {
+router.post('/users', async (req: Request, res: Response) => {
     const user = (req as any).user;
     const { username, email, role, site_id, password, mfa_enabled } = req.body;
     try {
@@ -447,7 +421,7 @@ router.post('/users', requireAdmin, async (req: Request, res: Response) => {
     }
 });
 
-router.put('/users/:userId', requireAdmin, async (req: Request, res: Response) => {
+router.put('/users/:userId', async (req: Request, res: Response) => {
     const user = (req as any).user;
     const { userId } = req.params;
     const { username, email, role, site_id, is_active, mfa_enabled } = req.body;
@@ -466,7 +440,7 @@ router.put('/users/:userId', requireAdmin, async (req: Request, res: Response) =
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.put('/users/:userId/activate', requireAdmin, async (req: Request, res: Response) => {
+router.put('/users/:userId/activate', async (req: Request, res: Response) => {
     const user = (req as any).user;
     const { userId } = req.params;
     try {
@@ -476,7 +450,7 @@ router.put('/users/:userId/activate', requireAdmin, async (req: Request, res: Re
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.put('/users/:userId/deactivate', requireAdmin, async (req: Request, res: Response) => {
+router.put('/users/:userId/deactivate', async (req: Request, res: Response) => {
     const user = (req as any).user;
     const { userId } = req.params;
     try {
@@ -486,7 +460,7 @@ router.put('/users/:userId/deactivate', requireAdmin, async (req: Request, res: 
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/users/:userId/reset-password', requireAdmin, async (req: Request, res: Response) => {
+router.post('/users/:userId/reset-password', async (req: Request, res: Response) => {
     const user = (req as any).user;
     const { userId } = req.params;
     const { new_password } = req.body;
@@ -503,7 +477,7 @@ router.post('/users/:userId/reset-password', requireAdmin, async (req: Request, 
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.get('/users/:userId/access-log', requireAdmin, async (req: Request, res: Response) => {
+router.get('/users/:userId/access-log', async (req: Request, res: Response) => {
     const { userId } = req.params;
     try {
         const { rows } = await pool.query(`
@@ -516,7 +490,7 @@ router.get('/users/:userId/access-log', requireAdmin, async (req: Request, res: 
 // ═══════════════════════════════════════════════════════
 // LOCK MANAGEMENT
 // ═══════════════════════════════════════════════════════
-router.get('/locks', requireAdmin, async (req: Request, res: Response) => {
+router.get('/locks', async (req: Request, res: Response) => {
     try {
         const { rows } = await pool.query(`
             SELECT dl.lock_id, ct.trial_title, dl.lock_type, dl.lock_date, dl.unlock_date,
@@ -530,7 +504,7 @@ router.get('/locks', requireAdmin, async (req: Request, res: Response) => {
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/locks', requireAdmin, async (req: Request, res: Response) => {
+router.post('/locks', async (req: Request, res: Response) => {
     const user = (req as any).user;
     const { trial_id, lock_type } = req.body;
     try {
@@ -544,7 +518,7 @@ router.post('/locks', requireAdmin, async (req: Request, res: Response) => {
     }
 });
 
-router.put('/locks/:lockId/unlock', requireAdmin, async (req: Request, res: Response) => {
+router.put('/locks/:lockId/unlock', async (req: Request, res: Response) => {
     const user = (req as any).user;
     const { lockId } = req.params;
     const { reason } = req.body;
@@ -559,7 +533,7 @@ router.put('/locks/:lockId/unlock', requireAdmin, async (req: Request, res: Resp
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.get('/locks/:lockId/verify', requireAdmin, async (req: Request, res: Response) => {
+router.get('/locks/:lockId/verify', async (req: Request, res: Response) => {
     const { lockId } = req.params;
     try {
         const { rows } = await pool.query(`
@@ -584,7 +558,7 @@ router.get('/locks/:lockId/verify', requireAdmin, async (req: Request, res: Resp
 // ═══════════════════════════════════════════════════════
 // AUDIT TRAIL
 // ═══════════════════════════════════════════════════════
-router.get('/audit', requireAdmin, async (req: Request, res: Response) => {
+router.get('/audit', async (req: Request, res: Response) => {
     const { table_name, user_id, action_type, record_id, date_from, date_to, admin_only, page = '1', limit = '50' } = req.query;
     const offset = (parseInt(page as string) - 1) * parseInt(limit as string);
     try {
@@ -609,7 +583,7 @@ router.get('/audit', requireAdmin, async (req: Request, res: Response) => {
 // ═══════════════════════════════════════════════════════
 // MATERIALIZED VIEW REFRESH
 // ═══════════════════════════════════════════════════════
-router.post('/mv/refresh', requireAdmin, async (req: Request, res: Response) => {
+router.post('/mv/refresh', async (req: Request, res: Response) => {
     const user = (req as any).user;
     try {
         await refreshMVs();
@@ -621,7 +595,7 @@ router.post('/mv/refresh', requireAdmin, async (req: Request, res: Response) => 
 // ═══════════════════════════════════════════════════════
 // SYSTEM SETTINGS
 // ═══════════════════════════════════════════════════════
-router.get('/settings', requireAdmin, async (req: Request, res: Response) => {
+router.get('/settings', async (req: Request, res: Response) => {
     try {
         // Ensure table exists
         await pool.query(`
@@ -635,7 +609,7 @@ router.get('/settings', requireAdmin, async (req: Request, res: Response) => {
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.put('/settings', requireAdmin, async (req: Request, res: Response) => {
+router.put('/settings', async (req: Request, res: Response) => {
     const user = (req as any).user;
     const { key, value } = req.body;
     try {

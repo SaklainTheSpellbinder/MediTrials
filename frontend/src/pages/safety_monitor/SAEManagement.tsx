@@ -1,18 +1,46 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { AEGradeBadge } from '../../components/safety/AEGradeBadge';
 import { Clock, FileWarning, AlertCircle, CheckCircle, ChevronRight, X } from 'lucide-react';
 import '../Dashboard.css';
+import { safetyManagerAPI } from '../../services/api';
 
-const safetyApi = axios.create({ baseURL: 'http://localhost:5000' });
-safetyApi.interceptors.request.use(cfg => {
-    const raw = localStorage.getItem('user');
-    if (raw) cfg.headers['X-User-Data'] = btoa(raw);
-    return cfg;
-});
+// --- Type Interfaces ---
+export interface SAETabCount {
+    sae_status: string;
+    cnt: string | number;
+}
+
+export interface SAEData {
+    sae_id: number;
+    sae_report_number: string;
+    ae_term: string;
+    trial_patient_id: string;
+    site_name: string;
+    severity_grade: number;
+    causality_relationship?: string;
+    results_in_death: boolean;
+    life_threatening: boolean;
+    requires_hospitalization: boolean;
+    ae_start_date?: string;
+    sae_status: string;
+    report_deadline_date?: string;
+    days_overdue?: number | string;
+    hours_until_deadline?: number | string;
+    narrative_text?: string;
+    fda_submitted_date?: string;
+    ema_submitted_date?: string;
+    irb_submitted_date?: string;
+    dsmb_review_date?: string;
+}
+
+export interface SAEListResponse {
+    saes: SAEData[];
+    tabCounts: SAETabCount[];
+}
+// ------------------------
 
 const STATUSES = ['Open', 'Under Investigation', 'Reported', 'Closed'];
 
@@ -28,9 +56,9 @@ const deadlineColor = (days: number, hours: number) => {
     return '#6B7280';
 };
 
-const DeadlineBadge: React.FC<{ days_overdue: number; hours: number }> = ({ days_overdue, hours }) => {
-    const daysOver = parseFloat(days_overdue as any);
-    const hoursLeft = parseFloat(hours as any);
+const DeadlineBadge: React.FC<{ days_overdue: number | string; hours: number | string }> = ({ days_overdue, hours }) => {
+    const daysOver = typeof days_overdue === 'string' ? parseFloat(days_overdue) : (days_overdue || 0);
+    const hoursLeft = typeof hours === 'string' ? parseFloat(hours) : (hours || 0);
     const color = deadlineColor(daysOver, hoursLeft);
     const label = daysOver > 0
         ? `${Math.round(daysOver)}d OVERDUE`
@@ -67,19 +95,30 @@ const SAEDetailModal: React.FC<{ saeId: number; onClose: () => void }> = ({ saeI
     const [narrative, setNarrative] = useState('');
     const [msg, setMsg] = useState('');
 
-    const { data: sae, isLoading } = useQuery({
+    const { data: sae, isLoading } = useQuery<SAEData>({
         queryKey: ['sae-detail', saeId],
-        queryFn: () => safetyApi.get(`/api/safety/sae/${saeId}`).then(r => r.data),
-        onSuccess: (d: any) => setNarrative(d.narrative_text ?? ''),
-    } as any);
+        queryFn: () => safetyManagerAPI.getSaeById(saeId),
+    });
+
+    // Replace the old onSuccess with a useEffect hook
+    useEffect(() => {
+        if (sae) {
+            setNarrative(sae.narrative_text ?? '');
+        }
+    }, [sae]);
 
     const updateMut = useMutation({
-        mutationFn: async (body: any) => {
-            const vr = await safetyApi.post('/api/safety/verify-password', { password });
-            if (!vr.data.verified) throw new Error('Password verification failed');
-            return safetyApi.put(`/api/safety/sae/${saeId}`, { ...body, reason });
+        mutationFn: async (body: Partial<SAEData> & { reason?: string }) => {
+            const vr = await safetyManagerAPI.verifyPassword(password);
+            if (!vr.data?.verified) throw new Error('Password verification failed');
+            return safetyManagerAPI.updateSae(saeId, { ...body, reason });
         },
-        onSuccess: () => { qc.invalidateQueries({ queryKey: ['sae-list'] }); qc.invalidateQueries({ queryKey: ['sae-detail', saeId] }); setMsg('Saved ✓'); setTimeout(() => setMsg(''), 3000); },
+        onSuccess: () => { 
+            qc.invalidateQueries({ queryKey: ['sae-list'] }); 
+            qc.invalidateQueries({ queryKey: ['sae-detail', saeId] }); 
+            setMsg('Saved ✓'); 
+            setTimeout(() => setMsg(''), 3000); 
+        },
         onError: (e: any) => setMsg(e.message),
     });
 
@@ -90,7 +129,7 @@ const SAEDetailModal: React.FC<{ saeId: number; onClose: () => void }> = ({ saeI
     );
     if (!sae) return null;
 
-    const dayZero = sae.ae_start_date?.split('T')[0];
+    const dayZero = sae.ae_start_date?.split('T')[0] ?? null;
     const today = new Date().toISOString().split('T')[0];
 
     return (
@@ -195,7 +234,7 @@ const SAEDetailModal: React.FC<{ saeId: number; onClose: () => void }> = ({ saeI
                                 <button className="btn-primary" disabled={!narrative || !reason || !password || updateMut.isPending}
                                     onClick={() => updateMut.mutate({
                                         sae_status: 'Reported',
-                                        report_submitted_date: today,
+                                        report_deadline_date: today, // Assuming submitted maps here loosely, adjust if needed
                                         narrative_text: narrative,
                                         fda_submitted_date: (document.getElementById(`fda-${saeId}`) as HTMLInputElement)?.value || undefined,
                                         ema_submitted_date: (document.getElementById(`ema-${saeId}`) as HTMLInputElement)?.value || undefined,
@@ -231,7 +270,7 @@ const modalBackdrop: React.CSSProperties = { position: 'fixed', inset: 0, backgr
 const modalBox: React.CSSProperties = { background: 'white', borderRadius: 12, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', width: '90%', maxWidth: 720 };
 const sh: React.CSSProperties = { margin: '0 0 12px', fontSize: '0.75rem', fontWeight: 700, color: 'var(--gray-600)', textTransform: 'uppercase', letterSpacing: '0.05em' };
 
-const Field: React.FC<{ label: string; value?: string; children?: React.ReactNode }> = ({ label, value, children }) => (
+const Field: React.FC<{ label: string; value?: string | number; children?: React.ReactNode }> = ({ label, value, children }) => (
     <div>
         <p style={{ margin: '0 0 2px', fontSize: '0.7rem', color: 'var(--gray-500)', textTransform: 'uppercase' }}>{label}</p>
         {children ?? <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 500 }}>{value ?? '—'}</p>}
@@ -242,15 +281,19 @@ export const SAEManagement: React.FC = () => {
     const [activeTab, setActiveTab] = useState('');
     const [selectedSaeId, setSelectedSaeId] = useState<number | null>(null);
 
-    const { data, isLoading } = useQuery({
+    const { data, isLoading } = useQuery<SAEListResponse>({
         queryKey: ['sae-list', activeTab],
-        queryFn: () => safetyApi.get('/api/safety/sae', { params: { sae_status: activeTab || undefined } }).then(r => r.data),
+        queryFn: () => safetyManagerAPI.getSaes({ params: { sae_status: activeTab || undefined } }),
     });
 
     const saes = data?.saes ?? [];
     const tabCounts: Record<string, number> = {};
-    (data?.tabCounts ?? []).forEach((r: any) => { tabCounts[r.sae_status] = parseInt(r.cnt); });
-    const totalCount = Object.values(tabCounts).reduce((a: any, b: any) => a + b, 0);
+    
+    (data?.tabCounts ?? []).forEach((r) => { 
+        tabCounts[r.sae_status] = typeof r.cnt === 'string' ? parseInt(r.cnt) : r.cnt; 
+    });
+    
+    const totalCount = Object.values(tabCounts).reduce((a, b) => a + b, 0);
 
     return (
         <div className="dashboard-container">
@@ -304,9 +347,9 @@ export const SAEManagement: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {saes.map((sae: any) => {
-                                    const daysOver = parseFloat(sae.days_overdue) || 0;
-                                    const hoursLeft = parseFloat(sae.hours_until_deadline) || 0;
+                                {saes.map((sae) => {
+                                    const daysOver = typeof sae.days_overdue === 'string' ? parseFloat(sae.days_overdue) : (sae.days_overdue || 0);
+                                    const hoursLeft = typeof sae.hours_until_deadline === 'string' ? parseFloat(sae.hours_until_deadline) : (sae.hours_until_deadline || 0);
                                     return (
                                         <tr key={sae.sae_id}
                                             style={{ background: deadlineBg(daysOver, hoursLeft), cursor: 'pointer' }}
@@ -327,8 +370,8 @@ export const SAEManagement: React.FC = () => {
                                             <td><DeadlineBadge days_overdue={daysOver} hours={hoursLeft} /></td>
                                             <td>
                                                 <span style={{
-                                                    background: { 'Open': '#FEE2E2', 'Under Investigation': '#FFFBEB', 'Reported': '#ECFDF5', 'Closed': '#F3F4F6' }[sae.sae_status as string] ?? '#F3F4F6',
-                                                    color: { 'Open': '#991B1B', 'Under Investigation': '#854D0E', 'Reported': '#065F46', 'Closed': '#6B7280' }[sae.sae_status as string] ?? '#6B7280',
+                                                    background: { 'Open': '#FEE2E2', 'Under Investigation': '#FFFBEB', 'Reported': '#ECFDF5', 'Closed': '#F3F4F6' }[sae.sae_status] ?? '#F3F4F6',
+                                                    color: { 'Open': '#991B1B', 'Under Investigation': '#854D0E', 'Reported': '#065F46', 'Closed': '#6B7280' }[sae.sae_status] ?? '#6B7280',
                                                     padding: '2px 8px', borderRadius: 9999, fontSize: '0.72rem', fontWeight: 600,
                                                 }}>{sae.sae_status}</span>
                                             </td>

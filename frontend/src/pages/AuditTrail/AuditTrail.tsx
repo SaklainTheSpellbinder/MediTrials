@@ -1,24 +1,48 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import axios from 'axios';
-import { Shield, Download, ChevronDown, ChevronRight, CheckCircle, AlertCircle, Printer } from 'lucide-react';
+import { Shield, Download, ChevronDown, ChevronRight, CheckCircle, AlertCircle, Printer, Info } from 'lucide-react';
 import '../Dashboard.css';
+import { dataManagerAPI } from '../../services/api';
 
-const api = axios.create({ baseURL: 'http://localhost:5000' });
-api.interceptors.request.use(cfg => { const raw = localStorage.getItem('user'); if (raw) cfg.headers['X-User-Data'] = btoa(raw); return cfg; });
+export interface AuditRow { 
+    audit_id: number; 
+    table_name: string; 
+    record_id: number; 
+    action_type: string; 
+    old_value: any; 
+    new_value: any; 
+    change_timestamp: string; 
+    change_reason: string; 
+    ip_address: string | null; 
+    data_hash: string; 
+    changed_by_username: string | null; 
+    changed_by_role: string | null; 
+}
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-interface AuditRow { audit_id: number; table_name: string; record_id: number; action_type: string; old_value: any; new_value: any; change_timestamp: string; change_reason: string; ip_address: string | null; data_hash: string; changed_by_username: string | null; changed_by_role: string | null; }
-interface SigRow { signature_id: number; document_type: string; document_id: number; signature_hash: string; signing_reason: string; signed_at: string; signatory_username: string | null; }
+export interface SigRow { 
+    signature_id: number; 
+    document_type: string; 
+    document_id: number; 
+    signature_hash: string; 
+    signing_reason: string; 
+    signed_at: string; 
+    signatory_username: string | null; 
+}
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+export interface AuditUser {
+    user_id: number;
+    username: string;
+    role: string;
+}
+
+//Helpers
 const actionColor: Record<string, string> = { INSERT: '#16A34A', UPDATE: '#3B82F6', DELETE: '#DC2626' };
 const actionBg:    Record<string, string> = { INSERT: '#D1FAE5', UPDATE: '#DBEAFE', DELETE: '#FEE2E2' };
 
 const TABLES = ['users','clinical_trials','study_sites','data_locks','study_protocols','patients','adverse_events','lab_results','ecrf_data','data_queries','protocol_deviations','electronic_signatures'];
 const ACTIONS = ['INSERT','UPDATE','DELETE'];
 
-// ── JSON Diff Viewer ──────────────────────────────────────────────────────────
+//JSON Diff Viewer
 function diffObjects(old_val: any, new_val: any): { key: string; old: any; new: any; changed: boolean }[] {
     const oldObj  = old_val ? (typeof old_val === 'string' ? JSON.parse(old_val) : old_val) : {};
     const newObj  = new_val ? (typeof new_val === 'string' ? JSON.parse(new_val) : new_val) : {};
@@ -65,7 +89,7 @@ const JsonDiff: React.FC<{ old_val: any; new_val: any }> = ({ old_val, new_val }
     );
 };
 
-// ── Audit Row (expandable) ─────────────────────────────────────────────────────
+//Audit Row (expandable)
 const AuditTableRow: React.FC<{ row: AuditRow }> = ({ row }) => {
     const [open, setOpen] = useState(false);
     return (
@@ -109,38 +133,57 @@ const AuditTableRow: React.FC<{ row: AuditRow }> = ({ row }) => {
     );
 };
 
-// ── Main AuditTrail Page ───────────────────────────────────────────────────────
+//Main AuditTrail Page
 const SUB_TABS = ['Audit Log', 'Electronic Signatures'] as const;
 
 export const AuditTrail: React.FC = () => {
     const [activeTab, setActiveTab] = useState<string>('Audit Log');
     const [filters, setFilters]     = useState({ table_name: '', user_id: '', action_type: '', date_from: '', date_to: '', record_id: '', page: 1 });
     const setF = (patch: Partial<typeof filters>) => setFilters(f => ({ ...f, ...patch, page: 1 }));
-    const totalCount = React.useRef(0);
 
-    const params = { ...filters, limit: 50, page: filters.page, user_id: filters.user_id || undefined, table_name: filters.table_name || undefined, action_type: filters.action_type || undefined, date_from: filters.date_from || undefined, date_to: filters.date_to || undefined, record_id: filters.record_id || undefined };
+    const params = { 
+        ...filters, 
+        limit: 50, 
+        page: filters.page, 
+        user_id: filters.user_id || undefined, 
+        table_name: filters.table_name || undefined, 
+        action_type: filters.action_type || undefined, 
+        date_from: filters.date_from || undefined, 
+        date_to: filters.date_to || undefined, 
+        record_id: filters.record_id || undefined 
+    };
 
-    const { data: rows = [], isLoading } = useQuery({
+    const { data: auditData, isLoading } = useQuery({
         queryKey: ['dm-audit', params],
-        queryFn: async () => {
-            const res = await api.get('/api/data-management/audit', { params });
-            totalCount.current = parseInt(res.headers['x-total-count'] ?? '0');
-            return res.data;
-        },
+        queryFn: () => dataManagerAPI.getAuditLog(params),
     });
 
-    const { data: auditUsers = [] } = useQuery({ queryKey: ['audit-users'], queryFn: () => api.get('/api/data-management/audit/users').then(r => r.data) });
-    const { data: signatures = [] } = useQuery({ queryKey: ['dm-signatures'], queryFn: () => api.get('/api/data-management/audit/signatures').then(r => r.data), enabled: activeTab === 'Electronic Signatures' });
+    const rows = auditData?.data ?? [];
+    const totalCount = auditData?.totalCount ?? 0;
+
+    const { data: auditUsers = [] } = useQuery<AuditUser[]>({ 
+        queryKey: ['audit-users'], 
+        queryFn: () => dataManagerAPI.getAuditUsers() 
+    });
+    
+    const { data: signatures = [] } = useQuery<SigRow[]>({ 
+        queryKey: ['dm-signatures'], 
+        queryFn: () => dataManagerAPI.getAuditSignatures(), 
+        enabled: activeTab === 'Electronic Signatures' 
+    });
 
     const handlePrint = () => window.print();
 
     const exportCsv = () => {
-        const auditRows = rows as AuditRow[];
-        if (!auditRows.length) return;
+        if (!rows.length) return;
         const csv = ['Timestamp,Table,Record,Action,Changed By,Role,Reason,IP,Hash',
-            ...auditRows.map((r: AuditRow) => `"${new Date(r.change_timestamp).toLocaleString()}","${r.table_name}",${r.record_id},"${r.action_type}","${r.changed_by_username ?? ''}","${r.changed_by_role ?? ''}","${(r.change_reason ?? '').replace(/"/g,'""')}","${r.ip_address ?? ''}","${r.data_hash ?? ''}"`)
+            ...rows.map((r: AuditRow) => `"${new Date(r.change_timestamp).toLocaleString()}","${r.table_name}",${r.record_id},"${r.action_type}","${r.changed_by_username ?? ''}","${r.changed_by_role ?? ''}","${(r.change_reason ?? '').replace(/"/g,'""')}","${r.ip_address ?? ''}","${r.data_hash ?? ''}"`)
         ].join('\n');
-        const b = new Blob([csv], { type: 'text/csv' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'audit_trail_21cfr.csv'; a.click();
+        const b = new Blob([csv], { type: 'text/csv' }); 
+        const a = document.createElement('a'); 
+        a.href = URL.createObjectURL(b); 
+        a.download = 'audit_trail_21cfr.csv'; 
+        a.click();
     };
 
     return (
@@ -205,7 +248,7 @@ export const AuditTrail: React.FC = () => {
                                 <label className="form-label" style={{ fontSize: 11 }}>Changed By</label>
                                 <select className="form-select" value={filters.user_id} onChange={e => setF({ user_id: e.target.value })}>
                                     <option value="">All Users</option>
-                                    {(auditUsers as any[]).map((u: any) => <option key={u.user_id} value={u.user_id}>{u.username} ({u.role?.replace(/_/g,' ')})</option>)}
+                                    {auditUsers.map((u) => <option key={u.user_id} value={u.user_id}>{u.username} ({u.role?.replace(/_/g,' ')})</option>)}
                                 </select>
                             </div>
                             <div style={{ flex: '0 0 130px' }}>
@@ -227,7 +270,7 @@ export const AuditTrail: React.FC = () => {
                     <div className="card">
                         {isLoading ? (
                             <div style={{ padding: '2rem', textAlign: 'center', color: '#9CA3AF' }}>Loading audit entries…</div>
-                        ) : (rows as AuditRow[]).length === 0 ? (
+                        ) : rows.length === 0 ? (
                             <div style={{ padding: '3rem', textAlign: 'center', color: '#9CA3AF' }}>
                                 <AlertCircle size={36} style={{ marginBottom: 10, opacity: 0.4 }} />
                                 <p style={{ margin: 0 }}>No audit entries match the current filters.</p>
@@ -244,15 +287,15 @@ export const AuditTrail: React.FC = () => {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {(rows as AuditRow[]).map((r: AuditRow) => <AuditTableRow key={r.audit_id} row={r} />)}
+                                            {rows.map((r: AuditRow) => <AuditTableRow key={r.audit_id} row={r} />)}
                                         </tbody>
                                     </table>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', borderTop: '1px solid #F3F4F6' }}>
-                                    <span style={{ fontSize: 13, color: '#9CA3AF' }}>{(rows as AuditRow[]).length} entries on page {filters.page}</span>
+                                    <span style={{ fontSize: 13, color: '#9CA3AF' }}>{totalCount} total entries (showing page {filters.page})</span>
                                     <div style={{ display: 'flex', gap: 6 }}>
                                         <button className="btn-secondary" style={{ padding: '4px 12px', fontSize: 13 }} disabled={filters.page === 1} onClick={() => setFilters(f => ({ ...f, page: f.page - 1 }))}>← Prev</button>
-                                        <button className="btn-secondary" style={{ padding: '4px 12px', fontSize: 13 }} disabled={(rows as AuditRow[]).length < 50} onClick={() => setFilters(f => ({ ...f, page: f.page + 1 }))}>Next →</button>
+                                        <button className="btn-secondary" style={{ padding: '4px 12px', fontSize: 13 }} disabled={rows.length < 50} onClick={() => setFilters(f => ({ ...f, page: f.page + 1 }))}>Next →</button>
                                     </div>
                                 </div>
                             </>
@@ -268,7 +311,7 @@ export const AuditTrail: React.FC = () => {
                         <h3 className="card-title"><CheckCircle size={16} /> Electronic Signatures (21 CFR § 11)</h3>
                         <span style={{ fontSize: 11, color: '#9CA3AF' }}>All cryptographic signatures recorded in the system</span>
                     </div>
-                    {(signatures as SigRow[]).length === 0 ? (
+                    {signatures.length === 0 ? (
                         <div style={{ padding: '3rem', textAlign: 'center', color: '#9CA3AF' }}>No electronic signatures recorded yet.</div>
                     ) : (
                         <div style={{ overflowX: 'auto' }}>
@@ -281,7 +324,7 @@ export const AuditTrail: React.FC = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {(signatures as SigRow[]).map((s: SigRow, i: number) => (
+                                    {signatures.map((s, i) => (
                                         <tr key={s.signature_id} style={{ background: i % 2 === 0 ? 'white' : '#FAFAFA' }}>
                                             <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontSize: 11, color: '#6B7280' }}>#{s.signature_id}</td>
                                             <td style={{ padding: '10px 12px', fontWeight: 600 }}>{s.signatory_username ?? '—'}</td>

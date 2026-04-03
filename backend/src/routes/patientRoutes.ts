@@ -2,8 +2,10 @@ import { Router } from 'express';
 import { pool } from '../config/db';
 import type { Request, Response } from 'express';
 import * as crypto from 'crypto';
+import { requireRole } from '../middleware/authMiddleware';
 
 const router = Router();
+router.use(requireRole(['Principal_Investigator','Study_Coordinator']));
 
 async function nextTrialPatientId(client: { query: (text: string, params?: unknown[]) => Promise<{ rows: any[] }> }): Promise<string> {
   const maxIdResult = await client.query(`
@@ -23,7 +25,11 @@ async function nextTrialPatientId(client: { query: (text: string, params?: unkno
 // GET /api/patients - Filter by user's site_id
 router.get('/', async (req, res) => {
   try {
-    const userSiteId = req.query.site_id ? parseInt(req.query.site_id as string) : null;
+    const requestedSiteId = req.query.site_id ? parseInt(req.query.site_id as string) : null;
+    const requestUser = (req as Request).user;
+    const isSiteScopedRole = ['Principal_Investigator', 'Study_Coordinator'].includes(requestUser?.role || '');
+    const effectiveSiteId = isSiteScopedRole ? (requestUser?.site_id ?? null) : requestedSiteId;
+
 
     let query = `
       SELECT p.*, s.institution_name,
@@ -40,9 +46,9 @@ router.get('/', async (req, res) => {
 
     const params: any[] = [];
 
-    if (userSiteId) {
+    if (effectiveSiteId) {
       query += ` WHERE p.site_id = $1`;
-      params.push(userSiteId);
+      params.push(effectiveSiteId);
     }
 
     query += ` ORDER BY p.patient_id`;
@@ -56,17 +62,19 @@ router.get('/', async (req, res) => {
 
 // POST /api/patients — Register a subject pre-enrollment (canonical schema: status Screened, not enrolled until PI signs off)
 router.post('/', async (req: Request, res: Response) => {
+  const requestUser = req.user;
+  const isSiteScopedRole = ['Principal_Investigator', 'Study_Coordinator'].includes(requestUser?.role || '');
+  const effectiveSiteId = isSiteScopedRole ? requestUser?.site_id : req.body.site_id;
   const {
     trial_patient_id: clientTrialId,
     full_name,
     date_of_birth,
     gender,
-    site_id,
     patient_status,
     enrollment_date,
   } = req.body;
 
-  if (!date_of_birth || !gender || !site_id) {
+  if (!date_of_birth || !gender || !effectiveSiteId) {
     return res.status(400).json({
       success: false,
       error: 'date_of_birth, gender, and site_id are required',
@@ -84,7 +92,7 @@ router.post('/', async (req: Request, res: Response) => {
         trial_patient_id, full_name, site_id, patient_status, date_of_birth, gender, enrollment_date
       ) VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING *`,
-      [trial_patient_id, full_name || null, site_id, status, date_of_birth, gender, enrollment_date ?? null]
+      [trial_patient_id, full_name || null, effectiveSiteId, status, date_of_birth, gender, enrollment_date ?? null]
     );
     await client.query('COMMIT');
     res.status(201).json({ success: true, patient: result.rows[0] });

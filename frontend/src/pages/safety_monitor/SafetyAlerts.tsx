@@ -1,17 +1,47 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
 import { useAuth } from '../../contexts/AuthContext';
 import { SeverityBadge } from '../../components/safety/SeverityBadge';
 import { AlertTriangle, Shield, Info, CheckCircle, AlertCircle, X, Activity } from 'lucide-react';
 import '../Dashboard.css';
+import { safetyManagerAPI } from '../../services/api';
 
-const safetyApi = axios.create({ baseURL: 'http://localhost:5000' });
-safetyApi.interceptors.request.use(cfg => {
-    const raw = localStorage.getItem('user');
-    if (raw) cfg.headers['X-User-Data'] = btoa(raw);
-    return cfg;
-});
+
+export interface SiteData {
+    site_id: string;
+    institution_name: string;
+}
+
+export interface SafetyAlert {
+    alert_id: number;
+    alert_code: string;
+    trial_patient_id: string;
+    site_name: string;
+    alert_message: string;
+    alert_severity: string;
+    alert_status: string;
+    source_type?: string;
+    created_at: string;
+    hours_open: string | number;
+    test_name?: string;
+    test_value?: number;
+    reference_range_low?: number;
+    reference_range_high?: number;
+}
+
+export interface AlertKPIs {
+    total_active: string | number;
+    critical: string | number;
+    severe: string | number;
+    warning: string | number;
+    info: string | number;
+}
+
+export interface AlertsResponse {
+    alerts: SafetyAlert[];
+    kpis: AlertKPIs;
+}
+
 
 const KpiCard: React.FC<{ label: string; value: number; color: string; icon: React.ReactNode }> = ({ label, value, color, icon }) => (
     <div className="card" style={{ padding: '1.25rem', display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -33,37 +63,32 @@ const AlertDetailModal: React.FC<{ alertId: number; onClose: () => void }> = ({ 
     const [activeSection, setActiveSection] = useState<'ack' | 'esc' | 'dismiss'>('ack');
     const [msg, setMsg] = useState('');
 
-    const { data: alerts } = useQuery({
+    const { data } = useQuery<AlertsResponse>({
         queryKey: ['alerts-list'],
-        queryFn: () => safetyApi.get('/api/safety/alerts').then(r => r.data),
+        queryFn: () => safetyManagerAPI.getAlerts(),
     });
-    const alert = (alerts?.alerts ?? []).find((a: any) => a.alert_id === alertId);
-
-    const makeAction = (url: string, body: any) => useMutation({
-        mutationFn: () => safetyApi.put(url, body),
-        onSuccess: () => { qc.invalidateQueries({ queryKey: ['alerts-list'] }); setMsg('Done ✓'); setTimeout(onClose, 1200); },
-        onError: (e: any) => setMsg(e.message),
-    });
+    
+    const alert = (data?.alerts ?? []).find((a) => a.alert_id === alertId);
 
     const ackMut = useMutation({
-        mutationFn: () => safetyApi.put(`/api/safety/alerts/${alertId}/acknowledge`, { reason: ackReason }),
+        mutationFn: () => safetyManagerAPI.acknowledgeAlert(alertId, { reason: ackReason }),
         onSuccess: () => { qc.invalidateQueries({ queryKey: ['alerts-list'] }); setMsg('Acknowledged ✓'); setTimeout(onClose, 1200); },
         onError: (e: any) => setMsg(e.message),
     });
     const escMut = useMutation({
-        mutationFn: () => safetyApi.put(`/api/safety/alerts/${alertId}/escalate`, { escalation_level: escLevel, reason: escReason }),
+        mutationFn: () => safetyManagerAPI.escalateAlert(alertId, { escalation_level: escLevel, reason: escReason }),
         onSuccess: () => { qc.invalidateQueries({ queryKey: ['alerts-list'] }); setMsg('Escalated ✓'); setTimeout(onClose, 1200); },
         onError: (e: any) => setMsg(e.message),
     });
     const dismissMut = useMutation({
-        mutationFn: () => safetyApi.put(`/api/safety/alerts/${alertId}/dismiss`, { reason: dismissReason }),
+        mutationFn: () => safetyManagerAPI.dismissAlert(alertId, { reason: dismissReason }),
         onSuccess: () => { qc.invalidateQueries({ queryKey: ['alerts-list'] }); setMsg('Dismissed ✓'); setTimeout(onClose, 1200); },
         onError: (e: any) => setMsg(e.message),
     });
 
     if (!alert) return null;
 
-    const labRatio = alert.reference_range_high
+    const labRatio = alert.reference_range_high && alert.test_value
         ? ((alert.test_value - alert.reference_range_high) / alert.reference_range_high * 100).toFixed(1)
         : null;
 
@@ -87,7 +112,7 @@ const AlertDetailModal: React.FC<{ alertId: number; onClose: () => void }> = ({ 
                     </div>
 
                     {/* Lab value range bar if lab result alert */}
-                    {alert.source_type === 'LAB_RESULT' && alert.test_value != null && (
+                    {alert.source_type === 'LAB_RESULT' && alert.test_value != null && alert.reference_range_high != null && (
                         <div style={{ background: '#FEF2F2', borderRadius: 8, padding: '1rem' }}>
                             <p style={{ margin: '0 0 8px', fontWeight: 700, fontSize: '0.8rem', color: '#DC2626' }}>
                                 {alert.test_name}: {alert.test_value} (Normal: {alert.reference_range_low}–{alert.reference_range_high})
@@ -179,23 +204,27 @@ export const SafetyAlerts: React.FC = () => {
     const [selected, setSelected] = useState<number[]>([]);
     const qc = useQueryClient();
 
-    const { data } = useQuery({
+    const { data } = useQuery<AlertsResponse>({
         queryKey: ['alerts-list', severity, alertStatus, siteId, dateFrom, dateTo],
-        queryFn: () => safetyApi.get('/api/safety/alerts', {
+        queryFn: () => safetyManagerAPI.getAlerts({
             params: {
                 severity: severity || undefined, status: alertStatus || undefined,
                 site_id: siteId || undefined, date_from: dateFrom || undefined, date_to: dateTo || undefined
             }
-        }).then(r => r.data),
+        }),
         refetchInterval: 30000,
     });
 
-    const { data: sites } = useQuery({ queryKey: ['safety-sites'], queryFn: () => safetyApi.get('/api/safety/sites').then(r => r.data) });
+    const { data: sites } = useQuery<SiteData[]>({ 
+        queryKey: ['safety-sites'], 
+        queryFn: () => safetyManagerAPI.getSites() 
+    });
+    
     const alerts = data?.alerts ?? [];
-    const kpis = data?.kpis ?? {};
+    const kpis = data?.kpis ?? {} as AlertKPIs;
 
     const bulkAckMut = useMutation({
-        mutationFn: () => Promise.all(selected.map(id => safetyApi.put(`/api/safety/alerts/${id}/acknowledge`, { reason: 'Bulk acknowledge' }))),
+        mutationFn: () => Promise.all(selected.map(id => safetyManagerAPI.acknowledgeAlert(id, { reason: 'Bulk acknowledge' }))),
         onSuccess: () => { qc.invalidateQueries({ queryKey: ['alerts-list'] }); setSelected([]); },
     });
 
@@ -219,11 +248,11 @@ export const SafetyAlerts: React.FC = () => {
 
             {/* KPIs */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16, marginBottom: '1.5rem' }}>
-                <KpiCard label="Total Active" value={parseInt(kpis.total_active) || 0} color="#6B7280" icon={<Activity size={20} />} />
-                <KpiCard label="CRITICAL" value={parseInt(kpis.critical) || 0} color="#DC2626" icon={<AlertCircle size={20} />} />
-                <KpiCard label="SEVERE" value={parseInt(kpis.severe) || 0} color="#EA580C" icon={<AlertTriangle size={20} />} />
-                <KpiCard label="WARNING" value={parseInt(kpis.warning) || 0} color="#F59E0B" icon={<AlertTriangle size={20} />} />
-                <KpiCard label="INFO" value={parseInt(kpis.info) || 0} color="#3B82F6" icon={<Info size={20} />} />
+                <KpiCard label="Total Active" value={typeof kpis.total_active === 'string' ? parseInt(kpis.total_active) : (kpis.total_active || 0)} color="#6B7280" icon={<Activity size={20} />} />
+                <KpiCard label="CRITICAL" value={typeof kpis.critical === 'string' ? parseInt(kpis.critical) : (kpis.critical || 0)} color="#DC2626" icon={<AlertCircle size={20} />} />
+                <KpiCard label="SEVERE" value={typeof kpis.severe === 'string' ? parseInt(kpis.severe) : (kpis.severe || 0)} color="#EA580C" icon={<AlertTriangle size={20} />} />
+                <KpiCard label="WARNING" value={typeof kpis.warning === 'string' ? parseInt(kpis.warning) : (kpis.warning || 0)} color="#F59E0B" icon={<AlertTriangle size={20} />} />
+                <KpiCard label="INFO" value={typeof kpis.info === 'string' ? parseInt(kpis.info) : (kpis.info || 0)} color="#3B82F6" icon={<Info size={20} />} />
             </div>
 
             {/* Filters */}
@@ -247,7 +276,7 @@ export const SafetyAlerts: React.FC = () => {
                         <label className="form-label">Site</label>
                         <select className="form-select" value={siteId} onChange={e => setSiteId(e.target.value)}>
                             <option value="">All Sites</option>
-                            {(sites ?? []).map((s: any) => <option key={s.site_id} value={s.site_id}>{s.institution_name}</option>)}
+                            {(sites ?? []).map((s) => <option key={s.site_id} value={s.site_id}>{s.institution_name}</option>)}
                         </select>
                     </div>
                     <div>
@@ -281,7 +310,7 @@ export const SafetyAlerts: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {alerts.map((a: any) => (
+                                {alerts.map((a) => (
                                     <tr key={a.alert_id} onClick={() => setSelectedAlertId(a.alert_id)} style={{ cursor: 'pointer' }}>
                                         <td onClick={e => { e.stopPropagation(); toggleSelect(a.alert_id); }}>
                                             <input type="checkbox" checked={selected.includes(a.alert_id)} readOnly style={{ width: 14, height: 14 }} />
@@ -303,8 +332,8 @@ export const SafetyAlerts: React.FC = () => {
                                         }}>{a.alert_status}</span></td>
                                         <td style={{ fontSize: '0.75rem' }}>{a.source_type ?? '—'}</td>
                                         <td style={{ fontSize: '0.78rem' }}>{a.created_at?.split('T')[0]}</td>
-                                        <td style={{ fontWeight: 600, fontSize: '0.8rem', color: parseFloat(a.hours_open) > 24 ? '#DC2626' : 'inherit' }}>
-                                            {hrsLabel(parseFloat(a.hours_open) || 0)}
+                                        <td style={{ fontWeight: 600, fontSize: '0.8rem', color: (typeof a.hours_open === 'string' ? parseFloat(a.hours_open) : a.hours_open) > 24 ? '#DC2626' : 'inherit' }}>
+                                            {hrsLabel(typeof a.hours_open === 'string' ? parseFloat(a.hours_open) : (a.hours_open || 0))}
                                         </td>
                                     </tr>
                                 ))}

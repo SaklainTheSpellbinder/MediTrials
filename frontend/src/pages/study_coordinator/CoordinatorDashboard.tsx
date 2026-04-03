@@ -18,13 +18,17 @@ export const CoordinatorDashboard: React.FC = () => {
             }
 
             try {
-                const statsResponse = await fetch(`http://localhost:5000/api/coordinator/stats?site_id=${user.site_id}`);
+                const statsResponse = await fetch(`http://localhost:5000/api/coordinator/stats`, {
+                    credentials: 'include', // Include httpOnly cookie
+                });
                 if (statsResponse.ok) {
                     const data = await statsResponse.json();
                     setStats(data);
                 }
 
-                const visitsResponse = await fetch(`http://localhost:5000/api/coordinator/visits/today?site_id=${user.site_id}`);
+                const visitsResponse = await fetch(`http://localhost:5000/api/coordinator/visits/today`, {
+                    credentials: 'include', // Include httpOnly cookie
+                });
                 if (visitsResponse.ok) {
                     const data = await visitsResponse.json();
                     setTodaysVisits(data);

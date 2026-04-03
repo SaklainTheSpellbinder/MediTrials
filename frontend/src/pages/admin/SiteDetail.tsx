@@ -6,8 +6,11 @@ import { Edit2, AlertTriangle } from 'lucide-react';
 import '../Dashboard.css';
 import '../admin/AdminDashboard.css';
 
-const adminApi = axios.create({ baseURL: 'http://localhost:5000' });
-adminApi.interceptors.request.use(cfg => { const raw = localStorage.getItem('user'); if (raw) cfg.headers['X-User-Data'] = btoa(raw); return cfg; });
+const adminApi = axios.create({ 
+    baseURL: 'http://localhost:5000',
+    withCredentials: true, // Include httpOnly cookie
+});
+// No need to set X-User-Data header; auth is via httpOnly cookie
 
 export const SiteDetail: React.FC = () => {
     const { siteId } = useParams();

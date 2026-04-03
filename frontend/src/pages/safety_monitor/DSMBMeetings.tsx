@@ -1,15 +1,29 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react'; // 1. Added useEffect
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
 import { Calendar, Plus, ChevronRight, X } from 'lucide-react';
 import '../Dashboard.css';
+import { safetyManagerAPI } from '../../services/api';
 
-const safetyApi = axios.create({ baseURL: 'http://localhost:5000' });
-safetyApi.interceptors.request.use(cfg => {
-    const raw = localStorage.getItem('user');
-    if (raw) cfg.headers['X-User-Data'] = btoa(raw);
-    return cfg;
-});
+export interface TrialData {
+    trial_id: string;
+    trial_title: string;
+}
+
+export interface DSMBMeetingData {
+    meeting_id: number;
+    meeting_date: string;
+    trial_title: string;
+    meeting_type: string;
+    data_cutoff_date?: string;
+    recommendation?: string;
+    meeting_minutes?: { text: string; updated?: string };
+    safetySnapshot?: {
+        total_ae: number;
+        total_sae: number;
+        active_alerts: number;
+        total_deviations: number;
+    };
+}
 
 const recColors: Record<string, { bg: string; color: string }> = {
     'Continue': { bg: '#ECFDF5', color: '#059669' },
@@ -26,10 +40,15 @@ const ScheduleModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         meeting_type: 'Scheduled',
         data_cutoff_date: new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0],
     });
-    const { data: trials } = useQuery({ queryKey: ['safety-trials'], queryFn: () => safetyApi.get('/api/safety/trials').then(r => r.data) });
+    
+    
+    const { data: trials } = useQuery<TrialData[]>({ 
+        queryKey: ['safety-trials'], 
+        queryFn: () => safetyManagerAPI.getTrials() 
+    });
 
     const mut = useMutation({
-        mutationFn: () => safetyApi.post('/api/safety/dsmb', form),
+        mutationFn: () => safetyManagerAPI.scheduleDsmbMeeting(form),
         onSuccess: () => { qc.invalidateQueries({ queryKey: ['dsmb-list'] }); onClose(); },
     });
 
@@ -45,7 +64,7 @@ const ScheduleModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                         <label className="form-label">Trial <span style={{ color: '#DC2626' }}>*</span></label>
                         <select className="form-select" value={form.trial_id} onChange={e => setForm(f => ({ ...f, trial_id: e.target.value }))}>
                             <option value="">Select trial…</option>
-                            {(trials ?? []).map((t: any) => <option key={t.trial_id} value={t.trial_id}>{t.trial_title}</option>)}
+                            {(trials ?? []).map((t) => <option key={t.trial_id} value={t.trial_id}>{t.trial_title}</option>)}
                         </select>
                     </div>
                     <div>
@@ -80,19 +99,25 @@ const MeetingDetailModal: React.FC<{ meetingId: number; onClose: () => void }> =
     const [minutesText, setMinutesText] = useState('');
     const [msg, setMsg] = useState('');
 
-    const { data: rawData, isLoading } = useQuery({
+    
+    const { data, isLoading } = useQuery<DSMBMeetingData>({
         queryKey: ['dsmb-detail', meetingId],
-        queryFn: () => safetyApi.get(`/api/safety/dsmb/${meetingId}`).then(r => r.data),
-        onSuccess: (d: any) => {
-            setRecommendation(d.recommendation ?? '');
-            setMinutesText(d.meeting_minutes?.text ?? '');
-        },
-    } as any);
-    const data: any = rawData;
+        queryFn: () => safetyManagerAPI.getDsmbMeetingById(meetingId),
+    });
 
+    
+    useEffect(() => {
+        if (data) {
+            setRecommendation(data.recommendation ?? '');
+            setMinutesText(data.meeting_minutes?.text ?? '');
+        }
+    }, [data]);
+
+    
     const updateMut = useMutation({
-        mutationFn: () => safetyApi.put(`/api/safety/dsmb/${meetingId}`, {
-            recommendation, meeting_minutes: { text: minutesText, updated: new Date().toISOString() }
+        mutationFn: () => safetyManagerAPI.updateDsmbMeeting(meetingId, {
+            recommendation, 
+            meeting_minutes: { text: minutesText, updated: new Date().toISOString() }
         }),
         onSuccess: () => { qc.invalidateQueries({ queryKey: ['dsmb-list'] }); setMsg('Saved ✓'); setTimeout(() => setMsg(''), 3000); },
         onError: (e: any) => setMsg(e.message),
@@ -104,6 +129,7 @@ const MeetingDetailModal: React.FC<{ meetingId: number; onClose: () => void }> =
         </div>
     );
     if (!data) return null;
+    
     const snapshot = data.safetySnapshot;
 
     return (
@@ -117,7 +143,6 @@ const MeetingDetailModal: React.FC<{ meetingId: number; onClose: () => void }> =
                     <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-400)' }}><X size={18} /></button>
                 </div>
                 <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    {/* Safety snapshot at cutoff */}
                     {snapshot && (
                         <div style={{ background: 'var(--gray-50)', borderRadius: 8, padding: '1rem' }}>
                             <h4 style={sh}>Safety Data at Cutoff ({data.data_cutoff_date?.split('T')[0]})</h4>
@@ -137,7 +162,6 @@ const MeetingDetailModal: React.FC<{ meetingId: number; onClose: () => void }> =
                         </div>
                     )}
 
-                    {/* Recommendation */}
                     <div>
                         <label className="form-label">Board Recommendation</label>
                         <select className="form-select" value={recommendation} onChange={e => setRecommendation(e.target.value)}>
@@ -146,7 +170,6 @@ const MeetingDetailModal: React.FC<{ meetingId: number; onClose: () => void }> =
                         </select>
                     </div>
 
-                    {/* Minutes */}
                     <div>
                         <label className="form-label">Meeting Minutes</label>
                         <textarea className="ack-textarea" rows={8} value={minutesText} onChange={e => setMinutesText(e.target.value)}
@@ -172,12 +195,13 @@ export const DSMBMeetings: React.FC = () => {
     const [showSchedule, setShowSchedule] = useState(false);
     const [selectedMeetingId, setSelectedMeetingId] = useState<number | null>(null);
 
-    const { data: meetings = [], isLoading } = useQuery({
+    
+    const { data: meetings = [], isLoading } = useQuery<DSMBMeetingData[]>({
         queryKey: ['dsmb-list'],
-        queryFn: () => safetyApi.get('/api/safety/dsmb').then(r => r.data),
+        queryFn: () => safetyManagerAPI.getDsmbMeetings(),
     });
 
-    const typeColor = { 'Scheduled': '#2563EB', 'Emergency': '#DC2626', 'Ad-hoc': '#F59E0B' };
+    const typeColor: Record<string, string> = { 'Scheduled': '#2563EB', 'Emergency': '#DC2626', 'Ad-hoc': '#F59E0B' };
 
     return (
         <div className="dashboard-container">
@@ -206,14 +230,14 @@ export const DSMBMeetings: React.FC = () => {
                                 <tr><th>Meeting Date</th><th>Trial</th><th>Type</th><th>Data Cutoff</th><th>Recommendation</th><th>Minutes</th><th></th></tr>
                             </thead>
                             <tbody>
-                                {meetings.map((m: any) => {
-                                    const rc = recColors[m.recommendation] ?? { bg: '#F3F4F6', color: '#6B7280' };
+                                {meetings.map((m) => {
+                                    const rc = recColors[m.recommendation ?? ''] ?? { bg: '#F3F4F6', color: '#6B7280' };
                                     return (
                                         <tr key={m.meeting_id} style={{ cursor: 'pointer' }} onClick={() => setSelectedMeetingId(m.meeting_id)}>
                                             <td style={{ fontWeight: 600 }}>{m.meeting_date?.split('T')[0]}</td>
                                             <td style={{ fontSize: '0.8rem' }}>{m.trial_title}</td>
                                             <td>
-                                                <span style={{ background: (typeColor as any)[m.meeting_type] + '20', color: (typeColor as any)[m.meeting_type] ?? '#6B7280', padding: '2px 8px', borderRadius: 9999, fontSize: '0.72rem', fontWeight: 600 }}>
+                                                <span style={{ background: (typeColor[m.meeting_type] ?? '#6B7280') + '20', color: typeColor[m.meeting_type] ?? '#6B7280', padding: '2px 8px', borderRadius: 9999, fontSize: '0.72rem', fontWeight: 600 }}>
                                                     {m.meeting_type}
                                                 </span>
                                             </td>

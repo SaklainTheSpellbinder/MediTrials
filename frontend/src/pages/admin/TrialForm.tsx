@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import axios from 'axios';
 import { useNavigate, useParams } from 'react-router-dom';
-import '../Dashboard.css';
 
-const adminApi = axios.create({ baseURL: 'http://localhost:5000' });
-adminApi.interceptors.request.use(cfg => { const raw = localStorage.getItem('user'); if (raw) cfg.headers['X-User-Data'] = btoa(raw); return cfg; });
+// 1. Import your central adminAPI
+import { adminAPI } from '../../services/api';
+import '../Dashboard.css';
 
 const PHASES = ['Phase I', 'Phase II', 'Phase III', 'Phase IV', 'N/A'];
 const STATUSES = ['Planning', 'Recruiting', 'Active', 'Paused', 'Completed', 'Archived'];
@@ -15,10 +14,26 @@ const fieldStyle = { border: '1px solid #E5E7EB', borderRadius: 6, padding: '7px
 const labelStyle = { display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 };
 
 interface FormState {
-    trial_nct_id: string; trial_title: string; trial_phase: string; therapeutic_area: string;
-    trial_status: string; start_date: string; estimated_completion_date: string; target_enrollment: string;
+    trial_nct_id: string; 
+    trial_title: string; 
+    trial_phase: string; 
+    therapeutic_area: string;
+    trial_status: string; 
+    start_date: string; 
+    estimated_completion_date: string; 
+    target_enrollment: string;
 }
-const empty: FormState = { trial_nct_id: '', trial_title: '', trial_phase: 'Phase III', therapeutic_area: '', trial_status: 'Planning', start_date: '', estimated_completion_date: '', target_enrollment: '' };
+
+const empty: FormState = { 
+    trial_nct_id: '', 
+    trial_title: '', 
+    trial_phase: 'Phase III', 
+    therapeutic_area: '', 
+    trial_status: 'Planning', 
+    start_date: '', 
+    estimated_completion_date: '', 
+    target_enrollment: '' 
+};
 
 export const TrialForm: React.FC = () => {
     const { trialId } = useParams();
@@ -27,9 +42,10 @@ export const TrialForm: React.FC = () => {
     const [form, setForm] = useState<FormState>(empty);
     const [error, setError] = useState('');
 
+    // 2. Use adminAPI.getTrial
     const { data: existing, isLoading } = useQuery({
         queryKey: ['admin', 'trial', trialId],
-        queryFn: () => adminApi.get(`/api/admin/trials/${trialId}`).then(r => r.data.trial),
+        queryFn: () => adminAPI.getTrial(trialId as string).then(data => data.trial),
         enabled: isEdit,
     });
 
@@ -48,13 +64,33 @@ export const TrialForm: React.FC = () => {
         }
     }, [existing]);
 
+    // 3. Use adminAPI.createTrial and adminAPI.updateTrial
     const save = useMutation({
-        mutationFn: (data: FormState) => isEdit
-            ? adminApi.put(`/api/admin/trials/${trialId}`, data).then(r => r.data)
-            : adminApi.post('/api/admin/trials', data).then(r => r.data),
+        mutationFn: (data: FormState) => {
+            // Format target_enrollment to integer for PostgreSQL
+            const payload = {
+                ...data,
+                target_enrollment: parseInt(data.target_enrollment, 10) || 0,
+                start_date: data.start_date || null,
+                estimated_completion_date: data.estimated_completion_date || null,
+            };
+
+            return isEdit
+                ? adminAPI.updateTrial(trialId as string, payload)
+                : adminAPI.createTrial(payload);
+        },
         onSuccess: (data) => navigate(`/admin/trials/${data.trial_id ?? trialId}`),
         onError: (e: any) => setError(e.response?.data?.error ?? e.message),
     });
+
+    const handleSubmit = () => {
+        if (!form.trial_nct_id || !form.trial_title || !form.start_date || !form.target_enrollment) {
+            setError('Please fill out all required fields.');
+            return;
+        }
+        setError('');
+        save.mutate(form);
+    };
 
     if (isEdit && isLoading) return <div className="dashboard-container"><div className="sm-loading">Loading trial data…</div></div>;
 
@@ -73,7 +109,8 @@ export const TrialForm: React.FC = () => {
                 <h1 className="page-title">{isEdit ? 'Edit Trial' : 'New Trial'}</h1>
             </div>
             <div className="card" style={{ maxWidth: 700 }}>
-                {error && <div className="sm-error" style={{ marginBottom: 14 }}>{error}</div>}
+                {error && <div className="sm-error" style={{ marginBottom: 14, color: '#dc2626' }}>{error}</div>}
+                
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 20px' }}>
                     <Field label="Trial NCT ID *" name="trial_nct_id" />
                     <Field label="Trial Phase *" name="trial_phase">
@@ -101,7 +138,7 @@ export const TrialForm: React.FC = () => {
                     <Field label="Target Enrollment *" name="target_enrollment" type="number" />
                 </div>
                 <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
-                    <button onClick={() => save.mutate(form)} disabled={save.isPending} className="btn-primary">
+                    <button onClick={handleSubmit} disabled={save.isPending} className="btn-primary">
                         {save.isPending ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Trial'}
                     </button>
                     <button onClick={() => navigate(-1)} className="btn-secondary">Cancel</button>

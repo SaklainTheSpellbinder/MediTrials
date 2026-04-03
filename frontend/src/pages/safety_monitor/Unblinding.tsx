@@ -1,18 +1,28 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import axios from 'axios';
+import { safetyManagerAPI } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { ShieldAlert, Lock, Search, AlertTriangle, CheckCircle, Printer } from 'lucide-react';
 import '../Dashboard.css';
-
-const safetyApi = axios.create({ baseURL: 'http://localhost:5000' });
-safetyApi.interceptors.request.use(cfg => {
-    const raw = localStorage.getItem('user');
-    if (raw) cfg.headers['X-User-Data'] = btoa(raw);
-    return cfg;
-});
-
 const JUSTIFICATIONS = ['Emergency Medical Necessity', 'Regulatory Requirement', 'Patient Safety', 'Other'];
+
+export interface UnblindingPatient {
+    patient_id: number;
+    trial_patient_id: string;
+    institution_name: string;
+    patient_status: string;
+    enrollment_date: string;
+    is_unblinded: boolean;
+    arm_code?: string;
+    unblinded_at?: string;
+}
+
+export interface UnblindingResult {
+    arm_code: string;
+    arm_name?: string;
+    arm_description?: string;
+    unblinded_at: string;
+}
 
 export const Unblinding: React.FC = () => {
     const { user } = useAuth();
@@ -21,7 +31,6 @@ export const Unblinding: React.FC = () => {
     const [pinVerified, setPinVerified] = useState(false);
     const [pinPassword, setPinPassword] = useState('');
     const [pinError, setPinError] = useState('');
-    const [pinLoading, setPinLoading] = useState(false);
 
     // Search state
     const [searchTerm, setSearchTerm] = useState('');
@@ -34,44 +43,54 @@ export const Unblinding: React.FC = () => {
     const [confirmed, setConfirmed] = useState(false);
     const [confirmPassword, setConfirmPassword] = useState('');
     const [showConfirmModal, setShowConfirmModal] = useState(false);
-    const [result, setResult] = useState<any>(null);
+    const [result, setResult] = useState<UnblindingResult | null>(null);
     const [formMsg, setFormMsg] = useState('');
 
-    // PIN verification
-    const handlePinVerify = async () => {
-        setPinLoading(true); setPinError('');
-        try {
-            const r = await safetyApi.post('/api/safety/verify-password', { password: pinPassword });
-            if (r.data.verified) {
+    // PIN verification mutation
+    const pinVerifyMut = useMutation({
+        mutationFn: (password: string) => safetyManagerAPI.verifyPassword(password),
+        onSuccess: (data) => {
+            if (data.verified) {
                 setPinVerified(true);
+                setPinError('');
             } else {
                 setPinError('Incorrect password. Please try again.');
             }
-        } catch {
+        },
+        onError: () => {
             setPinError('Verification failed. Please try again.');
-        } finally {
-            setPinLoading(false);
-        }
+        },
+    });
+
+    const handlePinVerify = () => {
+        if (!pinPassword) return;
+        pinVerifyMut.mutate(pinPassword);
     };
 
     // Patient lookup
-    const { data: patientData, isLoading: patientLoading } = useQuery({
+    const { data: patientData, isLoading: patientLoading } = useQuery<{ patient: UnblindingPatient; history: any[] }>({
         queryKey: ['unblinding-patient', searchTerm],
-        queryFn: () => safetyApi.get(`/api/safety/unblinding/${searchTerm}`).then(r => r.data),
+        queryFn: () => safetyManagerAPI.getUnblindingPatient(searchTerm),
         enabled: !!searchTerm,
     });
 
     const unblindMut = useMutation({
         mutationFn: async () => {
-            const vr = await safetyApi.post('/api/safety/verify-password', { password: confirmPassword });
-            if (!vr.data.verified) throw new Error('Password verification failed');
-            return safetyApi.post('/api/safety/unblind', {
+            const vr = await safetyManagerAPI.verifyPassword(confirmPassword);
+            if (!vr.verified) throw new Error('Password verification failed');
+            return safetyManagerAPI.submitUnblinding({
                 patient_id: patientData?.patient?.patient_id,
                 reason, justification_category: justification, requesting_physician: physician,
             });
         },
-        onSuccess: (r) => { setResult(r.data.result); setShowConfirmModal(false); },
-        onError: (e: any) => { setFormMsg(e.message); },
+        onSuccess: (r) => { 
+            setResult(r.result); 
+            setShowConfirmModal(false); 
+            setFormMsg('');
+        },
+        onError: (e: any) => { 
+            setFormMsg(e.response?.data?.message || e.message); 
+        },
     });
 
     // ── PIN Gate ──────────────────────────────────────────────────────────────
@@ -95,8 +114,8 @@ export const Unblinding: React.FC = () => {
                     </div>
                     {pinError && <p style={{ color: '#DC2626', fontSize: '0.875rem', marginBottom: 12 }}>{pinError}</p>}
                     <button className="btn-primary" style={{ width: '100%', padding: '12px' }}
-                        disabled={!pinPassword || pinLoading} onClick={handlePinVerify}>
-                        {pinLoading ? 'Verifying…' : 'Verify Identity'}
+                        disabled={!pinPassword || pinVerifyMut.isPending} onClick={handlePinVerify}>
+                        {pinVerifyMut.isPending ? 'Verifying…' : 'Verify Identity'}
                     </button>
                 </div>
             </div>

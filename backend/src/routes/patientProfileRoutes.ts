@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import { pool } from '../config/db';
+import { requireRole } from '../middleware/authMiddleware';
 
 const router = Router();
-
+router.use(requireRole(['Principal_Investigator','Study_Coordinator']));
 // Middleware to ensure patient_id is provided and valid
 const requirePatientId = (req: any, res: any, next: any) => {
     const patientId = parseInt(req.params.patientId);
@@ -20,7 +21,7 @@ router.get('/:patientId/profile', requirePatientId, async (req: any, res: any) =
             SELECT 
                 p.patient_id,
                 p.trial_patient_id,
-                p.trial_patient_id AS full_name,
+                p.full_name AS full_name,
                 p.date_of_birth,
                 p.gender,
                 p.patient_status,

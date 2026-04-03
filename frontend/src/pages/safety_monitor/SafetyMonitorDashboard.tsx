@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
@@ -13,16 +12,77 @@ import { useAuth } from '../../contexts/AuthContext';
 import { StatCard } from '../../components/dashboard/StatCard';
 import '../Dashboard.css';
 import './SafetyMonitorDashboard.css';
+import { safetyManagerAPI } from '../../services/api';
 
-// ── Axios helper that injects X-User-Data header ─────────────────────────────
-const safetyApi = axios.create({ baseURL: 'http://localhost:5000' });
-safetyApi.interceptors.request.use(cfg => {
-    const raw = localStorage.getItem('user');
-    if (raw) {
-        cfg.headers['X-User-Data'] = btoa(raw);
-    }
-    return cfg;
-});
+// --- Type Interfaces ---
+export interface OverdueSAE {
+    sae_report_number: string;
+    trial_patient_id: string;
+    site_name: string;
+    ae_term: string;
+    severity_grade: number;
+    report_deadline_date: string;
+    days_overdue: number;
+    hours_until_deadline: string | number;
+}
+
+export interface CriticalAlert {
+    alert_id: number;
+    trial_patient_id: string;
+    site_name: string;
+    alert_code: string;
+    alert_message: string;
+    alert_severity: string;
+    created_at: string;
+    minutes_open: number;
+}
+
+export interface GradeByTrial {
+    trial_id: number;
+    trial_title: string;
+    grade1: string | number;
+    grade2: string | number;
+    grade3: string | number;
+    grade4: string | number;
+    grade5: string | number;
+}
+
+export interface SafetySignal {
+    ae_term: string;
+    total_count: number;
+    treatment_count: number;
+    control_count: number;
+    prr: string | number;
+    signal_strength: string;
+}
+
+export interface SAETimeline {
+    sae_id: number;
+    sae_report_number: string;
+    trial_patient_id: string;
+    ae_term: string;
+    report_deadline_date: string;
+    sae_status: string;
+    hours_until_deadline: string | number;
+}
+
+export interface SafetyDashboardData {
+    criticalAlerts: number;
+    pendingSaeCount: number;
+    overdueSaeCount: number;
+    totalAeThisMonth: number;
+    totalAeLastMonth: number;
+    aeTrend: 'up' | 'down' | 'flat';
+    trialSafetyOverview: any[];
+    overdueSaes: OverdueSAE[];
+    criticalAlertsFeed: CriticalAlert[];
+    aeByGradeByTrial: GradeByTrial[];
+    topSignals: SafetySignal[];
+    pendingSaeTimeline: SAETimeline[];
+    trialKpis: any[];
+    systemEvents: any[];
+}
+// ------------------------
 
 // ── Severity badge ────────────────────────────────────────────────────────────
 const SeverityBadge: React.FC<{ level: string }> = ({ level }) => {
@@ -53,7 +113,7 @@ const AcknowledgeForm: React.FC<{ alertId: number; onDone: () => void }> = ({ al
     const qc = useQueryClient();
 
     const { mutate, isPending } = useMutation({
-        mutationFn: (r: string) => safetyApi.put(`/api/safety/alerts/${alertId}/acknowledge`, { reason: r }),
+        mutationFn: (r: string) => safetyManagerAPI.acknowledgeAlert(alertId, { reason: r }),
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: ['dashboard', 'safety-monitor'] });
             onDone();
@@ -85,9 +145,9 @@ export const SafetyMonitorDashboard: React.FC = () => {
     const { user } = useAuth();
     const [ackOpen, setAckOpen] = useState<number | null>(null);
 
-    const { data, isLoading, isError } = useQuery({
+    const { data, isLoading, isError } = useQuery<SafetyDashboardData>({
         queryKey: ['dashboard', 'safety-monitor'],
-        queryFn: () => safetyApi.get('/api/dashboard/safety-monitor').then(r => r.data),
+        queryFn: () => safetyManagerAPI.getSafetyMonitorDashboard(),
         refetchInterval: 30000,
     });
 
@@ -119,19 +179,19 @@ export const SafetyMonitorDashboard: React.FC = () => {
     const TrendIcon = aeTrend === 'up' ? TrendingUp : aeTrend === 'down' ? TrendingDown : Minus;
 
     // ── Grade chart data ─────────────────────────────────────────────────────
-    const gradeData = (data.aeByGradeByTrial ?? []).map((r: any) => ({
+    const gradeData = (data.aeByGradeByTrial ?? []).map((r) => ({
         name: r.trial_title?.length > 20 ? r.trial_title.slice(0, 20) + '…' : r.trial_title ?? '—',
-        G1: parseInt(r.grade1) || 0,
-        G2: parseInt(r.grade2) || 0,
-        G3: parseInt(r.grade3) || 0,
-        G4: parseInt(r.grade4) || 0,
-        G5: parseInt(r.grade5) || 0,
+        G1: typeof r.grade1 === 'string' ? parseInt(r.grade1) : (r.grade1 || 0),
+        G2: typeof r.grade2 === 'string' ? parseInt(r.grade2) : (r.grade2 || 0),
+        G3: typeof r.grade3 === 'string' ? parseInt(r.grade3) : (r.grade3 || 0),
+        G4: typeof r.grade4 === 'string' ? parseInt(r.grade4) : (r.grade4 || 0),
+        G5: typeof r.grade5 === 'string' ? parseInt(r.grade5) : (r.grade5 || 0),
     }));
 
     // ── Timeline max hours (for proportional widths) ─────────────────────────
     const maxHours = Math.max(
         72,
-        ...(data.pendingSaeTimeline ?? []).map((s: any) => Math.abs(parseFloat(s.hours_until_deadline) || 0))
+        ...(data.pendingSaeTimeline ?? []).map((s) => Math.abs(typeof s.hours_until_deadline === 'string' ? parseFloat(s.hours_until_deadline) : (s.hours_until_deadline || 0)))
     );
 
     return (
@@ -145,8 +205,8 @@ export const SafetyMonitorDashboard: React.FC = () => {
                     </p>
                 </div>
                 <div className="flex gap-2">
-                    <Link to="/safety/reports" className="btn-secondary">Generate Report</Link>
-                    <Link to="/safety/alerts" className="btn-primary">View All Alerts</Link>
+                    <Link to="/safety/reports" className="btn-secondary" style={{ textDecoration: 'none' }}>Generate Report</Link>
+                    <Link to="/safety/alerts" className="btn-primary" style={{ textDecoration: 'none' }}>View All Alerts</Link>
                 </div>
             </div>
 
@@ -191,7 +251,7 @@ export const SafetyMonitorDashboard: React.FC = () => {
                             <FileWarning size={18} />
                             Overdue &amp; At-Risk SAEs
                         </h3>
-                        <Link to="/safety/sae" className="sm-link">
+                        <Link to="/safety/sae" className="sm-link" style={{ textDecoration: 'none' }}>
                             View All SAEs <ArrowRight size={14} />
                         </Link>
                     </div>
@@ -215,9 +275,10 @@ export const SafetyMonitorDashboard: React.FC = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {data.overdueSaes.map((s: any) => {
+                                    {data.overdueSaes.map((s) => {
                                         const isOverdue = (s.days_overdue ?? 0) > 0;
-                                        const isUrgent = !isOverdue && (parseFloat(s.hours_until_deadline) < 48);
+                                        const hoursUntil = typeof s.hours_until_deadline === 'string' ? parseFloat(s.hours_until_deadline) : s.hours_until_deadline;
+                                        const isUrgent = !isOverdue && (hoursUntil < 48);
                                         const rowCls = isOverdue ? 'row-red' : isUrgent ? 'row-amber' : '';
                                         return (
                                             <tr key={s.sae_report_number} className={rowCls}>
@@ -232,7 +293,7 @@ export const SafetyMonitorDashboard: React.FC = () => {
                                                 </td>
                                                 <td className="text-xs">{s.report_deadline_date?.split('T')[0]}</td>
                                                 <td className={isOverdue ? 'text-danger font-bold' : 'text-amber'}>
-                                                    {isOverdue ? `${s.days_overdue}d` : `${Math.round(parseFloat(s.hours_until_deadline))}h`}
+                                                    {isOverdue ? `${s.days_overdue}d` : `${Math.round(hoursUntil)}h`}
                                                 </td>
                                             </tr>
                                         );
@@ -250,7 +311,7 @@ export const SafetyMonitorDashboard: React.FC = () => {
                             <AlertTriangle size={18} />
                             Active Critical Alerts
                         </h3>
-                        <Link to="/safety/alerts" className="sm-link">
+                        <Link to="/safety/alerts" className="sm-link" style={{ textDecoration: 'none' }}>
                             View All <ArrowRight size={14} />
                         </Link>
                     </div>
@@ -261,7 +322,7 @@ export const SafetyMonitorDashboard: React.FC = () => {
                                 No critical alerts active
                             </div>
                         ) : (
-                            data.criticalAlertsFeed.map((a: any) => (
+                            data.criticalAlertsFeed.map((a) => (
                                 <div key={a.alert_id} className="sm-alert-item">
                                     <div className="sm-alert-top">
                                         <SeverityBadge level={a.alert_severity} />
@@ -330,7 +391,7 @@ export const SafetyMonitorDashboard: React.FC = () => {
                             Safety Signal Detection
                             <span className="sm-subtitle">Top signals · PRR</span>
                         </h3>
-                        <Link to="/safety/signals" className="sm-link">
+                        <Link to="/safety/signals" className="sm-link" style={{ textDecoration: 'none' }}>
                             Full Analysis <ArrowRight size={14} />
                         </Link>
                     </div>
@@ -338,7 +399,7 @@ export const SafetyMonitorDashboard: React.FC = () => {
                         {data.topSignals?.length === 0 ? (
                             <div className="sm-empty">No safety signals detected</div>
                         ) : (
-                            data.topSignals.map((sig: any, i: number) => (
+                            data.topSignals.map((sig, i) => (
                                 <div key={i} className="sm-signal-row">
                                     <div className="sm-signal-left">
                                         <span className="sm-signal-term">{sig.ae_term}</span>
@@ -347,7 +408,7 @@ export const SafetyMonitorDashboard: React.FC = () => {
                                         </span>
                                     </div>
                                     <div className="sm-signal-right">
-                                        <span className="sm-prr">PRR {parseFloat(sig.prr ?? 0).toFixed(2)}</span>
+                                        <span className="sm-prr">PRR {parseFloat(String(sig.prr ?? 0)).toFixed(2)}</span>
                                         <SignalBadge strength={sig.signal_strength} />
                                     </div>
                                 </div>
@@ -378,8 +439,8 @@ export const SafetyMonitorDashboard: React.FC = () => {
                             No pending SAEs
                         </div>
                     ) : (
-                        data.pendingSaeTimeline.map((s: any) => {
-                            const hours = parseFloat(s.hours_until_deadline) || 0;
+                        data.pendingSaeTimeline.map((s) => {
+                            const hours = typeof s.hours_until_deadline === 'string' ? parseFloat(s.hours_until_deadline) : (s.hours_until_deadline || 0);
                             const color = timelineColor(hours);
                             const widthPct = Math.min(100, Math.max(4, (Math.abs(hours) / maxHours) * 100));
                             const label = hours < 0

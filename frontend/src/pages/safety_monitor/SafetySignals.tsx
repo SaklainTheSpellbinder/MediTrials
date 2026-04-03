@@ -1,18 +1,11 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
+import { safetyManagerAPI } from '../../services/api';
 import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts';
 import { Shield, TrendingUp, ChevronRight, X, Activity } from 'lucide-react';
 import { SeverityBadge } from '../../components/safety/SeverityBadge';
 import { AEGradeBadge } from '../../components/safety/AEGradeBadge';
 import '../Dashboard.css';
-
-const safetyApi = axios.create({ baseURL: 'http://localhost:5000' });
-safetyApi.interceptors.request.use(cfg => {
-    const raw = localStorage.getItem('user');
-    if (raw) cfg.headers['X-User-Data'] = btoa(raw);
-    return cfg;
-});
 
 const CustomDot = (props: any) => {
     const { cx, cy, payload } = props;
@@ -37,7 +30,7 @@ const SignalTooltip = ({ active, payload }: any) => {
 const DrilldownPanel: React.FC<{ aeTerm: string; trialId: string; onClose: () => void }> = ({ aeTerm, trialId, onClose }) => {
     const { data, isLoading } = useQuery({
         queryKey: ['signal-drilldown', aeTerm, trialId],
-        queryFn: () => safetyApi.get('/api/safety/signals/drilldown', { params: { ae_term: aeTerm, trial_id: trialId || undefined } }).then(r => r.data),
+        queryFn: () => safetyManagerAPI.getSignalDrilldown({ ae_term: aeTerm, trial_id: trialId || undefined }),
     });
 
     const binDays = (aes: any[]) => {
@@ -110,29 +103,38 @@ const DrilldownPanel: React.FC<{ aeTerm: string; trialId: string; onClose: () =>
 
 const sh: React.CSSProperties = { margin: '0 0 10px', fontSize: '0.75rem', fontWeight: 700, color: 'var(--gray-600)', textTransform: 'uppercase', letterSpacing: '0.05em' };
 
+export interface SignalData {
+    ae_term: string;
+    total_count: number;
+    treatment_count: number;
+    control_count: number;
+    prr: number | string;
+    signal_strength: 'HIGH' | 'MEDIUM' | 'LOW';
+}
+
 export const SafetySignals: React.FC = () => {
     const [trialId, setTrialId] = useState('');
-    const [signals, setSignals] = useState<any[]>([]);
-    const [loading, setLoading] = useState(false);
+    const [signals, setSignals] = useState<SignalData[]>([]);
     const [drilldownTerm, setDrilldownTerm] = useState<string | null>(null);
 
-    const { data: trials } = useQuery({ queryKey: ['safety-trials'], queryFn: () => safetyApi.get('/api/safety/trials').then(r => r.data) });
+    const { data: trials } = useQuery({ queryKey: ['safety-trials'], queryFn: () => safetyManagerAPI.getTrials() });
 
-    const runDetection = async () => {
+    const detectMut = useMutation({
+        mutationFn: (params: { trial_id: string }) => safetyManagerAPI.getSignals(params),
+        onSuccess: (data) => {
+            setSignals(data ?? []);
+        },
+    });
+
+    const runDetection = () => {
         if (!trialId) return;
-        setLoading(true);
-        try {
-            const r = await safetyApi.get('/api/safety/signals', { params: { trial_id: trialId } });
-            setSignals(r.data ?? []);
-        } finally {
-            setLoading(false);
-        }
+        detectMut.mutate({ trial_id: trialId });
     };
 
-    const bubbleData = signals.map((s: any) => ({
+    const bubbleData = signals.map((s: SignalData) => ({
         ae_term: s.ae_term,
-        x: parseInt(s.total_count) || 0,
-        y: parseFloat(s.prr) || 0,
+        x: Number(s.total_count) || 0,
+        y: Number(s.prr) || 0,
         z: s.signal_strength === 'HIGH' ? 600 : s.signal_strength === 'MEDIUM' ? 300 : 100,
         signal_strength: s.signal_strength,
         prr: s.prr,
@@ -161,9 +163,9 @@ export const SafetySignals: React.FC = () => {
                             {(trials ?? []).map((t: any) => <option key={t.trial_id} value={t.trial_id}>{t.trial_title}</option>)}
                         </select>
                     </div>
-                    <button className="btn-primary" onClick={runDetection} disabled={!trialId || loading}
+                    <button className="btn-primary" onClick={runDetection} disabled={!trialId || detectMut.isPending}
                         style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Activity size={16} /> {loading ? 'Running analysis…' : 'Run Signal Detection'}
+                        <Activity size={16} /> {detectMut.isPending ? 'Running analysis…' : 'Run Signal Detection'}
                     </button>
                 </div>
                 {signals.length > 0 && (
@@ -249,7 +251,7 @@ export const SafetySignals: React.FC = () => {
                 </div>
             )}
 
-            {!signals.length && !loading && (
+            {!signals.length && !detectMut.isPending && (
                 <div className="card" style={{ padding: '4rem', textAlign: 'center', color: 'var(--gray-400)' }}>
                     <Shield size={48} style={{ marginBottom: 12, opacity: 0.3 }} />
                     <p style={{ fontWeight: 600 }}>Select a trial and run signal detection to see results</p>

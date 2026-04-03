@@ -1,61 +1,74 @@
 import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import axios from 'axios';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { safetyManagerAPI } from '../../services/api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { FileText, Download, AlertCircle, Activity, BarChart2 } from 'lucide-react';
 import '../Dashboard.css';
 
-const safetyApi = axios.create({ baseURL: 'http://localhost:5000' });
-safetyApi.interceptors.request.use(cfg => {
-    const raw = localStorage.getItem('user');
-    if (raw) cfg.headers['X-User-Data'] = btoa(raw);
-    return cfg;
-});
-
 const GRADE_COLORS = { 1: '#3B82F6', 2: '#0D9488', 3: '#F59E0B', 4: '#F97316', 5: '#DC2626' };
 const PIE_COLORS = ['#10B981', '#3B82F6', '#F59E0B', '#F97316', '#DC2626', '#8B5CF6'];
+
+export interface SafetyReportResponse {
+    report: {
+        total_ae: number;
+        total_sae: number;
+        ae_deaths: number;
+        active_alerts: number;
+        by_causality: Array<{ causality_relationship: string; count: string | number }>;
+        summary?: {
+             total_ae: number;
+             total_sae: number;
+             ae_deaths: number;
+             active_alerts: number;
+        };
+    };
+    aeBySeverity: Array<{ severity_grade: number; count: string | number }>;
+    aeByArm: Array<{ ae_term: string; arm_code: string; occurrence_count: string | number }>;
+    deviations: Array<{ deviation_type: string; count: string | number }>;
+    cutoff_date: string;
+}
 
 export const SafetyReports: React.FC = () => {
     const [trialId, setTrialId] = useState('');
     const [cutoffDate, setCutoffDate] = useState(new Date().toISOString().split('T')[0]);
     const [reportType, setReportType] = useState('Standard Safety Report');
     const [generated, setGenerated] = useState(false);
-    const [generating, setGenerating] = useState(false);
+    const [reportData, setReportData] = useState<SafetyReportResponse | null>(null);
 
-    const { data: trials } = useQuery({ queryKey: ['safety-trials'], queryFn: () => safetyApi.get('/api/safety/trials').then(r => r.data) });
+    const { data: trials } = useQuery({ queryKey: ['safety-trials'], queryFn: () => safetyManagerAPI.getTrials() });
 
-    const [reportData, setReportData] = useState<any>(null);
-
-    const handleGenerate = async () => {
-        if (!trialId) return;
-        setGenerating(true);
-        try {
-            const r = await safetyApi.get('/api/safety/reports/generate', { params: { trial_id: trialId, cutoff_date: cutoffDate } });
-            setReportData(r.data);
+    const generateMut = useMutation<SafetyReportResponse, Error, { trial_id: string; cutoff_date: string; report_type: string }>({
+        mutationFn: (params) => safetyManagerAPI.generateReport(params),
+        onSuccess: (data) => {
+            setReportData(data);
             setGenerated(true);
-        } finally {
-            setGenerating(false);
-        }
+        },
+    });
+
+    const handleGenerate = () => {
+        if (!trialId) return;
+        generateMut.mutate({ trial_id: trialId, cutoff_date: cutoffDate, report_type: reportType });
     };
 
     const handleExportJSON = () => {
+        if (!reportData) return;
         const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: 'application/json' });
         const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
         a.download = `safety_report_${trialId}_${cutoffDate}.json`; a.click();
     };
 
-    const report = reportData?.report ?? {};
+    const report = reportData?.report ?? {} as any;
     const trialName = (trials ?? []).find((t: any) => String(t.trial_id) === String(trialId))?.trial_title ?? '';
 
     // Grade chart data
     const gradeData = (reportData?.aeBySeverity ?? []).map((r: any) => ({
-        name: `Grade ${r.severity_grade}`, count: parseInt(r.count) || 0,
+        name: `Grade ${r.severity_grade}`, count: Number(r.count) || 0,
         fill: (GRADE_COLORS as any)[r.severity_grade] ?? '#6B7280',
     }));
 
     // Causality pie data
     const causalityData = (report.by_causality ?? []).map((r: any, i: number) => ({
-        name: r.causality_relationship ?? 'Unknown', value: parseInt(r.count) || 0,
+        name: r.causality_relationship ?? 'Unknown', value: Number(r.count) || 0,
         fill: PIE_COLORS[i % PIE_COLORS.length],
     }));
 
@@ -66,7 +79,7 @@ export const SafetyReports: React.FC = () => {
         const row: any = { name: term };
         arms.forEach(arm => {
             const match = (reportData?.aeByArm ?? []).find((r: any) => r.ae_term === term && r.arm_code === arm);
-            row[arm as string] = parseInt(match?.occurrence_count) || 0;
+            row[arm as string] = Number(match?.occurrence_count) || 0;
         });
         return row;
     });
@@ -111,11 +124,11 @@ export const SafetyReports: React.FC = () => {
                         </select>
                     </div>
                     <button className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 8 }}
-                        disabled={!trialId || generating} onClick={handleGenerate}>
-                        <Activity size={16} /> {generating ? 'Generating…' : 'Generate Report'}
+                        disabled={!trialId || generateMut.isPending} onClick={handleGenerate}>
+                        <Activity size={16} /> {generateMut.isPending ? 'Generating…' : 'Generate Report'}
                     </button>
                 </div>
-                {generating && <p style={{ margin: '10px 0 0', color: 'var(--gray-500)', fontSize: '0.8rem', fontStyle: 'italic' }}>Running signal detection analysis…</p>}
+                {generateMut.isPending && <p style={{ margin: '10px 0 0', color: 'var(--gray-500)', fontSize: '0.8rem', fontStyle: 'italic' }}>Running signal detection analysis…</p>}
             </div>
 
             {/* Report content */}
@@ -244,7 +257,7 @@ export const SafetyReports: React.FC = () => {
                 </div>
             )}
 
-            {!generated && !generating && (
+            {!generated && !generateMut.isPending && (
                 <div className="card" style={{ padding: '4rem', textAlign: 'center', color: 'var(--gray-400)' }}>
                     <FileText size={48} style={{ marginBottom: 12, opacity: 0.3 }} />
                     <p style={{ fontWeight: 600 }}>Configure options above and click Generate Report</p>

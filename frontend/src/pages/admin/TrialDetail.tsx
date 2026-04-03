@@ -1,13 +1,12 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { Edit2, Plus, Trash2 } from 'lucide-react';
+
+// 1. Import your central API
+import { adminAPI } from '../../services/api';
 import '../Dashboard.css';
 import '../admin/AdminDashboard.css';
-
-const adminApi = axios.create({ baseURL: 'http://localhost:5000' });
-adminApi.interceptors.request.use(cfg => { const raw = localStorage.getItem('user'); if (raw) cfg.headers['X-User-Data'] = btoa(raw); return cfg; });
 
 const Tab: React.FC<{ label: string; active: boolean; onClick: () => void }> = ({ label, active, onClick }) => (
     <button onClick={onClick} style={{
@@ -43,15 +42,15 @@ export const TrialDetail: React.FC = () => {
     const qc = useQueryClient();
     const [tab, setTab] = useState(0);
 
+    // 2. Use your API method for fetching the data
     const { data, isLoading } = useQuery({
         queryKey: ['admin', 'trial', trialId],
-        queryFn: () => adminApi.get(`/api/admin/trials/${trialId}`).then(r => r.data),
+        queryFn: () => adminAPI.getTrialFull(trialId as string),
     });
 
-    const mut = (path: string, method: 'post' | 'delete' = 'post') => useMutation({
-        mutationFn: (body?: any) => method === 'post'
-            ? adminApi.post(`/api/admin/trials/${trialId}/${path}`, body).then(r => r.data)
-            : adminApi.delete(`/api/admin/trials/${trialId}/${path}`),
+    // 3. Simplified mutation helper using your API method
+    const mut = (path: string) => useMutation({
+        mutationFn: (body: any) => adminAPI.addTrialEntity(trialId as string, path, body),
         onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'trial', trialId] }),
     });
 
@@ -126,7 +125,7 @@ export const TrialDetail: React.FC = () => {
                         </tbody>
                     </table>
                     <InlineForm fields={[{ name: 'institution_name', label: 'Site Name' }, { name: 'country', label: 'Country' }, { name: 'target_enrollment', label: 'Target', type: 'number' }, { name: 'initiation_date', label: 'Initiation Date', type: 'date' }]}
-                        onSubmit={v => addSite.mutate(v)} loading={addSite.isPending} />
+                        onSubmit={v => addSite.mutate({ ...v, target_enrollment: Number(v.target_enrollment) })} loading={addSite.isPending} />
                 </div>
             )}
 
@@ -174,14 +173,19 @@ export const TrialDetail: React.FC = () => {
                                 <div key={e.criterion_id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '6px 0', borderBottom: '1px solid #F9FAFB' }}>
                                     <span style={{ color: '#9CA3AF', fontSize: 12, minWidth: 24 }}>{i + 1}.</span>
                                     <span style={{ fontSize: 13, flex: 1 }}>{e.criterion_text}</span>
-                                    <button onClick={() => adminApi.delete(`/api/admin/trials/${trialId}/eligibility/${e.criterion_id}`).then(() => qc.invalidateQueries({ queryKey: ['admin', 'trial', trialId] }))}
-                                        style={{ background: 'none', border: 'none', color: '#DC2626', cursor: 'pointer' }}><Trash2 size={13} /></button>
+                                    {/* 4. Implement delete mutation via adminAPI */}
+                                    <button 
+                                        onClick={() => adminAPI.deleteTrialEntity(trialId as string, 'eligibility', e.criterion_id).then(() => qc.invalidateQueries({ queryKey: ['admin', 'trial', trialId] }))}
+                                        style={{ background: 'none', border: 'none', color: '#DC2626', cursor: 'pointer' }}
+                                    >
+                                        <Trash2 size={13} />
+                                    </button>
                                 </div>
                             ))}
                         </div>
                     ))}
                     <InlineForm fields={[{ name: 'criterion_text', label: 'Criterion Text' }, { name: 'criterion_type', label: 'Type (Inclusion/Exclusion)' }, { name: 'criterion_order', label: 'Order', type: 'number' }]}
-                        onSubmit={v => addElig.mutate(v)} loading={addElig.isPending} />
+                        onSubmit={v => addElig.mutate({ ...v, criterion_order: Number(v.criterion_order) })} loading={addElig.isPending} />
                 </div>
             )}
 
@@ -195,7 +199,7 @@ export const TrialDetail: React.FC = () => {
                         </tbody>
                     </table>
                     <InlineForm fields={[{ name: 'visit_name', label: 'Name' }, { name: 'visit_day', label: 'Day', type: 'number' }, { name: 'window_before_days', label: 'Before', type: 'number' }, { name: 'window_after_days', label: 'After', type: 'number' }]}
-                        onSubmit={v => addVisit.mutate({ ...v, is_required: true })} loading={addVisit.isPending} />
+                        onSubmit={v => addVisit.mutate({ ...v, is_required: true, visit_day: Number(v.visit_day), window_before_days: Number(v.window_before_days), window_after_days: Number(v.window_after_days) })} loading={addVisit.isPending} />
                 </div>
             )}
 
@@ -225,7 +229,7 @@ export const TrialDetail: React.FC = () => {
                         </tbody>
                     </table>
                     <InlineForm fields={[{ name: 'test_name', label: 'Test Name' }, { name: 'test_code_loinc', label: 'LOINC' }, { name: 'unit_of_measure', label: 'Unit' }, { name: 'reference_low', label: 'Ref Low', type: 'number' }, { name: 'reference_high', label: 'Ref High', type: 'number' }]}
-                        onSubmit={v => addLab.mutate(v)} loading={addLab.isPending} />
+                        onSubmit={v => addLab.mutate({ ...v, reference_low: Number(v.reference_low), reference_high: Number(v.reference_high) })} loading={addLab.isPending} />
                 </div>
             )}
         </div>

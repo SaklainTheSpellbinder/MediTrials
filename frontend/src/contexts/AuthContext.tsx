@@ -37,37 +37,50 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
 
+    // Session recovery endpoint: Check if user is logged in via httpOnly cookie
     useEffect(() => {
-        const storedUser = localStorage.getItem('user');
-        if (storedUser) {
-            setUser(JSON.parse(storedUser));
-        }
-        setLoading(false);
+        const recoverSession = async () => {
+            try {
+                const response = await fetch('http://localhost:5000/api/auth/me', {
+                    method: 'GET',
+                    credentials: 'include', // CRITICAL: Include httpOnly cookie
+                    headers: { 'Content-Type': 'application/json' },
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.user) {
+                        setUser(data.user);
+                    }
+                }
+            } catch (error) {
+                console.error('Session recovery failed:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        recoverSession();
     }, []);
 
     const login = async (username: string, password: string, role: string) => {
         try {
             const response = await fetch('http://localhost:5000/api/auth/login', {
                 method: 'POST',
+                credentials: 'include', // CRITICAL: Include httpOnly cookie in response
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password, role }),
             });
 
             const data = await response.json();
 
-            // 2. BETTER ERROR HANDLING
-            // fetch() doesn't throw on 401/500, so we must check response.ok
             if (!response.ok) {
                 throw new Error(data.message || 'Login failed');
             }
 
-            // 3. DATA STRUCTURE MATCHING
-            // Our backend sends { user: {...} }, not { success: true }
+            // Backend sets httpOnly cookie automatically via Set-Cookie header
+            // User data is in response body for immediate UI update
             if (data.user) {
-                localStorage.setItem('user', JSON.stringify(data.user));
-                // Note: If you implement JWT later, ensure backend sends 'token'
-                localStorage.setItem('token', data.token || 'mock-session-token');
-                localStorage.setItem('user_id', String(data.user.user_id));
                 setUser(data.user);
             }
         } catch (error) {
@@ -75,14 +88,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
     };
 
-    const logout = () => {
-        localStorage.removeItem('user');
-        localStorage.removeItem('token');
-        localStorage.removeItem('user_id');
-        setUser(null);
-        // Optional: Call backend logout to log the exit event
-        // Use POST for actions like logout
-        fetch('http://localhost:5000/api/auth/logout', { method: 'POST' }).catch(err => console.log('Logout log failed', err));
+    const logout = async () => {
+        try {
+            // Call backend to clear httpOnly cookie
+            await fetch('http://localhost:5000/api/auth/logout', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+            });
+        } catch (error) {
+            console.error('Logout error:', error);
+        } finally {
+            // Clear frontend state regardless of backend response
+            setUser(null);
+        }
     };
 
     return (

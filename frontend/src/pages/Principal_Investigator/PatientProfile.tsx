@@ -37,7 +37,7 @@ export const PatientProfile: React.FC = () => {
     const [documents, setDocuments] = useState<any>({ consent: [], ecrfs: [], auditTrail: [] });
     const [loading, setLoading] = useState(true);
 
-    // ── Consent modal state ──────────────────────────────────────────
+    //Consent modal state
     const [showConsentModal, setShowConsentModal] = useState(false);
     const [consentForm, setConsentForm] = useState({ consent_version: '', consent_date: new Date().toISOString().split('T')[0], e_signature_password: '' });
     const [consentVersions, setConsentVersions] = useState<any[]>([]);
@@ -57,32 +57,32 @@ export const PatientProfile: React.FC = () => {
             try {
                 const headerData = await patientProfileAPI.getHeader(pid);
                 setPatient(headerData.profile || null);
-            } catch { /* will show loading state */ }
+            } catch {  }
 
             try {
                 const timelineData = await patientProfileAPI.getTimeline(pid);
                 if (timelineData.timeline) setTimeline(timelineData.timeline);
-            } catch { /* quietly fail */ }
+            } catch {  }
 
             try {
                 const clinicalData = await patientProfileAPI.getClinical(pid);
                 if (clinicalData.clinical) setClinical(clinicalData.clinical);
-            } catch { /* quietly fail */ }
+            } catch {  }
 
             try {
                 const safetyData = await patientProfileAPI.getSafety(pid);
                 if (safetyData.safety) setSafety(safetyData.safety);
-            } catch { /* quietly fail */ }
+            } catch {  }
 
             try {
                 const labsData = await patientProfileAPI.getLabs(pid);
                 if (labsData.labs) setLabs(labsData.labs);
-            } catch { /* quietly fail */ }
+            } catch {  }
 
             try {
                 const docsData = await patientProfileAPI.getDocuments(pid);
                 if (docsData.documents) setDocuments(docsData.documents);
-            } catch { /* quietly fail */ }
+            } catch { }
 
         } catch (error) {
             console.error('Error fetching patient data:', error);

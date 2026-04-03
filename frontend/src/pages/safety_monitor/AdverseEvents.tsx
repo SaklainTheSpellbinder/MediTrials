@@ -1,21 +1,44 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
 import { useAuth } from '../../contexts/AuthContext';
 import { SeverityBadge } from '../../components/safety/SeverityBadge';
 import { AEGradeBadge } from '../../components/safety/AEGradeBadge';
 import { X, Download, AlertCircle, ChevronRight } from 'lucide-react';
 import '../Dashboard.css';
+import { safetyManagerAPI } from '../../services/api';
 
-const safetyApi = axios.create({ baseURL: 'http://localhost:5000' });
-safetyApi.interceptors.request.use(cfg => {
-    const raw = localStorage.getItem('user');
-    if (raw) cfg.headers['X-User-Data'] = btoa(raw);
-    return cfg;
-});
 
 const CAUSALITY_OPTIONS = ['Definite', 'Probable', 'Possible', 'Unlikely', 'Unrelated'];
 const OUTCOME_OPTIONS = ['Recovered', 'Recovering', 'Not Recovered', 'Fatal', 'Unknown'];
+
+// Add this below OUTCOME_OPTIONS
+
+export interface AdverseEventData {
+    ae_id: number;
+    ae_term: string;
+    trial_patient_id: string;
+    site_name: string;
+    ae_start_date?: string;
+    severity_grade: number;
+    status: string;
+    treatment_related: boolean;
+    results_in_death: boolean;
+    life_threatening: boolean;
+    requires_hospitalization: boolean;
+    sae_report_number?: string;
+    sae_status?: string;
+    report_deadline_date?: string;
+    report_submitted_date?: string;
+    causality_relationship?: string;
+    outcome?: string;
+    reason?: string;
+    relatedAlerts?: Array<{
+        alert_id: number;
+        alert_severity: string;
+        alert_message: string;
+        created_at: string;
+    }>;
+}
 
 const AEDetailPanel: React.FC<{ aeId: number; onClose: () => void }> = ({ aeId, onClose }) => {
     const qc = useQueryClient();
@@ -26,18 +49,28 @@ const AEDetailPanel: React.FC<{ aeId: number; onClose: () => void }> = ({ aeId, 
     const [password, setPassword] = useState('');
     const [saveMsg, setSaveMsg] = useState('');
 
-    const { data: ae, isLoading } = useQuery({
-        queryKey: ['ae-detail', aeId],
-        queryFn: () => safetyApi.get(`/api/safety/ae/${aeId}`).then(r => r.data),
-        onSuccess: (d: any) => { setCausality(d.causality_relationship ?? ''); setOutcome(d.outcome ?? ''); }
-    } as any);
+    const { data: ae, isLoading } = useQuery<AdverseEventData>({
+    queryKey: ['ae-detail', aeId],
+    queryFn: async () => {
+        return await safetyManagerAPI.getAeById(aeId);
+    }
+}); 
+
+// Use a standard React effect to update your editable state 
+// once the 'ae' data successfully loads from the query.
+useEffect(() => {
+    if (ae) {
+        setCausality(ae.causality_relationship ?? '');
+        setOutcome(ae.outcome ?? '');
+    }
+}, [ae]);
 
     const updateMut = useMutation({
         mutationFn: async () => {
             // Verify password (21 CFR Part 11)
-            const vr = await safetyApi.post('/api/safety/verify-password', { password });
+            const vr = await safetyManagerAPI.verifyPassword(password);
             if (!vr.data.verified) throw new Error('Password verification failed');
-            return safetyApi.put(`/api/safety/ae/${aeId}`, { causality_relationship: causality, outcome, reason });
+            return safetyManagerAPI.updateAe(aeId, { causality_relationship: causality, outcome, reason });
         },
         onSuccess: () => { qc.invalidateQueries({ queryKey: ['ae-list'] }); setSaveMsg('Saved successfully ✓'); setTimeout(() => setSaveMsg(''), 3000); },
         onError: (e: any) => setSaveMsg(e.message),
@@ -122,10 +155,11 @@ const AEDetailPanel: React.FC<{ aeId: number; onClose: () => void }> = ({ aeId, 
                 </div>
 
                 {/* Related alerts timeline */}
-                {ae.relatedAlerts?.length > 0 && (
+                {ae.relatedAlerts && ae.relatedAlerts.length > 0 && (
                     <div style={sectionStyle}>
                         <h4 style={sectionHeader}>Related Safety Alerts</h4>
-                        {ae.relatedAlerts.map((a: any) => (
+                        {/* Because of the && check above, TS now guarantees relatedAlerts is an array here */}
+                        {ae.relatedAlerts.map((a) => (
                             <div key={a.alert_id} style={{ display: 'flex', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--gray-100)' }}>
                                 <SeverityBadge level={a.alert_severity} />
                                 <span style={{ fontSize: '0.8rem', color: 'var(--gray-700)', flex: 1 }}>{a.alert_message?.slice(0, 80)}</span>
@@ -169,12 +203,12 @@ export const AdverseEvents: React.FC = () => {
     const [dateTo, setDateTo] = useState('');
     const [page, setPage] = useState(1);
 
-    const { data: trials } = useQuery({ queryKey: ['safety-trials'], queryFn: () => safetyApi.get('/api/safety/trials').then(r => r.data) });
-    const { data: sites } = useQuery({ queryKey: ['safety-sites'], queryFn: () => safetyApi.get('/api/safety/sites').then(r => r.data) });
+    const { data: trials } = useQuery({ queryKey: ['safety-trials'], queryFn: () => safetyManagerAPI.getTrials()});
+    const { data: sites } = useQuery({ queryKey: ['safety-sites'], queryFn: () => safetyManagerAPI.getSites() });
 
     const { data: aes = [], isLoading } = useQuery({
         queryKey: ['ae-list', trialId, siteId, gradeMin, gradeMax, causality, saeOnly, treatmentOnly, dateFrom, dateTo, page],
-        queryFn: () => safetyApi.get('/api/safety/ae', {
+        queryFn: () => safetyManagerAPI.getAes({
             params: {
                 trial_id: trialId || undefined, site_id: siteId || undefined,
                 severity_min: gradeMin > 1 ? gradeMin : undefined,

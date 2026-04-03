@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import { pool } from '../config/db';
+import { requireRole } from '../middleware/authMiddleware';
 
 const router = Router();
-
+router.use(requireRole(['Principal_Investigator','Study_Coordinator']));
 // POST /api/ecrf/submit
 router.post('/submit', async (req, res) => {
     try {

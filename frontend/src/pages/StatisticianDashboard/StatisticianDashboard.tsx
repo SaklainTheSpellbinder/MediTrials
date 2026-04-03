@@ -1,6 +1,5 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import axios from 'axios';
 import { useAuth } from '../../contexts/AuthContext';
 import { StatCard } from '../../components/dashboard/StatCard';
 import {
@@ -10,30 +9,40 @@ import {
 import { Link } from 'react-router-dom';
 import '../Dashboard.css';
 import './StatisticianDashboard.css';
+import { statisticsAPI } from '../../services/api';
 
-// ── Axios helper ──────────────────────────────────────────────────────────────
-const statApi = axios.create({ baseURL: 'http://localhost:5000' });
-statApi.interceptors.request.use(cfg => {
-    const raw = localStorage.getItem('user');
-    if (raw) cfg.headers['X-User-Data'] = btoa(raw);
-    return cfg;
-});
+// --- Type Interfaces ---
+interface DashboardData {
+    ittPopulation: number;
+    perProtocolPopulation: number;
+    latestPowerEstimate: { currentPower: number; requiredSampleSize: number } | null;
+    analysisDatasets: any[];
+    activeLocks: any[];
+    enrollmentByTrial: any[];
+    recentSurvivalAnalyses: any[];
+    randomizationBalance: any[];
+}
+// ------------------------
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const powerColor = (p: number) => p >= 0.8 ? 'success' : p >= 0.6 ? 'warning' : 'danger';
-const pvalDisplay = (p: any) => {
+
+const pvalDisplay = (p: string | number | null) => {
     if (p == null) return <span style={{ color: '#9CA3AF' }}>—</span>;
-    const num = parseFloat(p);
+    const num = typeof p === 'string' ? parseFloat(p) : p;
     return <span style={{ fontWeight: num < 0.05 ? 700 : 400, color: num < 0.05 ? '#DC2626' : '#6B7280' }}>{num.toFixed(4)}</span>;
 };
+
 const daysAgo = (d: string) => {
     const diff = Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
     return diff === 0 ? 'Today' : `${diff}d ago`;
 };
+
 const datasetBadgeClass: Record<string, string> = {
     Safety: 'stat-badge-red', Efficacy: 'stat-badge-blue', ITT: 'stat-badge-green',
     'Per Protocol': 'stat-badge-teal', Exploratory: 'stat-badge-purple',
 };
+
 const phaseBadgeClass: Record<string, string> = {
     'Phase I': 'stat-badge-gray', 'Phase II': 'stat-badge-blue', 'Phase III': 'stat-badge-green',
 };
@@ -122,7 +131,6 @@ const SurvivalList: React.FC<{ rows: any[] }> = ({ rows }) => (
 
 // ── Randomization Balance ─────────────────────────────────────────────────────
 const BalanceTable: React.FC<{ rows: any[] }> = ({ rows }) => {
-    // Get trial groups
     const trials = Array.from(new Set(rows.map(r => r.trial_id)));
     return (
         <div className="stat-balance-wrap">
@@ -135,7 +143,7 @@ const BalanceTable: React.FC<{ rows: any[] }> = ({ rows }) => {
                 const ageDiff = Math.max(...trialRows.map(r => parseFloat(r.avg_age))) - Math.min(...trialRows.map(r => parseFloat(r.avg_age)));
                 const imbalanced = pctDiff > 10 || ageDiff > 5;
                 return (
-                    <div key={tid} className="stat-balance-trial">
+                    <div key={String(tid)} className="stat-balance-trial">
                         <div className="stat-balance-title">
                             {trialRows[0]?.trial_title}
                             {imbalanced && <span className="stat-imbalance">⚠️ Imbalance detected</span>}
@@ -167,9 +175,9 @@ const BalanceTable: React.FC<{ rows: any[] }> = ({ rows }) => {
 export const StatisticianDashboard: React.FC = () => {
     const { user } = useAuth();
 
-    const { data, isLoading, isError } = useQuery({
+    const { data, isLoading, isError } = useQuery<DashboardData>({
         queryKey: ['dashboard', 'statistician'],
-        queryFn: () => statApi.get('/api/dashboard/statistician').then(r => r.data),
+        queryFn: () => statisticsAPI.getDashboard(),
         refetchInterval: 300000, // 5 min
     });
 
@@ -196,8 +204,8 @@ export const StatisticianDashboard: React.FC = () => {
                     <p className="text-gray-500 text-sm">Welcome, {user?.full_name} · Read-only · Refreshes every 5 min</p>
                 </div>
                 <div className="flex gap-2">
-                    <Link to="/statistics/datasets" className="btn-secondary">Analysis Datasets</Link>
-                    <Link to="/data-management/export" className="btn-primary">Export SDTM</Link>
+                    <Link to="/statistics/datasets" className="btn-secondary" style={{ textDecoration: 'none' }}>Analysis Datasets</Link>
+                    <Link to="/statistics/export" className="btn-primary" style={{ textDecoration: 'none' }}>Export SDTM</Link>
                 </div>
             </div>
 
@@ -220,7 +228,7 @@ export const StatisticianDashboard: React.FC = () => {
                 <div className="card">
                     <div className="card-header">
                         <h3 className="card-title"><Database size={18} /> Analysis Datasets</h3>
-                        <Link to="/statistics/datasets" className="sm-link">Generate Dataset →</Link>
+                        <Link to="/statistics/datasets" className="sm-link" style={{ textDecoration: 'none' }}>Generate Dataset →</Link>
                     </div>
                     <DatasetsTable rows={data.analysisDatasets} />
                 </div>
@@ -233,7 +241,7 @@ export const StatisticianDashboard: React.FC = () => {
                                 ? <><CheckCircle size={16} color="#10B981" /> Data available for analysis</>
                                 : <><Activity size={16} /> Active Data Locks</>}
                         </h3>
-                        <Link to="/data-management/lock" className="sm-link">Manage →</Link>
+                        <Link to="/data-management/lock" className="sm-link" style={{ textDecoration: 'none' }}>Manage →</Link>
                     </div>
                     <div className="stat-locks-list">
                         {data.activeLocks?.length === 0 ? (
@@ -270,7 +278,7 @@ export const StatisticianDashboard: React.FC = () => {
                 <div className="card">
                     <div className="card-header">
                         <h3 className="card-title"><Activity size={18} /> Recent Survival Analyses</h3>
-                        <Link to="/statistics/survival" className="sm-link">Run New →</Link>
+                        <Link to="/statistics/survival" className="sm-link" style={{ textDecoration: 'none' }}>Run New →</Link>
                     </div>
                     <SurvivalList rows={data.recentSurvivalAnalyses} />
                 </div>
@@ -279,7 +287,7 @@ export const StatisticianDashboard: React.FC = () => {
                 <div className="card">
                     <div className="card-header">
                         <h3 className="card-title"><BarChart2 size={18} /> Randomization Balance</h3>
-                        <Link to="/statistics/balance" className="sm-link">Full Report →</Link>
+                        <Link to="/statistics/balance" className="sm-link" style={{ textDecoration: 'none' }}>Full Report →</Link>
                     </div>
                     <BalanceTable rows={data.randomizationBalance} />
                 </div>

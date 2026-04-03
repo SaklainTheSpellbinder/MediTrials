@@ -1,18 +1,10 @@
 import { Router } from 'express';
 import { pool } from '../config/db';
+import { requireRole } from '../middleware/authMiddleware'; 
 
 const router = Router();
+router.use(requireRole(['Principal_Investigator']));
 
-// Middleware to inject user from header
-router.use((req: any, _res: any, next: any) => {
-    try {
-        const header = req.headers['x-user-data'];
-        if (header) {
-            req.user = JSON.parse(Buffer.from(header as string, 'base64').toString('utf-8'));
-        }
-    } catch (_) {}
-    next();
-});
 
 const requirePI = (req: any, res: any, next: any) => {
     if (!req.user || req.user.role !== 'Principal_Investigator') {
@@ -21,7 +13,7 @@ const requirePI = (req: any, res: any, next: any) => {
     next();
 };
 
-// ── GET /api/pi-safety/dashboard ──────────────────────────────────────────────
+//GET /api/pi-safety/dashboard 
 router.get('/dashboard', requirePI, async (req: any, res: any) => {
     try {
         const siteId = req.user.site_id;
@@ -113,7 +105,7 @@ router.get('/dashboard', requirePI, async (req: any, res: any) => {
     }
 });
 
-// ── GET /api/pi-safety/site-overview ──────────────────────────────────────────
+//GET /api/pi-safety/site-overview
 router.get('/site-overview', requirePI, async (req: any, res: any) => {
     try {
         const siteId = req.user.site_id;
@@ -168,7 +160,7 @@ router.put('/alerts/:alertId/acknowledge', requirePI, async (req: any, res: any)
         await client.query(`SET LOCAL app.change_reason = '${reason.replace(/'/g, "''")}'`);
 
         await client.query(
-            `UPDATE public.safety_alerts SET alert_status='ACKNOWLEDGED', acknowledged_by_user_id=$1, updated_at=NOW() WHERE alert_id=$2`,
+            `UPDATE public.safety_alerts SET alert_status='ACKNOWLEDGED', acknowledged_by_user_id=$1 WHERE alert_id=$2`,
             [userId, alertId]
         );
         await client.query(

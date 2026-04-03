@@ -17,7 +17,9 @@ export const LabResultsEntry: React.FC = () => {
         if (!user?.site_id) return;
         setLoading(true);
         try {
-            const response = await fetch(`http://localhost:5000/api/coordinator/labs/pending?site_id=${user.site_id}`);
+            const response = await fetch(`http://localhost:5000/api/coordinator/labs/pending`, {
+                credentials: 'include', // Include httpOnly cookie
+            });
             if (response.ok) {
                 const data = await response.json();
                 setPendingLabs(data);
@@ -39,8 +41,9 @@ export const LabResultsEntry: React.FC = () => {
 
         setSubmitting(true);
         try {
-            const response = await fetch(`http://localhost:5000/api/coordinator/labs/update?site_id=${user?.site_id}`, {
+            const response = await fetch(`http://localhost:5000/api/coordinator/labs/update`, {
                 method: 'POST',
+                credentials: 'include', // Include httpOnly cookie
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     result_id: selectedLab.result_id,

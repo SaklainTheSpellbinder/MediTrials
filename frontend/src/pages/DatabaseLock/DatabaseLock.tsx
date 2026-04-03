@@ -1,17 +1,40 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
 import { Lock, CheckCircle, XCircle, Copy, AlertTriangle, X, Info } from 'lucide-react';
 import '../Dashboard.css';
+import { dataManagerAPI } from '../../services/api';
 
-const api = axios.create({ baseURL: 'http://localhost:5000' });
-api.interceptors.request.use(cfg => { const raw = localStorage.getItem('user'); if (raw) cfg.headers['X-User-Data'] = btoa(raw); return cfg; });
+//page for datamanager
+export interface TrialData {
+    trial_id: number;
+    trial_title: string;
+}
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-interface ReadinessData { trial_id: number; trial_title: string; open_queries: number; unsigned_forms: number; missing_data_pct: number; undocumented_deviations: number; critical_alerts: number; open_saes: number; has_active_lock: boolean; }
-interface LockRow { lock_id: number; trial_title: string; trial_id: number; lock_type: string; lock_date: string; locked_by_username: string; snapshot_hash: string; unlock_date: string | null; }
+export interface ReadinessData { 
+    trial_id: number; 
+    trial_title: string; 
+    open_queries: number | string; 
+    unsigned_forms: number | string; 
+    missing_data_pct: number | string; 
+    undocumented_deviations: number | string; 
+    critical_alerts: number | string; 
+    open_saes: number | string; 
+    has_active_lock: boolean; 
+}
 
-// ── Lock type badge ───────────────────────────────────────────────────────────
+export interface LockRow { 
+    lock_id: number; 
+    trial_title: string; 
+    trial_id: number; 
+    lock_type: string; 
+    lock_date: string; 
+    locked_by_username: string; 
+    snapshot_hash: string; 
+    unlock_date: string | null; 
+}
+
+
+//Lock type badge 
 const lockColors: Record<string, { bg: string; color: string }> = {
     Interim:  { bg: '#DBEAFE', color: '#1D4ED8' },
     Final:    { bg: '#EDE9FE', color: '#5B21B6' },
@@ -53,31 +76,47 @@ export const DatabaseLock: React.FC = () => {
     const [msg, setMsg]                   = useState('');
     const [copiedHash, setCopiedHash]     = useState<number | null>(null);
 
-    const { data: trials = [] } = useQuery({ queryKey: ['dm-trials'], queryFn: () => api.get('/api/data-management/trials').then(r => r.data) });
-    const { data: readiness, isLoading: rLoading } = useQuery({
+    const { data: trials = [] } = useQuery<TrialData[]>({ 
+        queryKey: ['dm-trials'], 
+        queryFn: () => dataManagerAPI.getTrials() 
+    });
+    
+    const { data: readiness, isLoading: rLoading } = useQuery<ReadinessData>({
         queryKey: ['lock-readiness', trialId],
-        queryFn: () => api.get(`/api/data-management/lock-readiness/${trialId}`).then(r => r.data),
+        queryFn: () => dataManagerAPI.getLockReadiness(trialId),
         enabled: !!trialId,
     });
-    const { data: locks = [], isLoading: lLoading } = useQuery({
+    
+    const { data: locks = [], isLoading: lLoading } = useQuery<LockRow[]>({
         queryKey: ['locks'],
-        queryFn: () => api.get('/api/data-management/locks').then(r => r.data),
+        queryFn: () => dataManagerAPI.getLocks(),
     });
 
-    const rd: ReadinessData | undefined = readiness;
-    const queriesPass  = rd ? parseInt(rd.open_queries as any) === 0 : false;
-    const unsignedPass = rd ? parseInt(rd.unsigned_forms as any) === 0 : false;
-    const missingPass  = rd ? parseFloat(rd.missing_data_pct as any) < 2 : false;
-    const devPass      = rd ? parseInt(rd.undocumented_deviations as any) === 0 : false;
-    const alertsPass   = rd ? parseInt(rd.critical_alerts as any) === 0 : false;
-    const saesPass     = rd ? parseInt(rd.open_saes as any) === 0 : false;
+    const rd = readiness;
+    const queriesPass  = rd ? Number(rd.open_queries) === 0 : false;
+    const unsignedPass = rd ? Number(rd.unsigned_forms) === 0 : false;
+    const missingPass  = rd ? Number(rd.missing_data_pct) < 2 : false;
+    const devPass      = rd ? Number(rd.undocumented_deviations) === 0 : false;
+    const alertsPass   = rd ? Number(rd.critical_alerts) === 0 : false;
+    const saesPass     = rd ? Number(rd.open_saes) === 0 : false;
     const allPass      = queriesPass && unsignedPass && missingPass && devPass && alertsPass && saesPass;
+    
     const isFinalLock  = lockType === 'Final';
     const canSubmit    = reason.length >= 50 && (lockType !== 'Partial' || lockScope.trim()) && (!isFinalLock || allPass);
 
     const lockMut = useMutation({
-        mutationFn: () => api.post('/api/data-management/lock', { trial_id: parseInt(trialId), lock_type: lockType, lock_scope: lockScope, reason }),
-        onSuccess: (res) => { setCertLock(res.data.lock); setMsg(''); qc.invalidateQueries({ queryKey: ['locks'] }); qc.invalidateQueries({ queryKey: ['lock-readiness', trialId] }); },
+        mutationFn: () => dataManagerAPI.initiateLock({ 
+            trial_id: parseInt(trialId), 
+            lock_type: lockType, 
+            lock_scope: lockScope, 
+            reason 
+        }),
+        onSuccess: (res) => { 
+            setCertLock(res.lock); 
+            setMsg(''); 
+            qc.invalidateQueries({ queryKey: ['locks'] }); 
+            qc.invalidateQueries({ queryKey: ['lock-readiness', trialId] }); 
+        },
         onError: (e: any) => setMsg(e.response?.data?.error ?? e.message),
     });
 
@@ -88,7 +127,7 @@ export const DatabaseLock: React.FC = () => {
     };
 
     // Active lock banner check
-    const activeLockForTrial = (locks as LockRow[]).find(l => l.trial_id === parseInt(trialId) && !l.unlock_date);
+    const activeLockForTrial = locks.find(l => l.trial_id === parseInt(trialId) && !l.unlock_date);
 
     return (
         <div className="dashboard-container">
@@ -101,7 +140,7 @@ export const DatabaseLock: React.FC = () => {
                     <label className="form-label" style={{ fontSize: 11 }}>Trial</label>
                     <select className="form-select" value={trialId} onChange={e => { setTrialId(e.target.value); setCertLock(null); setMsg(''); }}>
                         <option value="">Select trial…</option>
-                        {(trials as any[]).map((t: any) => <option key={t.trial_id} value={t.trial_id}>{t.trial_title}</option>)}
+                        {trials.map((t) => <option key={t.trial_id} value={t.trial_id}>{t.trial_title}</option>)}
                     </select>
                 </div>
             </div>
@@ -134,12 +173,12 @@ export const DatabaseLock: React.FC = () => {
                             <div style={{ padding: '1rem 0' }}>{[...Array(6)].map((_, i) => <div key={i} style={{ height: 14, background: '#F3F4F6', borderRadius: 4, marginBottom: 12, width: '80%' }} />)}</div>
                         ) : rd ? (
                             <>
-                                <CheckRow label="Open Queries" pass={queriesPass} value={rd.open_queries} note="must be 0 for Final lock" />
-                                <CheckRow label="Unsigned Forms" pass={unsignedPass} value={rd.unsigned_forms} note="must be 0" />
-                                <CheckRow label="Missing Data" pass={missingPass} value={`${parseFloat(rd.missing_data_pct as any).toFixed(1)}%`} note="target < 2%" />
-                                <CheckRow label="Undocumented Deviations" pass={devPass} value={rd.undocumented_deviations} />
-                                <CheckRow label="Critical/Severe Safety Alerts" pass={alertsPass} value={rd.critical_alerts} />
-                                <CheckRow label="Open SAEs" pass={saesPass} value={rd.open_saes} />
+                                <CheckRow label="Open Queries" pass={queriesPass} value={Number(rd.open_queries)} note="must be 0 for Final lock" />
+                                <CheckRow label="Unsigned Forms" pass={unsignedPass} value={Number(rd.unsigned_forms)} note="must be 0" />
+                                <CheckRow label="Missing Data" pass={missingPass} value={`${Number(rd.missing_data_pct).toFixed(1)}%`} note="target < 2%" />
+                                <CheckRow label="Undocumented Deviations" pass={devPass} value={Number(rd.undocumented_deviations)} />
+                                <CheckRow label="Critical/Severe Safety Alerts" pass={alertsPass} value={Number(rd.critical_alerts)} />
+                                <CheckRow label="Open SAEs" pass={saesPass} value={Number(rd.open_saes)} />
                             </>
                         ) : null}
                     </div>
@@ -229,7 +268,7 @@ export const DatabaseLock: React.FC = () => {
                 </div>
                 {lLoading ? (
                     <div style={{ padding: '2rem', textAlign: 'center', color: '#9CA3AF' }}>Loading locks…</div>
-                ) : (locks as LockRow[]).length === 0 ? (
+                ) : locks.length === 0 ? (
                     <div style={{ padding: '3rem', textAlign: 'center', color: '#9CA3AF' }}>
                         <Info size={32} style={{ marginBottom: 8, opacity: 0.4 }} />
                         <p style={{ margin: 0 }}>No data locks have been initiated yet.</p>
@@ -245,7 +284,7 @@ export const DatabaseLock: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {(locks as LockRow[]).map((l, i) => (
+                                {locks.map((l, i) => (
                                     <tr key={l.lock_id} style={{ background: i % 2 === 0 ? 'white' : '#FAFAFA' }}>
                                         <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontSize: 11, color: '#6B7280' }}>#{l.lock_id}</td>
                                         <td style={{ padding: '10px 12px', fontWeight: 600, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.trial_title}</td>

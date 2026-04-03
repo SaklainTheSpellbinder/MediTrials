@@ -1,24 +1,10 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { pool } from '../config/db';
+import {requireRole } from '../middleware/authMiddleware';
 
 const router = Router();
-
-// ── Auth helpers ──────────────────────────────────────────────────────────────
-function decodeUser(req: Request): any | null {
-    const header = req.headers['x-user-data'];
-    if (!header) return null;
-    try { return JSON.parse(Buffer.from(header as string, 'base64').toString('utf8')); }
-    catch { return null; }
-}
-router.use((req: Request, _res: Response, next) => { (req as any).user = decodeUser(req); next(); });
-
-const requireDataManager = (req: Request, res: Response, next: any) => {
-    const u = (req as any).user;
-    if (!u) return res.status(401).json({ error: 'Unauthorized' });
-    if (u.role !== 'Data_Manager') return res.status(403).json({ error: 'Forbidden — Data Manager only' });
-    next();
-};
+router.use(requireRole(['Data_Manager']));
 
 // Helper: explicit transaction wrapper with 21 CFR Part 11 session variables
 async function withTransaction(userId: number, reason: string, fn: (client: any) => Promise<any>) {
@@ -38,8 +24,8 @@ async function withTransaction(userId: number, reason: string, fn: (client: any)
     }
 }
 
-// ── GET /api/dashboard/data-manager ──────────────────────────────────────────
-router.get('/data-manager', requireDataManager, async (req: Request, res: Response) => {
+//GET /api/dashboard/data-manager
+router.get('/data-manager', async (req: Request, res: Response) => {
     try {
         const [queryStats, sitePerf, avgResolution, dataQuality, deviations, queryAge, lockReadiness, triggerActivity] =
             await Promise.all([
@@ -113,7 +99,9 @@ router.get('/data-manager', requireDataManager, async (req: Request, res: Respon
             lockReadiness: lockReadiness.rows,
             triggerActivity: triggerActivity.rows,
         });
-    } catch (err: any) { console.error('DM dashboard error:', err.message); res.status(500).json({ error: err.message }); }
+    } catch (err: any) {
+        console.error('DM dashboard error:', err.message); res.status(500).json({ error: err.message });
+    }
 });
 
 // ── GET /api/data-management/trials ──────────────────────────────────────────
@@ -766,8 +754,7 @@ router.get('/protocols/:trialId/compare', async (req: Request, res: Response) =>
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// ── GET /api/data-management/sites/:siteId/quality-score ─────────────────────
-// Calls get_site_data_quality_score() PostgreSQL function (new in 007_dm_function.sql)
+// ── GET /api/data-management/sites/:siteId/quality-score 
 router.get('/sites/:siteId/quality-score', async (req: Request, res: Response) => {
     try {
         const { rows } = await pool.query(

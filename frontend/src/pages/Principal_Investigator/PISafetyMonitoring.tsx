@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
+import { safetyAPI } from '../../services/api'; // Adjust path if needed
 import {
     AlertTriangle, Clock, TrendingUp, TrendingDown, Minus,
     ShieldAlert, Activity, FileWarning, CheckCircle
@@ -12,24 +12,18 @@ import { AEGradeBadge } from '../../components/safety/AEGradeBadge';
 import '../Dashboard.css';
 import './PISafetyMonitoring.css';
 
-const safetyApi = axios.create({ baseURL: 'http://localhost:5000' });
-safetyApi.interceptors.request.use(cfg => {
-    const raw = localStorage.getItem('user');
-    if (raw) cfg.headers['X-User-Data'] = btoa(raw);
-    return cfg;
-});
 
 const AcknowledgeForm: React.FC<{ alertId: number; onDone: () => void }> = ({ alertId, onDone }) => {
     const [reason, setReason] = useState('');
     const qc = useQueryClient();
 
     const { mutate, isPending } = useMutation({
-        mutationFn: (r: string) => safetyApi.put(`/api/pi-safety/alerts/${alertId}/acknowledge`, { reason: r }),
-        onSuccess: () => {
-            qc.invalidateQueries({ queryKey: ['dashboard', 'pi-safety'] });
-            onDone();
-        },
-    });
+    mutationFn: (r: string) => safetyAPI.acknowledgeAlert(alertId, r),
+    onSuccess: () => {
+        qc.invalidateQueries({ queryKey: ['dashboard', 'pi-safety'] });
+        onDone();
+    },
+});
 
     return (
         <div className="ack-form">
@@ -57,7 +51,7 @@ export const PISafetyMonitoring: React.FC = () => {
 
     const { data, isLoading, isError } = useQuery({
         queryKey: ['dashboard', 'pi-safety'],
-        queryFn: () => safetyApi.get('/api/pi-safety/dashboard').then(r => r.data),
+        queryFn: () => safetyAPI.getPiDashboard(),
         refetchInterval: 30000,
     });
 
@@ -179,7 +173,7 @@ export const PISafetyMonitoring: React.FC = () => {
                     )}
                 </div>
 
-                {/* ── ROW 2 RIGHT: Critical Alerts ── */}
+                {/* ROW 2 RIGHT: Critical Alerts*/}
                 <div className="card">
                     <div className="card-header">
                         <h3 className="card-title">

@@ -1,18 +1,26 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { safetyManagerAPI } from '../../services/api';
 import { SeverityBadge } from '../../components/safety/SeverityBadge';
 import { Search, Download, AlertTriangle, Users } from 'lucide-react';
 import '../Dashboard.css';
 
-const safetyApi = axios.create({ baseURL: 'http://localhost:5000' });
-safetyApi.interceptors.request.use(cfg => {
-    const raw = localStorage.getItem('user');
-    if (raw) cfg.headers['X-User-Data'] = btoa(raw);
-    return cfg;
-});
+
+export interface SafetyPatient {
+    patient_id: number;
+    trial_patient_id: string;
+    institution_name: string;
+    age?: number;
+    gender?: string;
+    patient_status: string;
+    enrollment_date?: string;
+    arm_code?: string;
+    active_alert_count?: number | string;
+    max_alert_severity?: string;
+    last_visit_date?: string;
+}
 
 export const AllPatients: React.FC = () => {
     const { user } = useAuth();
@@ -25,25 +33,30 @@ export const AllPatients: React.FC = () => {
     const [dateTo, setDateTo] = useState('');
     const [page, setPage] = useState(1);
 
+    
     const { data: sites } = useQuery({
         queryKey: ['safety-sites'],
-        queryFn: () => safetyApi.get('/api/safety/sites').then(r => r.data),
+        queryFn: () => safetyManagerAPI.getSites(), 
     });
 
-    const { data: patients = [], isLoading } = useQuery({
+    
+    const { data: patients = [], isLoading } = useQuery<SafetyPatient[]>({
         queryKey: ['sm-patients', search, status, siteId, hasAlerts, dateFrom, dateTo, page],
-        queryFn: () => safetyApi.get('/api/safety/patients', {
-            params: {
-                search: search || undefined, status: status || undefined,
-                site_id: siteId || undefined, has_alerts: hasAlerts || undefined,
-                date_from: dateFrom || undefined, date_to: dateTo || undefined, page, limit: 50
-            }
-        }).then(r => r.data),
+        queryFn: () => safetyManagerAPI.getPatients({ 
+            search: search || undefined, 
+            status: status || undefined,
+            site_id: siteId || undefined, 
+            has_alerts: hasAlerts || undefined,
+            date_from: dateFrom || undefined, 
+            date_to: dateTo || undefined, 
+            page, 
+            limit: 50
+        }),
     });
 
     const handleExport = () => {
         const csv = ['Patient ID,Site,Age,Gender,Status,Enrollment Date,Active Alerts,Last Visit',
-            ...patients.map((p: any) =>
+            ...patients.map((p: SafetyPatient) =>
                 `${p.trial_patient_id},${p.institution_name},${p.age ?? ''},${p.gender ?? ''},${p.patient_status},${p.enrollment_date?.split('T')[0] ?? ''},${p.active_alert_count ?? 0},${p.last_visit_date?.split('T')[0] ?? ''}`
             )].join('\n');
         const blob = new Blob([csv], { type: 'text/csv' });
@@ -138,7 +151,7 @@ export const AllPatients: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {patients.map((p: any) => (
+                                {patients.map((p: SafetyPatient) => (
                                     <tr key={p.patient_id}
                                         onClick={() => navigate(`/patients/${p.patient_id}`)}
                                         style={{ cursor: 'pointer' }}>
@@ -159,7 +172,7 @@ export const AllPatients: React.FC = () => {
                                             {p.arm_code ?? <span style={{ color: 'var(--gray-300)' }}>—</span>}
                                         </td>
                                         <td>
-                                            {parseInt(p.active_alert_count) > 0 ? (
+                                            {Number(p.active_alert_count || 0) > 0 ? (
                                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                                                     <SeverityBadge level={p.max_alert_severity ?? 'INFO'} />
                                                     <span style={{ fontWeight: 700, color: p.max_alert_severity === 'CRITICAL' ? '#DC2626' : 'inherit' }}>

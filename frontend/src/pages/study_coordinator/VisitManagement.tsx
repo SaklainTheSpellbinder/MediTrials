@@ -25,7 +25,9 @@ export const VisitManagement: React.FC = () => {
         if (!user?.site_id) return;
         setLoading(true);
         try {
-            const response = await fetch(`http://localhost:5000/api/coordinator/visits/today?site_id=${user.site_id}`);
+            const response = await fetch(`http://localhost:5000/api/coordinator/visits/today`, {
+                credentials: 'include', // Include httpOnly cookie
+            });
             if (response.ok) {
                 const data = await response.json();
                 setVisits(data);
@@ -44,8 +46,9 @@ export const VisitManagement: React.FC = () => {
     const handleCheckIn = async (visitInstanceId: number) => {
         setCheckingInId(visitInstanceId);
         try {
-            const response = await fetch(`http://localhost:5000/api/coordinator/visits/checkin?site_id=${user?.site_id}`, {
+            const response = await fetch(`http://localhost:5000/api/coordinator/visits/checkin`, {
                 method: 'POST',
+                credentials: 'include', // Include httpOnly cookie
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ visit_instance_id: visitInstanceId })
             });
