@@ -4,6 +4,7 @@ import { safetyManagerAPI } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { ShieldAlert, Lock, Search, AlertTriangle, CheckCircle, Printer } from 'lucide-react';
 import '../Dashboard.css';
+
 const JUSTIFICATIONS = ['Emergency Medical Necessity', 'Regulatory Requirement', 'Patient Safety', 'Other'];
 
 export interface UnblindingPatient {
@@ -23,6 +24,12 @@ export interface UnblindingResult {
     arm_description?: string;
     unblinded_at: string;
 }
+
+export interface UnblindingHistoryItem {
+    changed_at: string;
+    change_reason: string;
+}
+// ------------------------
 
 export const Unblinding: React.FC = () => {
     const { user } = useAuth();
@@ -50,6 +57,7 @@ export const Unblinding: React.FC = () => {
     const pinVerifyMut = useMutation({
         mutationFn: (password: string) => safetyManagerAPI.verifyPassword(password),
         onSuccess: (data) => {
+            // Fixed: use data.verified instead of data.data.verified
             if (data.verified) {
                 setPinVerified(true);
                 setPinError('');
@@ -68,7 +76,7 @@ export const Unblinding: React.FC = () => {
     };
 
     // Patient lookup
-    const { data: patientData, isLoading: patientLoading } = useQuery<{ patient: UnblindingPatient; history: any[] }>({
+    const { data: patientData, isLoading: patientLoading } = useQuery<{ patient: UnblindingPatient; history: UnblindingHistoryItem[] }>({
         queryKey: ['unblinding-patient', searchTerm],
         queryFn: () => safetyManagerAPI.getUnblindingPatient(searchTerm),
         enabled: !!searchTerm,
@@ -77,10 +85,13 @@ export const Unblinding: React.FC = () => {
     const unblindMut = useMutation({
         mutationFn: async () => {
             const vr = await safetyManagerAPI.verifyPassword(confirmPassword);
+            // Fixed: check vr.verified directly based on api.ts setup
             if (!vr.verified) throw new Error('Password verification failed');
             return safetyManagerAPI.submitUnblinding({
                 patient_id: patientData?.patient?.patient_id,
-                reason, justification_category: justification, requesting_physician: physician,
+                reason, 
+                justification_category: justification, 
+                requesting_physician: physician,
             });
         },
         onSuccess: (r) => { 
@@ -207,7 +218,7 @@ export const Unblinding: React.FC = () => {
                     {(patientData?.history ?? []).length > 0 && (
                         <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--gray-100)' }}>
                             <p style={{ margin: '0 0 8px', fontSize: '0.78rem', fontWeight: 700, color: 'var(--gray-500)', textTransform: 'uppercase' }}>Unblinding History</p>
-                            {patientData.history.map((h: any, i: number) => (
+                            {patientData?.history.map((h, i) => (
                                 <p key={i} style={{ margin: '0 0 4px', fontSize: '0.8rem', color: 'var(--gray-600)' }}>
                                     {h.changed_at?.split('T')[0]} · {h.change_reason}
                                 </p>

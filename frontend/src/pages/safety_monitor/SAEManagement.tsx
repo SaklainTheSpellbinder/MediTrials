@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { AEGradeBadge } from '../../components/safety/AEGradeBadge';
 import { Clock, FileWarning, AlertCircle, CheckCircle, ChevronRight, X } from 'lucide-react';
@@ -100,7 +99,6 @@ const SAEDetailModal: React.FC<{ saeId: number; onClose: () => void }> = ({ saeI
         queryFn: () => safetyManagerAPI.getSaeById(saeId),
     });
 
-    // Replace the old onSuccess with a useEffect hook
     useEffect(() => {
         if (sae) {
             setNarrative(sae.narrative_text ?? '');
@@ -110,7 +108,8 @@ const SAEDetailModal: React.FC<{ saeId: number; onClose: () => void }> = ({ saeI
     const updateMut = useMutation({
         mutationFn: async (body: Partial<SAEData> & { reason?: string }) => {
             const vr = await safetyManagerAPI.verifyPassword(password);
-            if (!vr.data?.verified) throw new Error('Password verification failed');
+            // Fixed: api.ts already extracts response.data, so it's vr.verified, not vr.data.verified
+            if (!vr.verified) throw new Error('Password verification failed');
             return safetyManagerAPI.updateSae(saeId, { ...body, reason });
         },
         onSuccess: () => { 
@@ -119,7 +118,7 @@ const SAEDetailModal: React.FC<{ saeId: number; onClose: () => void }> = ({ saeI
             setMsg('Saved ✓'); 
             setTimeout(() => setMsg(''), 3000); 
         },
-        onError: (e: any) => setMsg(e.message),
+        onError: (e: any) => setMsg(e.response?.data?.error ?? e.message),
     });
 
     if (isLoading) return (
@@ -283,7 +282,8 @@ export const SAEManagement: React.FC = () => {
 
     const { data, isLoading } = useQuery<SAEListResponse>({
         queryKey: ['sae-list', activeTab],
-        queryFn: () => safetyManagerAPI.getSaes({ params: { sae_status: activeTab || undefined } }),
+        // Fixed: Pass the object directly so api.ts can wrap it in { params }
+        queryFn: () => safetyManagerAPI.getSaes({ sae_status: activeTab || undefined }),
     });
 
     const saes = data?.saes ?? [];

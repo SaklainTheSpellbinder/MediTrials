@@ -11,8 +11,6 @@ import { safetyManagerAPI } from '../../services/api';
 const CAUSALITY_OPTIONS = ['Definite', 'Probable', 'Possible', 'Unlikely', 'Unrelated'];
 const OUTCOME_OPTIONS = ['Recovered', 'Recovering', 'Not Recovered', 'Fatal', 'Unknown'];
 
-// Add this below OUTCOME_OPTIONS
-
 export interface AdverseEventData {
     ae_id: number;
     ae_term: string;

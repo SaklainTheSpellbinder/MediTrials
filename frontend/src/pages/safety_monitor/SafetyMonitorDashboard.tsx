@@ -14,7 +14,6 @@ import '../Dashboard.css';
 import './SafetyMonitorDashboard.css';
 import { safetyManagerAPI } from '../../services/api';
 
-// --- Type Interfaces ---
 export interface OverdueSAE {
     sae_report_number: string;
     trial_patient_id: string;
@@ -82,9 +81,8 @@ export interface SafetyDashboardData {
     trialKpis: any[];
     systemEvents: any[];
 }
-// ------------------------
 
-// ── Severity badge ────────────────────────────────────────────────────────────
+// ── Severity badge
 const SeverityBadge: React.FC<{ level: string }> = ({ level }) => {
     const map: Record<string, string> = {
         CRITICAL: 'badge-critical', SEVERE: 'badge-severe',
