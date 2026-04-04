@@ -960,7 +960,8 @@ $$;
 
 
 -- SP-5  Lock database for interim / final analysis
-CREATE OR REPLACE PROCEDURE sp_lock_database(
+-- ------------------------------------------------------------
+CREATE OR REPLACE PROCEDURE public.sp_lock_database(
     p_trial_id          INTEGER,
     p_lock_type         VARCHAR,
     p_locked_by_user_id INTEGER
@@ -983,18 +984,17 @@ BEGIN
         RAISE EXCEPTION 'Trial % already has an active data lock.', p_trial_id;
     END IF;
 
-    -- Snapshot fingerprint
-    SELECT MD5(
-        COUNT(DISTINCT p.patient_id)::TEXT ||
-        COUNT(DISTINCT ae.ae_id)::TEXT      ||
-        COUNT(DISTINCT lr.result_id)::TEXT  ||
-        EXTRACT(EPOCH FROM NOW())::TEXT
-    ) INTO v_snapshot_hash
-      FROM patients          p
-      JOIN study_sites        ss ON ss.site_id    = p.site_id
-      LEFT JOIN adverse_events ae ON ae.patient_id = p.patient_id
-      LEFT JOIN lab_results    lr ON lr.patient_id = p.patient_id
-     WHERE ss.trial_id = p_trial_id;
+    -- CRITICAL FIX: Snapshot fingerprint now perfectly matches the Node.js /verify route.
+    -- It aggregates the exact patient data row-by-row into a JSON string and hashes it.
+    SELECT MD5(COALESCE(
+        (
+            SELECT json_agg(row_to_json(p.*) ORDER BY p.patient_id)::TEXT
+            FROM public.patients p
+            JOIN public.study_sites ss ON ss.site_id = p.site_id
+            WHERE ss.trial_id = p_trial_id
+        ), 
+        ''
+    )) INTO v_snapshot_hash;
 
     INSERT INTO data_locks (
         trial_id,
@@ -1684,23 +1684,82 @@ GROUP BY ct.trial_id, ta.arm_id, ta.arm_code, ae.ae_term;
 
 -- MV-6  Site performance (from site_performance table)
 CREATE MATERIALIZED VIEW mv_site_performance AS
+WITH site_patient_metrics AS (
+    -- 1. Aggregate Patient Data per Site
+    SELECT 
+        p.site_id,
+        COUNT(DISTINCT p.patient_id) AS patients_screened,
+        COUNT(p.enrollment_date) AS patients_enrolled,
+        MIN(ps.screening_date) AS period_start_date,
+        MAX(COALESCE(p.enrollment_date, ps.screening_date)) AS period_end_date,
+        -- p.enrollment_date and ps.screening_date are DATE types, subtraction yields integer days
+        AVG(p.enrollment_date - ps.screening_date) AS average_screening_days
+    FROM patients p
+    LEFT JOIN patient_screening ps ON p.patient_id = ps.patient_id
+    GROUP BY p.site_id
+),
+site_deviations AS (
+    -- 2. Aggregate Protocol Deviations per Site
+    -- Must join through the patients table to resolve the site_id
+    SELECT 
+        p.site_id, 
+        COUNT(pd.deviation_id) AS protocol_deviations_count
+    FROM protocol_deviations pd
+    JOIN patients p ON pd.patient_id = p.patient_id
+    GROUP BY p.site_id
+),
+site_queries AS (
+    -- 3. Aggregate Data Queries per Site
+    -- Must join through ecrf_data and patients to resolve the site_id
+    -- raised_date and resolved_date are TIMESTAMPs, subtraction yields an INTERVAL. 
+    -- We extract epoch seconds and divide by 86400 to get decimal days.
+    SELECT 
+        p.site_id, 
+        AVG(EXTRACT(EPOCH FROM (dq.resolved_date - dq.raised_date)) / 86400) AS query_resolution_days_avg
+    FROM data_queries dq
+    JOIN ecrf_data ed ON dq.ecrf_instance_id = ed.ecrf_instance_id
+    JOIN patients p ON ed.patient_id = p.patient_id
+    WHERE dq.resolved_date IS NOT NULL
+    GROUP BY p.site_id
+)
+-- 4. Combine Everything and Calculate Final Percentages
 SELECT
     s.site_id,
     s.institution_name,
     s.trial_id,
     s.country,
-    sp.period_start_date,
-    sp.period_end_date,
-    sp.patients_screened,
-    sp.patients_enrolled,
-    sp.screen_fail_rate,
-    sp.average_screening_days,
-    sp.protocol_deviations_count,
-    sp.query_resolution_days_avg,
-    ROUND(sp.patients_enrolled::DECIMAL / NULLIF(sp.patients_screened, 0) * 100, 2) AS screening_success_rate,
-    ROUND(sp.patients_enrolled::DECIMAL / NULLIF(s.target_enrollment, 0) * 100, 2)  AS enrollment_progress_pct
-FROM study_sites     s
-LEFT JOIN site_performance sp ON sp.site_id = s.site_id;
+    spm.period_start_date,
+    spm.period_end_date,
+    COALESCE(spm.patients_screened, 0) AS patients_screened,
+    COALESCE(spm.patients_enrolled, 0) AS patients_enrolled,
+    
+    -- Calculated: Screen Fail Rate = (Screened - Enrolled) / Screened
+    ROUND(
+        (COALESCE(spm.patients_screened, 0) - COALESCE(spm.patients_enrolled, 0))::DECIMAL 
+        / NULLIF(spm.patients_screened, 0) * 100, 
+    2) AS screen_fail_rate,
+    
+    ROUND(spm.average_screening_days, 1) AS average_screening_days,
+    
+    COALESCE(sd.protocol_deviations_count, 0) AS protocol_deviations_count,
+    ROUND(sq.query_resolution_days_avg::DECIMAL, 1) AS query_resolution_days_avg,
+    
+    -- Calculated: Screening Success Rate = Enrolled / Screened
+    ROUND(
+        COALESCE(spm.patients_enrolled, 0)::DECIMAL 
+        / NULLIF(spm.patients_screened, 0) * 100, 
+    2) AS screening_success_rate,
+    
+    -- Calculated: Enrollment Progress = Enrolled / Target
+    ROUND(
+        COALESCE(spm.patients_enrolled, 0)::DECIMAL 
+        / NULLIF(s.target_enrollment, 0) * 100, 
+    2) AS enrollment_progress_pct
+
+FROM study_sites s
+LEFT JOIN site_patient_metrics spm ON s.site_id = spm.site_id
+LEFT JOIN site_deviations sd ON s.site_id = sd.site_id
+LEFT JOIN site_queries sq ON s.site_id = sq.site_id;
 
 
 -- MV-7  Lab result trends per patient per test
@@ -1924,3 +1983,12 @@ BEGIN
     GROUP BY p.patient_id, p.trial_patient_id;
 END;
 $$ LANGUAGE plpgsql;
+
+CREATE TABLE IF NOT EXISTS public.system_settings (
+    key VARCHAR PRIMARY KEY, 
+    value JSONB,
+    updated_by INTEGER REFERENCES public.users(user_id) ON DELETE SET NULL,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE public.system_settings IS 'Global system configuration parameters';

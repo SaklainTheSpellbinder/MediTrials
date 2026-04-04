@@ -25,7 +25,7 @@ export const LabResults: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [activeTab, setActiveTab] = useState<'All' | 'Pending' | 'Critical'>('All');
 
-    // Modal state
+    
     const [selectedLab, setSelectedLab] = useState<LabResult | null>(null);
     const [isSigning, setIsSigning] = useState(false);
 

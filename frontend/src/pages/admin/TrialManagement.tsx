@@ -6,7 +6,6 @@ import '../Dashboard.css';
 import '../admin/AdminDashboard.css';
 import { adminAPI } from '../../services/api';
 
-
 export interface AdminTrial {
     trial_id: number;
     trial_nct_id: string;
@@ -20,16 +19,18 @@ export interface AdminTrial {
     site_count: number | string;
 }
 
-
-const STATUS_OPTS = ['', 'Planning', 'Recruiting', 'Active', 'Paused', 'Completed', 'Archived'];
+// 1. Updated to match your database CHECK constraint exactly
+const STATUS_OPTS = ['', 'Design', 'Recruiting', 'Active', 'Completed', 'Suspended', 'Terminated'];
 const PHASE_OPTS = ['', 'Phase I', 'Phase II', 'Phase III', 'Phase IV', 'N/A'];
+
+// Updated badge colors to reflect new statuses
 const statusColor: Record<string, string> = { 
-    Active: 'admin-badge-green', 
+    Design: 'admin-badge-purple',
     Recruiting: 'admin-badge-blue', 
+    Active: 'admin-badge-green', 
     Completed: 'admin-badge-gray', 
-    Paused: 'admin-badge-amber', 
-    Archived: 'admin-badge-red', 
-    Planning: 'admin-badge-purple' 
+    Suspended: 'admin-badge-amber', 
+    Terminated: 'admin-badge-red', 
 };
 
 export const TrialManagement: React.FC = () => {
@@ -94,26 +95,46 @@ export const TrialManagement: React.FC = () => {
                             <tbody>
                                 {filtered.length === 0 ? (
                                     <tr><td colSpan={10} style={{ textAlign: 'center', padding: 20, color: '#9CA3AF' }}>No trials found</td></tr>
-                                ) : filtered.map((t) => (
-                                    <tr key={t.trial_id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/admin/trials/${t.trial_id}`)}>
-                                        <td style={{ padding: '9px 10px', fontFamily: 'monospace', fontSize: 11, color: '#6B7280' }}>{t.trial_nct_id}</td>
-                                        <td style={{ padding: '9px 10px', fontWeight: 600, color: '#111827', maxWidth: 200 }}>{t.trial_title}</td>
-                                        <td style={{ padding: '9px 10px' }}><span className="admin-badge admin-badge-gray">{t.trial_phase}</span></td>
-                                        <td style={{ padding: '9px 10px', color: '#6B7280', fontSize: 12 }}>{t.therapeutic_area}</td>
-                                        <td style={{ padding: '9px 10px' }}><span className={`admin-badge ${statusColor[t.trial_status] ?? 'admin-badge-gray'}`}>{t.trial_status}</span></td>
-                                        <td style={{ padding: '9px 10px', fontSize: 12, color: '#6B7280' }}>{t.start_date?.split('T')[0]}</td>
-                                        <td style={{ padding: '9px 10px' }}>{t.target_enrollment}</td>
-                                        <td style={{ padding: '9px 10px' }}>{parseInt(String(t.current_enrollment ?? 0))}</td>
-                                        <td style={{ padding: '9px 10px' }}>{t.site_count}</td>
-                                        <td style={{ padding: '9px 10px' }} onClick={e => e.stopPropagation()}>
-                                            <div style={{ display: 'flex', gap: 6 }}>
-                                                <Link to={`/admin/trials/${t.trial_id}/edit`} className="admin-act-btn" style={{ textDecoration: 'none' }}><Edit2 size={12} /></Link>
-                                                <button onClick={() => { if (window.confirm(`Archive "${t.trial_title}"?`)) archive.mutate(t.trial_id); }}
-                                                    className="admin-act-btn" style={{ color: '#DC2626' }}><Archive size={12} /></button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
+                                ) : filtered.map((t) => {
+                                    const isSuspended = t.trial_status === 'Suspended';
+                                    
+                                    return (
+                                        <tr key={t.trial_id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/admin/trials/${t.trial_id}`)}>
+                                            <td style={{ padding: '9px 10px', fontFamily: 'monospace', fontSize: 11, color: '#6B7280' }}>{t.trial_nct_id}</td>
+                                            <td style={{ padding: '9px 10px', fontWeight: 600, color: '#111827', maxWidth: 200 }}>{t.trial_title}</td>
+                                            <td style={{ padding: '9px 10px' }}><span className="admin-badge admin-badge-gray">{t.trial_phase}</span></td>
+                                            <td style={{ padding: '9px 10px', color: '#6B7280', fontSize: 12 }}>{t.therapeutic_area}</td>
+                                            <td style={{ padding: '9px 10px' }}><span className={`admin-badge ${statusColor[t.trial_status] ?? 'admin-badge-gray'}`}>{t.trial_status}</span></td>
+                                            <td style={{ padding: '9px 10px', fontSize: 12, color: '#6B7280' }}>{t.start_date?.split('T')[0]}</td>
+                                            <td style={{ padding: '9px 10px' }}>{t.target_enrollment}</td>
+                                            <td style={{ padding: '9px 10px' }}>{parseInt(String(t.current_enrollment ?? 0))}</td>
+                                            <td style={{ padding: '9px 10px' }}>{t.site_count}</td>
+                                            <td style={{ padding: '9px 10px' }} onClick={e => e.stopPropagation()}>
+                                                <div style={{ display: 'flex', gap: 6 }}>
+                                                    {/* 2. Conditional rendering to block edits/deletes if suspended */}
+                                                    {isSuspended ? (
+                                                        <>
+                                                            <span className="admin-act-btn" style={{ color: '#D1D5DB', cursor: 'not-allowed' }} title="Suspended trials cannot be edited"><Edit2 size={12} /></span>
+                                                            <span className="admin-act-btn" style={{ color: '#D1D5DB', cursor: 'not-allowed' }} title="Trial is already suspended"><Archive size={12} /></span>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Link to={`/admin/trials/${t.trial_id}/edit`} className="admin-act-btn" style={{ textDecoration: 'none' }}><Edit2 size={12} /></Link>
+                                                            <button 
+                                                                onClick={() => { if (window.confirm(`Suspend "${t.trial_title}"? This cannot be undone from this menu.`)) archive.mutate(t.trial_id); }}
+                                                                className="admin-act-btn" 
+                                                                style={{ color: '#DC2626' }}
+                                                                title="Suspend Trial"
+                                                            >
+                                                                <Archive size={12} />
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>

@@ -1,4 +1,6 @@
--- Regular View: Patient Timeline
+
+DROP VIEW IF EXISTS vw_patient_timeline;
+
 CREATE OR REPLACE VIEW vw_patient_timeline AS
 SELECT 
     p.patient_id,
@@ -6,7 +8,7 @@ SELECT
     p.enrollment_date as event_date,
     'Enrollment' as event_type,
     'Patient enrolled in study' as description,
-    NULL::INTEGER as visit_id,
+    NULL::INTEGER as visit_instance_id,  
     NULL::NUMERIC as result_value
 FROM patients p
 WHERE p.enrollment_date IS NOT NULL
@@ -52,6 +54,4 @@ SELECT
 FROM patients p
 JOIN lab_results lr ON p.patient_id = lr.patient_id
 JOIN laboratory_tests lt ON lr.test_id = lt.test_id
-WHERE lr.critical_result_flag = 'Y'
-
-ORDER BY patient_id, event_date;
+WHERE lr.critical_result_flag = 'Y';

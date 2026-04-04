@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
     ArrowLeft, CheckCircle, AlertCircle, ClipboardList,
     RefreshCw, AlertTriangle, Send, Save, Heart, Activity
@@ -76,68 +77,92 @@ function evalCriterion(logic: string | null, form: ScreeningFormData, patientAge
 export const Screening: React.FC = () => {
     const navigate = useNavigate();
     const { user } = useAuth();
+    const qc = useQueryClient();
     const { patient_id } = useParams<{ patient_id: string }>();
+    const pid = parseInt(patient_id || '0');
 
-    const [criteria, setCriteria] = useState<CriterionDef[]>([]);
+    // Local Form State
     const [form, setForm] = useState<ScreeningFormData>(INITIAL_FORM);
     const [patientAge, setPatientAge] = useState<number | null>(null);
-    const [loading, setLoading] = useState(true);
-
     const [manualOverride, setManualOverride] = useState(false);
     const [overrideReason, setOverrideReason] = useState('');
-    const [submitting, setSubmitting] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-    useEffect(() => { if (patient_id) loadData(); }, [patient_id]);
+    // ─── Queries ────────────────────────────────────────────────────────
+    const { data: criteria = [], isLoading: criteriaLoading } = useQuery({
+        queryKey: ['eligibility-criteria', user?.site_id],
+        queryFn: async () => {
+            const data = await screeningAPI.getCriteria(user!.site_id!);
+            return data.criteria || [];
+        },
+        enabled: !!user?.site_id,
+    });
 
-    const loadData = async () => {
-        setLoading(true);
-        try {
-            // Load criteria
-            if (user?.site_id) {
-                const cData = await screeningAPI.getCriteria(user.site_id);
-                setCriteria(cData.criteria || []);
+    const { data: draftData, isLoading: draftLoading } = useQuery({
+        queryKey: ['screening-draft', pid],
+        queryFn: () => screeningAPI.getDraft(pid),
+        enabled: !!pid,
+        retry: false // It's okay if it fails (means no draft exists yet)
+    });
+
+    // Populate local form state when draft data loads
+    useEffect(() => {
+        const s = draftData?.screening;
+        if (s) {
+            if (s.date_of_birth) {
+                const dob = new Date(s.date_of_birth);
+                const today = new Date();
+                let age = today.getFullYear() - dob.getFullYear();
+                const m = today.getMonth() - dob.getMonth();
+                if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+                setPatientAge(age);
             }
-            // Load existing draft
-            try {
-                const draftData = await screeningAPI.getDraft(parseInt(patient_id!));
-                const s = draftData.screening;
-                if (s) {
-                    if (s.date_of_birth) {
-                        const dob = new Date(s.date_of_birth);
-                        const today = new Date();
-                        let age = today.getFullYear() - dob.getFullYear();
-                        const m = today.getMonth() - dob.getMonth();
-                        if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
-                        setPatientAge(age);
-                    }
-                    // Restore existing screening_data if present
-                    if (s.screening_data && Object.keys(s.screening_data).length > 0) {
-                        setForm(prev => ({ ...prev, ...s.screening_data }));
-                    }
-                    if (s.manual_override) setManualOverride(true);
-                    if (s.parsed_justification) setOverrideReason(s.parsed_justification);
-                }
-            } catch { /* no existing draft */ }
-        } catch (err) {
-            console.error('Failed to load criteria:', err);
-        } finally {
-            setLoading(false);
+            if (s.screening_data && Object.keys(s.screening_data).length > 0) {
+                setForm(prev => ({ ...prev, ...s.screening_data }));
+            }
+            if (s.manual_override) setManualOverride(true);
+            if (s.parsed_justification) setOverrideReason(s.parsed_justification);
         }
-    };
+    }, [draftData]);
 
-    // ─── Evaluate all criteria against current form data ──────────
-    const evaluated = criteria.map(c => {
+    // const saveDraftMut = useMutation({
+    //     mutationFn: (payload: any) => screeningAPI.saveChecklistDraft(pid, payload),
+    //     onSuccess: () => {
+    //         setSuccessMsg('Draft saved successfully.');
+    //         setErrorMsg(null);
+    //         qc.invalidateQueries({ queryKey: ['screening-draft', pid] });
+    //     },
+    //     onError: (err: any) => {
+    //         setErrorMsg(err?.response?.data?.error || 'Failed to save draft.');
+    //         setSuccessMsg(null);
+    //     }
+    // });
+
+    const submitPIMut = useMutation({
+        mutationFn: (payload: any) => screeningAPI.submitForPiReview(pid, payload),
+        onSuccess: () => {
+            setSuccessMsg('Submitted to PI for review!');
+            setErrorMsg(null);
+            qc.invalidateQueries({ queryKey: ['pending-pi-review'] });
+            setTimeout(() => navigate('/patients'), 1500); 
+        },
+        onError: (err: any) => {
+            setErrorMsg(err?.response?.data?.error || 'Submission failed.');
+            setSuccessMsg(null);
+        }
+    });
+
+    //Evaluate all criteria against current form data
+    const evaluated = criteria.map((c: CriterionDef) => {
         const pass = evalCriterion(c.criterion_logic, form, patientAge);
-        // For exclusion criteria, the criterion "passes" if condition is NOT present
         return { ...c, pass };
     });
 
-    const failures = evaluated.filter(c => c.pass === false);
-    const mandatoryFailures = failures.filter(c => c.is_mandatory);
-    const totalEvaluated = evaluated.filter(c => c.pass !== null).length;
-    const totalPassed = evaluated.filter(c => c.pass === true).length;
+    const failures = evaluated.filter((c: any) => c.pass === false);
+    const mandatoryFailures = failures.filter((c: any) => c.is_mandatory);
+    const totalEvaluated = evaluated.filter((c: any) => c.pass !== null).length;
+    const totalPassed = evaluated.filter((c: any) => c.pass === true).length;
     const score = totalEvaluated > 0 ? Math.round((totalPassed / totalEvaluated) * 100) : 100;
 
     const verdict: 'ELIGIBLE' | 'INELIGIBLE' | 'PENDING' =
@@ -154,34 +179,12 @@ export const Screening: React.FC = () => {
         manual_override: manualOverride,
         override_reason: overrideReason,
         screening_data: form,
-        failures: failures.map(f => ({
+        failures: failures.map((f: any) => ({
             criterion_id: f.criterion_id,
             failure_reason: f.criterion_text,
             override_approved: manualOverride,
         })),
     });
-
-    const handleSaveDraft = async () => {
-        setError(null); setSuccessMsg(null); setSubmitting(true);
-        try {
-            await screeningAPI.saveChecklistDraft(parseInt(patient_id!), buildPayload());
-            setSuccessMsg('Draft saved.');
-        } catch (err: any) {
-            setError(err?.response?.data?.error || 'Failed to save draft.');
-        } finally { setSubmitting(false); }
-    };
-
-    const handleSubmitToPI = async () => {
-        if (!canSubmit) return;
-        setError(null); setSuccessMsg(null); setSubmitting(true);
-        try {
-            await screeningAPI.submitForPiReview(parseInt(patient_id!), buildPayload());
-            setSuccessMsg('Submitted to PI for review!');
-            setTimeout(() => navigate('/patients/screening'), 1500);
-        } catch (err: any) {
-            setError(err?.response?.data?.error || 'Submission failed.');
-        } finally { setSubmitting(false); }
-    };
 
     // ─── Style helpers ─────────────────────────────────────────────
     const verdictClass = verdict === 'ELIGIBLE' ? 'verdict-eligible'
@@ -189,8 +192,11 @@ export const Screening: React.FC = () => {
     const scoreBanner = verdict === 'ELIGIBLE' ? 'score-eligible'
         : verdict === 'INELIGIBLE' ? 'score-ineligible' : 'score-pending';
 
-    const updateField = (key: keyof ScreeningFormData, value: any) =>
+    const updateField = (key: keyof ScreeningFormData, value: any) => {
         setForm(prev => ({ ...prev, [key]: value }));
+        // Clear success messages on edit
+        if (successMsg) setSuccessMsg(null);
+    };
 
     if (!patient_id) return <div className="screening-container"><div className="card p-8 text-center text-red-500">No patient selected.</div></div>;
 
@@ -205,7 +211,7 @@ export const Screening: React.FC = () => {
                 </div>
             </div>
 
-            {loading ? (
+            {criteriaLoading || draftLoading ? (
                 <div className="screening-card">
                     <div className="screening-card-body" style={{ padding: 48, textAlign: 'center' }}>
                         <RefreshCw size={28} className="animate-spin" style={{ display: 'block', margin: '0 auto 12px' }} />
@@ -215,7 +221,7 @@ export const Screening: React.FC = () => {
             ) : (
                 <>
                     {/* Alerts */}
-                    {error && <div className="screening-error"><AlertCircle size={18} /><span>{error}</span></div>}
+                    {errorMsg && <div className="screening-error"><AlertCircle size={18} /><span>{errorMsg}</span></div>}
                     {successMsg && <div style={{ padding: '10px 14px', background: '#f0fdf4', color: '#166534', borderRadius: 8, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem' }}><CheckCircle size={16} />{successMsg}</div>}
 
                     {/* ── SECTION 1: Vitals ─────────────────────────────────── */}
@@ -351,7 +357,7 @@ export const Screening: React.FC = () => {
                             </div>
 
                             {/* Criteria List */}
-                            {evaluated.map(c => {
+                            {evaluated.map((c: any) => {
                                 const passStatus = c.pass === null ? 'pending' : c.pass ? 'pass' : 'fail';
                                 const icon = c.pass === true ? '✓' : c.pass === false ? '✗' : '—';
                                 const bgColor = passStatus === 'pass' ? '#f0fdf4' : passStatus === 'fail' ? '#fef2f2' : '#f9fafb';
@@ -411,11 +417,11 @@ export const Screening: React.FC = () => {
                                 <button className="btn-secondary" onClick={() => navigate('/patients')}>
                                     <ArrowLeft size={15} /> Cancel
                                 </button>
-                                <button className="btn-secondary" disabled={submitting || criteria.length === 0} onClick={handleSaveDraft}>
-                                    <Save size={14} /> {submitting ? 'Saving…' : 'Save Draft'}
-                                </button>
-                                <button className="btn-primary" disabled={!canSubmit || submitting} onClick={handleSubmitToPI}>
-                                    <Send size={14} /> {submitting ? 'Submitting…' : 'Submit to PI'}
+                                {/* <button className="btn-secondary" disabled={saveDraftMut.isPending || criteria.length === 0} onClick={() => saveDraftMut.mutate(buildPayload())}>
+                                    <Save size={14} /> {saveDraftMut.isPending ? 'Saving…' : 'Save Draft'}
+                                </button> */}
+                                <button className="btn-primary" disabled={!canSubmit || submitPIMut.isPending} onClick={() => submitPIMut.mutate(buildPayload())}>
+                                    <Send size={14} /> {submitPIMut.isPending ? 'Submitting…' : 'Submit to PI'}
                                 </button>
                             </div>
                         </div>

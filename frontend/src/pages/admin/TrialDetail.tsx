@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { Edit2, Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Edit2 } from 'lucide-react';
 
-// 1. Import your central API
 import { adminAPI } from '../../services/api';
 import '../Dashboard.css';
-import '../admin/AdminDashboard.css';
+import './AdminDashboard.css';
 
 const Tab: React.FC<{ label: string; active: boolean; onClick: () => void }> = ({ label, active, onClick }) => (
     <button onClick={onClick} style={{
@@ -42,13 +41,11 @@ export const TrialDetail: React.FC = () => {
     const qc = useQueryClient();
     const [tab, setTab] = useState(0);
 
-    // 2. Use your API method for fetching the data
     const { data, isLoading } = useQuery({
         queryKey: ['admin', 'trial', trialId],
         queryFn: () => adminAPI.getTrialFull(trialId as string),
     });
 
-    // 3. Simplified mutation helper using your API method
     const mut = (path: string) => useMutation({
         mutationFn: (body: any) => adminAPI.addTrialEntity(trialId as string, path, body),
         onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'trial', trialId] }),
@@ -65,41 +62,73 @@ export const TrialDetail: React.FC = () => {
     if (!data) return <div className="dashboard-container"><div className="sm-error">Trial not found.</div></div>;
 
     const { trial, sites, protocols, arms, eligibility, visits, ecrfDefs, labTests } = data;
-    const statusColor: Record<string, string> = { Active: 'admin-badge-green', Recruiting: 'admin-badge-blue', Completed: 'admin-badge-gray', Paused: 'admin-badge-amber', Archived: 'admin-badge-red', Planning: 'admin-badge-purple' };
+    
+    const statusColor: Record<string, string> = { 
+        Active: 'admin-badge-green', 
+        Recruiting: 'admin-badge-blue', 
+        Completed: 'admin-badge-gray', 
+        Suspended: 'admin-badge-amber', 
+        Terminated: 'admin-badge-red', 
+        Design: 'admin-badge-purple' 
+    };
 
     return (
         <div className="dashboard-container">
-            <div className="section-header">
-                <div>
+            {/* HEADER SECTION */}
+            <div className="section-header" style={{ marginBottom: 20 }}>
+                <div style={{ width: '100%' }}>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
-                        <span style={{ fontFamily: 'monospace', color: '#6B7280', fontSize: 12 }}>{trial.trial_nct_id}</span>
-                        <span className="admin-badge admin-badge-gray">{trial.trial_phase}</span>
-                        <span className={`admin-badge ${statusColor[trial.trial_status] ?? 'admin-badge-gray'}`}>{trial.trial_status}</span>
+                        <span style={{ fontFamily: 'monospace', color: '#6B7280', fontSize: 12 }}>
+                            {trial?.trial_nct_id} 
+                        </span>
+                        <span className="admin-badge admin-badge-gray">
+                            {trial?.trial_phase}
+                        </span>
+                        <span className={`admin-badge ${statusColor[trial?.trial_status || ''] ?? 'admin-badge-gray'}`}>
+                            {trial?.trial_status}
+                        </span>
                     </div>
-                    <h1 className="page-title" style={{ margin: 0 }}>{trial.trial_title}</h1>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <h1 className="page-title" style={{ margin: 0 }}>
+                            {trial?.trial_title}
+                        </h1>
+                        <button 
+                            onClick={() => navigate(`/admin/trials/${trialId}/edit`)}
+                            className="btn-secondary"
+                            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}
+                        >
+                            <Edit2 size={14} /> Edit Trial
+                        </button>
+                    </div>
                 </div>
-                <Link to={`/admin/trials/${trialId}/edit`} className="btn-secondary"><Edit2 size={14} /> Edit Trial</Link>
             </div>
 
-            {/* Tabs */}
-            <div style={{ borderBottom: '1px solid #E5E7EB', marginBottom: 16, display: 'flex', gap: 0, overflowX: 'auto' }}>
-                {TABS.map((t, i) => <Tab key={t} label={t} active={tab === i} onClick={() => setTab(i)} />)}
+            {/* TAB NAVIGATION BAR */}
+            <div style={{ display: 'flex', borderBottom: '1px solid #E5E7EB', marginBottom: 20, overflowX: 'auto' }}>
+                {TABS.map((label, i) => (
+                    <Tab key={label} label={label} active={tab === i} onClick={() => setTab(i)} />
+                ))}
             </div>
+            
+            {/* TAB CONTENT */}
 
             {/* Tab 0 — Overview */}
             {tab === 0 && (
                 <div className="card">
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 30px' }}>
                         {[
-                            ['NCT ID', trial.trial_nct_id],
-                            ['Phase', trial.trial_phase],
-                            ['Therapeutic Area', trial.therapeutic_area],
-                            ['Status', trial.trial_status],
-                            ['Start Date', trial.start_date?.split('T')[0]],
-                            ['Est. Completion', trial.estimated_completion_date?.split('T')[0]],
-                            ['Target Enrollment', trial.target_enrollment],
+                            ['NCT ID', trial?.trial_nct_id],
+                            ['Phase', trial?.trial_phase],
+                            ['Therapeutic Area', trial?.therapeutic_area],
+                            ['Status', trial?.trial_status],
+                            ['Start Date', trial?.start_date?.split('T')[0]],
+                            ['Est. Completion', trial?.estimated_completion_date?.split('T')[0]],
+                            ['Target Enrollment', trial?.target_enrollment],
                         ].map(([k, v]) => (
-                            <div key={k as string}><label style={{ fontSize: 11, color: '#9CA3AF', textTransform: 'uppercase' }}>{k}</label><div style={{ fontWeight: 600, color: '#111827', marginTop: 2 }}>{v ?? '—'}</div></div>
+                            <div key={k as string}>
+                                <label style={{ fontSize: 11, color: '#9CA3AF', textTransform: 'uppercase' }}>{k}</label>
+                                <div style={{ fontWeight: 600, color: '#111827', marginTop: 2 }}>{v ?? '—'}</div>
+                            </div>
                         ))}
                     </div>
                 </div>
@@ -133,13 +162,13 @@ export const TrialDetail: React.FC = () => {
             {tab === 2 && (
                 <div className="card">
                     <div style={{ fontSize: 12, color: '#6B7280', background: '#FEF3C7', padding: '8px 12px', borderRadius: 6, marginBottom: 12 }}>
-                        ℹ️ Uploading a new version automatically invalidates the previous active version (via database trigger — no manual action needed).
+                        ℹ️ Uploading a new version automatically invalidates the previous active version.
                     </div>
                     {protocols?.map((p: any) => (
                         <div key={p.protocol_id} style={{ padding: '10px 0', borderBottom: '1px solid #F3F4F6', display: 'flex', gap: 16, alignItems: 'center' }}>
                             <span style={{ fontWeight: 700 }}>v{p.version_number}</span>
                             {p.amendment_number && <span style={{ color: '#6B7280', fontSize: 12 }}>Amend. {p.amendment_number}</span>}
-                            <span style={{ color: '#6B7280', fontSize: 12 }}>Effective: {p.effective_date?.split('T')[0]}</span>
+                            <span style={{ color: '#6B7280', fontSize: 12 }}>Effective: {p.valid_from?.split('T')[0]}</span>
                             {!p.valid_to && <span className="admin-badge admin-badge-green" style={{ marginLeft: 'auto' }}>Current</span>}
                             {p.valid_to && <span style={{ color: '#9CA3AF', fontSize: 11, marginLeft: 'auto' }}>Superseded {p.valid_to?.split('T')[0]}</span>}
                         </div>
@@ -173,7 +202,6 @@ export const TrialDetail: React.FC = () => {
                                 <div key={e.criterion_id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '6px 0', borderBottom: '1px solid #F9FAFB' }}>
                                     <span style={{ color: '#9CA3AF', fontSize: 12, minWidth: 24 }}>{i + 1}.</span>
                                     <span style={{ fontSize: 13, flex: 1 }}>{e.criterion_text}</span>
-                                    {/* 4. Implement delete mutation via adminAPI */}
                                     <button 
                                         onClick={() => adminAPI.deleteTrialEntity(trialId as string, 'eligibility', e.criterion_id).then(() => qc.invalidateQueries({ queryKey: ['admin', 'trial', trialId] }))}
                                         style={{ background: 'none', border: 'none', color: '#DC2626', cursor: 'pointer' }}
@@ -184,8 +212,8 @@ export const TrialDetail: React.FC = () => {
                             ))}
                         </div>
                     ))}
-                    <InlineForm fields={[{ name: 'criterion_text', label: 'Criterion Text' }, { name: 'criterion_type', label: 'Type (Inclusion/Exclusion)' }, { name: 'criterion_order', label: 'Order', type: 'number' }]}
-                        onSubmit={v => addElig.mutate({ ...v, criterion_order: Number(v.criterion_order) })} loading={addElig.isPending} />
+                    <InlineForm fields={[{ name: 'criterion_text', label: 'Criterion Text' }, { name: 'criterion_type', label: 'Type (Inclusion/Exclusion)' }]}
+                        onSubmit={v => addElig.mutate(v)} loading={addElig.isPending} />
                 </div>
             )}
 
@@ -193,13 +221,13 @@ export const TrialDetail: React.FC = () => {
             {tab === 5 && (
                 <div className="card">
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                        <thead><tr>{['Visit', 'Day', 'Window (±)', 'Required'].map(h => <th key={h} style={{ textAlign: 'left', padding: '7px 10px', fontSize: 11, color: '#9CA3AF', textTransform: 'uppercase', borderBottom: '1px solid #F3F4F6' }}>{h}</th>)}</tr></thead>
+                        <thead><tr>{['Visit', 'Day Offset', 'Window (±)'].map(h => <th key={h} style={{ textAlign: 'left', padding: '7px 10px', fontSize: 11, color: '#9CA3AF', textTransform: 'uppercase', borderBottom: '1px solid #F3F4F6' }}>{h}</th>)}</tr></thead>
                         <tbody>
-                            {visits?.map((v: any) => <tr key={v.visit_id}><td style={{ padding: '8px 10px', fontWeight: 600 }}>{v.visit_name}</td><td style={{ padding: '8px 10px' }}>Day {v.visit_day}</td><td style={{ padding: '8px 10px', color: '#6B7280' }}>-{v.window_before_days}/+{v.window_after_days}</td><td style={{ padding: '8px 10px' }}>{v.is_required ? '✓' : '—'}</td></tr>)}
+                            {visits?.map((v: any) => <tr key={v.visit_id}><td style={{ padding: '8px 10px', fontWeight: 600 }}>{v.visit_name}</td><td style={{ padding: '8px 10px' }}>Day {v.day_offset}</td><td style={{ padding: '8px 10px', color: '#6B7280' }}>-{v.visit_window_before_days}/+{v.visit_window_after_days}</td></tr>)}
                         </tbody>
                     </table>
-                    <InlineForm fields={[{ name: 'visit_name', label: 'Name' }, { name: 'visit_day', label: 'Day', type: 'number' }, { name: 'window_before_days', label: 'Before', type: 'number' }, { name: 'window_after_days', label: 'After', type: 'number' }]}
-                        onSubmit={v => addVisit.mutate({ ...v, is_required: true, visit_day: Number(v.visit_day), window_before_days: Number(v.window_before_days), window_after_days: Number(v.window_after_days) })} loading={addVisit.isPending} />
+                    <InlineForm fields={[{ name: 'visit_name', label: 'Name' }, { name: 'visit_day', label: 'Day Offset', type: 'number' }, { name: 'window_before_days', label: 'Before', type: 'number' }, { name: 'window_after_days', label: 'After', type: 'number' }]}
+                        onSubmit={v => addVisit.mutate({ ...v, visit_day: Number(v.visit_day), window_before_days: Number(v.window_before_days), window_after_days: Number(v.window_after_days) })} loading={addVisit.isPending} />
                 </div>
             )}
 
@@ -225,7 +253,7 @@ export const TrialDetail: React.FC = () => {
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                         <thead><tr>{['Test', 'LOINC', 'Unit', 'Reference Range', 'Critical Range'].map(h => <th key={h} style={{ textAlign: 'left', padding: '7px 10px', fontSize: 11, color: '#9CA3AF', textTransform: 'uppercase', borderBottom: '1px solid #F3F4F6' }}>{h}</th>)}</tr></thead>
                         <tbody>
-                            {labTests?.map((t: any) => <tr key={t.test_id}><td style={{ padding: '8px 10px', fontWeight: 600 }}>{t.test_name}</td><td style={{ padding: '8px 10px', fontFamily: 'monospace', fontSize: 11, color: '#6B7280' }}>{t.test_code_loinc}</td><td style={{ padding: '8px 10px' }}>{t.unit_of_measure}</td><td style={{ padding: '8px 10px' }}>{t.reference_low} – {t.reference_high}</td><td style={{ padding: '8px 10px', color: '#DC2626' }}>{t.critical_low_value} – {t.critical_high_value}</td></tr>)}
+                            {labTests?.map((t: any) => <tr key={t.test_id}><td style={{ padding: '8px 10px', fontWeight: 600 }}>{t.test_name}</td><td style={{ padding: '8px 10px', fontFamily: 'monospace', fontSize: 11, color: '#6B7280' }}>{t.test_code_loinc}</td><td style={{ padding: '8px 10px' }}>{t.unit_of_measure}</td><td style={{ padding: '8px 10px' }}>{t.reference_ranges?.low} – {t.reference_ranges?.high}</td><td style={{ padding: '8px 10px', color: '#DC2626' }}>{t.critical_low_value} – {t.critical_high_value}</td></tr>)}
                         </tbody>
                     </table>
                     <InlineForm fields={[{ name: 'test_name', label: 'Test Name' }, { name: 'test_code_loinc', label: 'LOINC' }, { name: 'unit_of_measure', label: 'Unit' }, { name: 'reference_low', label: 'Ref Low', type: 'number' }, { name: 'reference_high', label: 'Ref High', type: 'number' }]}

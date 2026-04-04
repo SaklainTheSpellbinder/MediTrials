@@ -11,7 +11,7 @@ import '../Dashboard.css';
 import './AdminDashboard.css';
 import { adminAPI } from '../../services/api';
 
-// --- Type Interfaces ---
+
 export interface TrialPortfolioItem {
     trial_id: number;
     trial_nct_id: string;
@@ -64,7 +64,6 @@ export interface AdminDashboardData {
     activeLocks: number;
     dataQualitySummary: DataQualitySummary[];
 }
-// ------------------------
 
 const statusColor: Record<string, string> = {
     Active: 'admin-badge-green', Recruiting: 'admin-badge-blue',

@@ -6,7 +6,7 @@ import '../Dashboard.css';
 import '../admin/AdminDashboard.css';
 import { adminAPI } from '../../services/api'; // Centralized API import
 
-const ROLES = ['Principal_Investigator', 'Study_Coordinator', 'Safety_Monitor', 'Data_Manager', 'Statistician', 'System_Admin'];
+const ROLES = ['Principal_Investigator', 'Study_Coordinator', 'Safety_Monitor', 'Data_Manager', 'Statistician'];
 const ROLE_NEEDS_SITE = (r: string) => ['Principal_Investigator', 'Study_Coordinator'].includes(r);
 
 const empty = { username: '', email: '', role: 'Study_Coordinator', site_id: '', password: '', mfa_enabled: false, is_active: true };
@@ -148,9 +148,9 @@ export const UserManagement: React.FC = () => {
                                     <tr><td colSpan={9} style={{ textAlign: 'center', padding: 20, color: '#9CA3AF' }}>No users found</td></tr>
                                 ) : filtered.map((u: any) => (
                                     <tr key={u.user_id}>
-                                        <td style={{ padding: '9px 10px', fontWeight: 700 }}>
-                                            <button onClick={() => navigate(`/admin/users/${u.user_id}`)} style={{ background: 'none', border: 'none', fontWeight: 700, color: '#3B82F6', cursor: 'pointer', fontSize: 13 }}>{u.username}</button>
-                                        </td>
+                                        <td style={{ padding: '9px 10px', fontWeight: 700, fontSize: 13, color: '#111827' }}>
+    {u.username}
+</td>
                                         <td style={{ padding: '9px 10px', color: '#6B7280', fontSize: 12 }}>{u.email}</td>
                                         <td style={{ padding: '9px 10px' }}><span className="admin-badge admin-badge-gray" style={{ fontSize: 10 }}>{u.role?.replace(/_/g, ' ')}</span></td>
                                         <td style={{ padding: '9px 10px', fontSize: 12, color: '#6B7280' }}>{u.site_name ?? '—'}</td>
@@ -164,11 +164,13 @@ export const UserManagement: React.FC = () => {
                                         <td style={{ padding: '9px 10px', fontSize: 11, color: '#6B7280' }}>{u.last_login ? new Date(u.last_login).toLocaleDateString() : 'Never'}</td>
                                         <td style={{ padding: '9px 10px', textAlign: 'center', color: u.failed_login_attempts > 0 ? '#DC2626' : '#9CA3AF' }}>{u.failed_login_attempts}</td>
                                         <td style={{ padding: '9px 10px' }}>
-                                            <div style={{ display: 'flex', gap: 4 }}>
-                                                <button onClick={() => setSlideOver(u)} className="admin-act-btn" style={{ fontSize: 11 }}>Edit</button>
-                                                <button onClick={() => setResetModal({ userId: u.user_id, username: u.username })} className="admin-act-btn" style={{ fontSize: 11, color: '#D97706' }}>Reset Pwd</button>
-                                            </div>
-                                        </td>
+    <div style={{ display: 'flex', gap: 4 }}>
+        <button onClick={() => setSlideOver(u)} className="admin-act-btn" style={{ fontSize: 11 }}>Edit</button>
+        <button onClick={() => setResetModal({ userId: u.user_id, username: u.username })} className="admin-act-btn" style={{ fontSize: 11, color: '#D97706' }}>Reset Pwd</button>
+        {/* New Logs Button */}
+        <button onClick={() => navigate(`/admin/users/${u.user_id}`)} className="admin-act-btn" style={{ fontSize: 11, color: '#10B981' }}>Logs</button>
+    </div>
+</td>
                                     </tr>
                                 ))}
                             </tbody>

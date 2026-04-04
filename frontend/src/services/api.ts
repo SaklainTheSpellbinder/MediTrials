@@ -30,19 +30,21 @@ API.interceptors.response.use(
 // Patient API functions
 export const patientAPI = {
   //get all patients of users site id
+  //patientRoutes.ts
   getAll: async () => {
-    // Backend automatically filters by authenticated user's site_id from JWT
     const response = await API.get(`/patients`);
     return response.data;
   },
 
   // Get single patient
-  getById: async (id: number) => {
-    const response = await API.get(`/patients/${id}`);
-    return response.data;
-  },
+  //this is not used and also no route like this in backend either
+  // getById: async (id: number) => {
+  //   const response = await API.get(`/patients/${id}`);
+  //   return response.data;
+  // },
 
-  // Create new patient - backend auto-includes user's site_id from JWT
+  // Create new patient
+  //patientRoutes.ts
   create: async (patientData: any) => {
     const response = await API.post('/patients', patientData);
     return response.data;
@@ -60,7 +62,7 @@ export const patientAPI = {
     return response.data;
   },
 
-  // Record informed consent (coordinator action)
+  // Record informed consent (coordinator action) patientRoutes.ts 
   recordConsent: async (patientId: number, payload: any) => {
     const response = await API.post(`/patients/${patientId}/record-consent`, payload);
     return response.data;
@@ -69,26 +71,33 @@ export const patientAPI = {
 
 export const patientProfileAPI = {
   //this calls from patientProfileRoutes
+  //called from PatientProfile.tsx
   getHeader: async (patientId: number) => {
     const response = await API.get(`/patients/${patientId}/profile`);
     return response.data;
   },
+  //called from PatientProfile.tsx
   getTimeline: async (patientId: number) => {
     const response = await API.get(`/patients/${patientId}/timeline`);
     return response.data;
   },
+  
+  //called from PatientProfile.tsx
   getClinical: async (patientId: number) => {
     const response = await API.get(`/patients/${patientId}/clinical`);
     return response.data;
   },
+  //called from PatientProfile.tsx
   getSafety: async (patientId: number) => {
     const response = await API.get(`/patients/${patientId}/safety`);
     return response.data;
   },
+  //called from PatientProfile.tsx
   getLabs: async (patientId: number) => {
     const response = await API.get(`/patients/${patientId}/labs`);
     return response.data;
   },
+  //called from PatientProfile.tsx
   getDocuments: async (patientId: number) => {
     const response = await API.get(`/patients/${patientId}/documents`);
     return response.data;
@@ -132,10 +141,10 @@ export const screeningAPI = {
   },
 
   saveChecklistDraft: async (patientId: number, payload: any) => {
-    const response = await API.put(`/screening/checklist/${patientId}`, payload);
+    const response = await API.put(`/screening/checklist/${patientId}`, payload); //this one is in screeningRoutes
     return response.data;
   },
-
+  //called from screening.tsx
   submitForPiReview: async (patientId: number, payload: any) => {
     const response = await API.post(`/screening/submit-for-review/${patientId}`, payload);
     return response.data;
@@ -201,9 +210,20 @@ export const safetyAPI = {
     const response = await API.put(`/pi-safety/alerts/${alertId}/acknowledge`, { reason }); 
     return response.data; //from piSafetyRoutes
   },
+};
 
-  
 
+export const coordinatorAPI = {
+    getStats: async () => {
+      //called from coordinatorDashboard
+        const res = await API.get('/coordinator/stats');
+        return res.data;
+    },
+    //called from coordinatorDashboard
+    getTodaysVisits: async () => {
+        const res = await API.get('/coordinator/visits/today');
+        return res.data;
+    }
 };
 
 //this is actually safetyMonitor
@@ -599,7 +619,7 @@ export const statisticsAPI = {
 export const adminAPI = {
   //called from adminDashboard
     getDashboard: async () => {
-        const res = await API.get('admin/admin');
+        const res = await API.get('/admin/admin');
         return res.data;
     },
     //called from adminDashboard
@@ -607,7 +627,7 @@ export const adminAPI = {
         const res = await API.post('/admin/mv/refresh');
         return res.data;
     },
-    // called from trialManagement
+    // called from trialManagement, lockManagement
     getTrials: async () => {
         const res = await API.get('/admin/trials');
         return res.data;
@@ -644,10 +664,10 @@ export const adminAPI = {
     const res = await API.post(`/admin/users/${id}/reset-password`, { new_password: newPassword });
     return res.data;
   },
-//called from user management
+//called from user management, sites_management
   // Sites dropdowns
-  getSites: async () => {
-    const res = await API.get('/admin/sites');
+  getSites: async (params?: Record<string, any>) => {
+    const res = await API.get('/admin/sites', { params });
     return res.data;
   },
   // called from TrialForm (Get Single Trial)
@@ -681,7 +701,73 @@ export const adminAPI = {
   deleteTrialEntity: async (trialId: string | number, path: string, entityId: string | number) => {
     const res = await API.delete(`/admin/trials/${trialId}/${path}/${entityId}`);
     return res.data;
+  },
+
+  //called frm siteDetails
+    getSiteDetails: async (id: string | number) => {
+        const res = await API.get(`/admin/sites/${id}`);
+        return res.data;
+    },
+    //callled from siteDetails
+    suspendSite: async (id: string | number, data: { reason: string }) => {
+        const res = await API.put(`/admin/sites/${id}/suspend`, data);
+        return res.data;
+    },
+
+    //called from siteedit
+    // Inside your existing adminAPI object in api.ts:
+    updateSite: async (id: string | number, data: any) => {
+        const res = await API.put(`/admin/sites/${id}`, data);
+        return res.data;
+    },
+
+    //called from lock management
+    getLocks: async () => {
+        const res = await API.get('/admin/locks');
+        return res.data;
+    },
+    //called from lock management
+    createLock: async (data: { trial_id: number; lock_type: string }) => {
+        const res = await API.post('/admin/locks', data);
+        return res.data;
+    },
+    //called from lock management
+    unlockTrial: async (id: number | string, reason: string) => {
+        const res = await API.put(`/admin/locks/${id}/unlock`, { reason });
+        return res.data;
+    },
+    //called from lock management
+    verifyLock: async (id: number | string) => {
+        const res = await API.get(`/admin/locks/${id}/verify`);
+        return res.data;
+    },
+
+    //called from SystemSettings (NOT USED)
+    getSettings: async () => {
+        const res = await API.get('/admin/settings');
+        return res.data;
+    },
+    //not used either
+    updateSetting: async (key: string, value: any) => {
+        const res = await API.put('/admin/settings', { key, value });
+        return res.data;
+    },
+    refreshMaterializedViews: async () => {
+        const res = await API.post('/admin/mv/refresh');
+        return res.data;
+    },
+    //called from adminAuditTrail
+    getAuditLogs: async (params?: any) => {
+        const res = await API.get('/admin/audit', { params });
+        return res.data;
+    },
+
+    //called from useraccesslog
+    getUserAccessLog: async (userId: string | number) => {
+    const res = await API.get(`/admin/users/${userId}/access-log`);
+    return res.data;
   }
+
 };
 
 

@@ -61,7 +61,7 @@ router.get('/:patientId/timeline', requirePatientId, async (req: any, res: any) 
                 event_date,
                 event_type,
                 description,
-                visit_id as visit_instance_id,
+                visit_instance_id,
                 result_value
             FROM vw_patient_timeline
             WHERE patient_id = $1

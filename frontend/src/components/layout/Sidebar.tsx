@@ -3,7 +3,9 @@ import {
     LayoutDashboard, Users, ClipboardList, AlertTriangle, TestTube,
     BarChart2, Lock, CalendarCheck, ShieldAlert, Activity, FileWarning,
     Siren, Stethoscope, Microscope, FileText, AlertCircle, Database,
-    Search, TrendingUp, GitBranch, BookOpen, FlaskConical, Settings, Globe, UserCog,
+    Search, TrendingUp, GitBranch, BookOpen, FlaskConical, 
+    //Settings,
+    Globe, UserCog,
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -112,7 +114,7 @@ export const Sidebar: React.FC<SidebarProps> = () => {
         { label: 'User Management', icon: UserCog, path: '/admin/users' },
         { label: 'Lock Management', icon: Lock, path: '/admin/locks' },
         { label: 'Audit Trail', icon: FileText, path: '/audit' },
-        { label: 'System Settings', icon: Settings, path: '/admin/settings' },
+        // { label: 'System Settings', icon: Settings, path: '/admin/settings' },
     ];
 
     const navItems =

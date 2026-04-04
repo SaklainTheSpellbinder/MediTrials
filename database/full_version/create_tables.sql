@@ -460,7 +460,7 @@ CREATE TABLE user_access_log (
     accessed_table VARCHAR(50) NOT NULL,
     accessed_record_id INTEGER,
     access_type VARCHAR(20) NOT NULL 
-        CHECK (access_type IN ('VIEW', 'EDIT', 'DELETE', 'EXPORT', 'SIGN')),
+        CHECK (access_type IN ('VIEW', 'EDIT', 'DELETE', 'EXPORT', 'SIGN', 'LOGIN', 'LOGIN_FAILED', 'LOGOUT')),
     access_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     ip_address VARCHAR(45),
     user_agent TEXT,
