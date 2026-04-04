@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bell, Search, User } from 'lucide-react';
+import {Search, User } from 'lucide-react';
 import './Header.css';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -20,11 +20,6 @@ export const Header: React.FC = ()=>{
                 <div className="role-badge">
                     {user?.role || 'User'}
                 </div>
-
-                <button className="icon-btn relative">
-                    <Bell size={20} />
-                    <span className="notification-badge">3</span>
-                </button>
 
                 <div className="user-profile">
                     <div className="avatar">

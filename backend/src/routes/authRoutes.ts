@@ -58,6 +58,17 @@ router.post('/login', async (req: Request, res: Response) => {
     // 3. SUCCESS: UPDATE LAST LOGIN TIME
     await pool.query('UPDATE public.users SET last_login = CURRENT_TIMESTAMP WHERE user_id = $1', [user.user_id]);
     
+    // Log the successful login attempt
+    const ipAddress = req.ip || req.headers['x-forwarded-for'] || null;
+    const userAgent = req.headers['user-agent'] || null;
+
+    await pool.query(
+      `INSERT INTO public.user_access_log 
+        (user_id, accessed_table, accessed_record_id, access_type, ip_address, user_agent) 
+       VALUES ($1, 'users', $1, 'LOGIN', $2, $3)`,
+      [user.user_id, ipAddress, userAgent]
+    );
+    
     // 4. GENERATE JWT TOKEN
     const token = jwt.sign(
       {
@@ -88,10 +99,40 @@ router.post('/login', async (req: Request, res: Response) => {
 });
 
 // POST /api/auth/logout
-router.post('/logout', (req, res) => {
-  // Clear the httpOnly cookie
-  res.clearCookie('token');
-  res.json({ success: true, message: 'Logged out successfully' });
+// POST /api/auth/logout
+router.post('/logout', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    // 1. Log the logout action (authMiddleware guarantees req.user exists)
+    if (req.user) {
+      const ipAddress = req.ip || req.headers['x-forwarded-for'] || null;
+      const userAgent = req.headers['user-agent'] || null;
+
+      await pool.query(
+        `INSERT INTO public.user_access_log 
+          (user_id, accessed_table, accessed_record_id, access_type, ip_address, user_agent) 
+         VALUES ($1, 'users', $1, 'LOGOUT', $2, $3)`,
+        [req.user.user_id, ipAddress, userAgent]
+      );
+    }
+
+    // 2. Clear the HTTP-only cookie
+    // We import your exact COOKIE_CONFIG but omit 'maxAge' since clearCookie 
+    // automatically handles expiration by setting the date to the past.
+    const { maxAge, ...clearOptions } = COOKIE_CONFIG;
+    res.clearCookie('token', clearOptions);
+
+    // 3. Send success response
+    res.json({ success: true, message: 'Logged out successfully' });
+
+  } catch (err: any) {
+    console.error('Logout Error:', err);
+    
+    // Even if the database log fails, we MUST clear the user's token cookie for security
+    const { maxAge, ...clearOptions } = COOKIE_CONFIG;
+    res.clearCookie('token', clearOptions);
+    
+    res.status(500).json({ success: false, message: 'An error occurred during logout, but session was cleared.' });
+  }
 });
 
 // GET /api/auth/me - Session recovery endpoint

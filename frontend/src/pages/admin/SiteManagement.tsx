@@ -1,31 +1,44 @@
 import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate, Link } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import '../Dashboard.css';
 import '../admin/AdminDashboard.css';
+import { adminAPI } from '../../services/api';
 
-const adminApi = axios.create({ 
-    baseURL: 'http://localhost:5000',
-    withCredentials: true, // Include httpOnly cookie
-});
-// No need to set X-User-Data header; auth is via httpOnly cookie
+export interface AdminSite {
+    site_id: number;
+    trial_id: number;
+    institution_name: string;
+    country: string;
+    site_status: string;
+    target_enrollment: number;
+    current_enrollment: number;
+    enrollment_pct: string | number;
+    pi_name: string | null;
+}
 
-const statusColor: Record<string, string> = { Active: '#10B981', Suspended: '#DC2626', Closed: '#6B7280', Initiated: '#3B82F6' };
+const statusColor: Record<string, string> = { 
+    Active: '#10B981', 
+    Suspended: '#DC2626', 
+    Closed: '#6B7280', 
+    Initiated: '#3B82F6' 
+};
 
 export const SiteManagement: React.FC = () => {
     const navigate = useNavigate();
     const [trialFilter, setTrialFilter] = useState('');
     const [search, setSearch] = useState('');
 
-    const { data: sites = [], isLoading } = useQuery({
+    const { data: sites = [], isLoading } = useQuery<AdminSite[]>({
         queryKey: ['admin', 'sites', trialFilter],
-        queryFn: () => adminApi.get('/api/admin/sites', trialFilter ? { params: { trial_id: trialFilter } } : undefined).then(r => r.data),
+        queryFn: () => adminAPI.getSites({ trial_id: trialFilter || undefined }),
     });
 
-    const filtered = sites.filter((s: any) =>
-        !search || s.institution_name.toLowerCase().includes(search.toLowerCase()) || s.country?.toLowerCase().includes(search.toLowerCase())
+    const filtered = sites.filter((s) =>
+        !search || 
+        s.institution_name.toLowerCase().includes(search.toLowerCase()) || 
+        s.country?.toLowerCase().includes(search.toLowerCase())
     );
 
     return (
@@ -33,20 +46,31 @@ export const SiteManagement: React.FC = () => {
             <div className="section-header">
                 <h1 className="page-title">Site Management</h1>
             </div>
+            
+            {/* Filter Bar */}
             <div className="card" style={{ padding: '12px 16px', marginBottom: 14 }}>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                     <div style={{ position: 'relative', flex: 1 }}>
                         <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#9CA3AF' }} />
-                        <input placeholder="Search site or country…" value={search} onChange={e => setSearch(e.target.value)}
-                            style={{ paddingLeft: 30, width: '100%', border: '1px solid #E5E7EB', borderRadius: 6, padding: '6px 8px 6px 28px', fontSize: 13 }} />
+                        <input 
+                            placeholder="Search site or country…" 
+                            value={search} 
+                            onChange={e => setSearch(e.target.value)}
+                            style={{ paddingLeft: 30, width: '100%', border: '1px solid #E5E7EB', borderRadius: 6, padding: '6px 8px 6px 28px', fontSize: 13 }} 
+                        />
                     </div>
-                    <input placeholder="Filter by Trial ID…" value={trialFilter} onChange={e => setTrialFilter(e.target.value)}
-                        style={{ border: '1px solid #E5E7EB', borderRadius: 6, padding: '6px 10px', fontSize: 13, width: 160 }} />
+                    <input 
+                        placeholder="Filter by Trial ID…" 
+                        value={trialFilter} 
+                        onChange={e => setTrialFilter(e.target.value)}
+                        style={{ border: '1px solid #E5E7EB', borderRadius: 6, padding: '6px 10px', fontSize: 13, width: 160 }} 
+                    />
                 </div>
             </div>
 
+            {/* Sites Table */}
             <div className="card">
-                {isLoading ? <div className="sm-empty">Loading…</div> : (
+                {isLoading ? <div className="sm-empty">Loading sites…</div> : (
                     <div style={{ overflowX: 'auto' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                             <thead>
@@ -57,8 +81,8 @@ export const SiteManagement: React.FC = () => {
                             <tbody>
                                 {filtered.length === 0 ? (
                                     <tr><td colSpan={9} style={{ textAlign: 'center', padding: 20, color: '#9CA3AF' }}>No sites found</td></tr>
-                                ) : filtered.map((s: any) => {
-                                    const pct = parseFloat(s.enrollment_pct ?? 0);
+                                ) : filtered.map((s) => {
+                                    const pct = parseFloat(String(s.enrollment_pct ?? 0));
                                     return (
                                         <tr key={`${s.site_id}-${s.trial_id}`} style={{ cursor: 'pointer' }} onClick={() => navigate(`/admin/sites/${s.site_id}`)}>
                                             <td style={{ padding: '9px 10px', fontWeight: 600 }}>{s.institution_name}</td>
@@ -72,14 +96,19 @@ export const SiteManagement: React.FC = () => {
                                             <td style={{ padding: '9px 10px' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                                     <div style={{ width: 60, height: 6, background: '#F3F4F6', borderRadius: 3, overflow: 'hidden' }}>
-                                                        <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, background: pct >= 80 ? '#10B981' : pct >= 50 ? '#3B82F6' : '#F59E0B', borderRadius: 3 }} />
+                                                        <div style={{ 
+                                                            height: '100%', 
+                                                            width: `${Math.min(100, pct)}%`, 
+                                                            background: pct >= 80 ? '#10B981' : pct >= 50 ? '#3B82F6' : '#F59E0B', 
+                                                            borderRadius: 3 
+                                                        }} />
                                                     </div>
                                                     <span style={{ fontSize: 11 }}>{pct}%</span>
                                                 </div>
                                             </td>
                                             <td style={{ padding: '9px 10px', fontSize: 12, color: '#6B7280' }}>{s.pi_name ?? '—'}</td>
                                             <td style={{ padding: '9px 10px' }} onClick={e => e.stopPropagation()}>
-                                                <Link to={`/admin/sites/${s.site_id}`} className="admin-act-btn" style={{ fontSize: 11 }}>Details</Link>
+                                                <Link to={`/admin/sites/${s.site_id}`} className="admin-act-btn" style={{ fontSize: 11, textDecoration: 'none' }}>Details</Link>
                                             </td>
                                         </tr>
                                     );

@@ -112,7 +112,7 @@ export const Sidebar: React.FC<SidebarProps> = () => {
         { label: 'User Management', icon: UserCog, path: '/admin/users' },
         { label: 'Lock Management', icon: Lock, path: '/admin/locks' },
         { label: 'Audit Trail', icon: FileText, path: '/audit' },
-        { label: 'System Settings', icon: Settings, path: '/admin/settings' },
+        // { label: 'System Settings', icon: Settings, path: '/admin/settings' },
     ];
 
     const navItems =

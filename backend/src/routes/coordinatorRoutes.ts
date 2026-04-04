@@ -5,31 +5,22 @@ import path from 'path';
 import { requireRole } from '../middleware/authMiddleware';
 
 const router = Router();
+// authMiddleware should be applied globally before this, or explicitly here
 router.use(requireRole(['Study_Coordinator']));
 
 const queriesDir = path.join(__dirname, '../../../database/study_coordinator_queries');
 const getQuery = (filename: string) => fs.readFileSync(path.join(queriesDir, filename), 'utf8');
 
-// Middleware to ensure site_id is provided (can be moved to a shared middleware)
-const requireSiteId = (req: any, res: any, next: any) => {
-    if (!req.query.site_id && req.method === 'GET') {
-        return res.status(400).json({ error: 'Missing site_id' });
-    }
-    // For POST check req.body.site_id or req.query.site_id
-    if (req.method === 'POST' && !req.query.site_id && !req.body.site_id) {
-         // allow pass if site_id is implicitly not needed for specific updates, but standard is pass site_id
-    }
-    next();
-};
-
 // GET /api/coordinator/stats
-router.get('/stats', requireSiteId, async (req, res) => {
+router.get('/stats', async (req, res) => {
     try {
-        const siteId = req.query.site_id;
-        const query = getQuery('002_get_coordinator_stats.sql');
+        const siteId = req.user?.site_id; 
+        if (!siteId) return res.status(403).json({ error: 'User is not assigned to a site' });
 
+        const query = getQuery('002_get_coordinator_stats.sql');
         const result = await pool.query(query, [siteId]);
         const stats = result.rows[0] || {};
+        
         res.json({
             today_visits: parseInt(stats.today_visits || '0'),
             pending_labs: parseInt(stats.pending_labs || '0'),
@@ -43,9 +34,11 @@ router.get('/stats', requireSiteId, async (req, res) => {
 });
 
 // GET /api/coordinator/visits/today
-router.get('/visits/today', requireSiteId, async (req, res) => {
+router.get('/visits/today', async (req, res) => {
     try {
-        const siteId = req.query.site_id;
+        const siteId = req.user?.site_id;
+        if (!siteId) return res.status(403).json({ error: 'User is not assigned to a site' });
+
         const query = getQuery('001_get_todays_visits.sql');
         const result = await pool.query(query, [siteId]);
         res.json(result.rows);
@@ -56,9 +49,11 @@ router.get('/visits/today', requireSiteId, async (req, res) => {
 });
 
 // GET /api/coordinator/labs/pending
-router.get('/labs/pending', requireSiteId, async (req, res) => {
+router.get('/labs/pending', async (req, res) => {
     try {
-        const siteId = req.query.site_id;
+        const siteId = req.user?.site_id;
+        if (!siteId) return res.status(403).json({ error: 'User is not assigned to a site' });
+
         const query = getQuery('003_get_pending_labs.sql');
         const result = await pool.query(query, [siteId]);
         res.json(result.rows);
@@ -68,8 +63,10 @@ router.get('/labs/pending', requireSiteId, async (req, res) => {
     }
 });
 
+// ... Keep your POST routes the same, just remove requireSiteId ...
+
 // POST /api/coordinator/labs/update
-router.post('/labs/update', requireSiteId, async (req, res) => {
+router.post('/labs/update', async (req, res) => {
     try {
         const { result_id, result_value } = req.body;
         if (!result_id || result_value === undefined) {
@@ -91,7 +88,7 @@ router.post('/labs/update', requireSiteId, async (req, res) => {
 });
 
 // POST /api/coordinator/visits/checkin
-router.post('/visits/checkin', requireSiteId, async (req, res) => {
+router.post('/visits/checkin', async (req, res) => {
     try {
         const { visit_instance_id } = req.body;
         if (!visit_instance_id) {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Filter, Download, Plus, MoreHorizontal, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { patientAPI } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import './PatientRegistry.css';
@@ -8,7 +9,7 @@ import './PatientRegistry.css';
 interface Patient {
     patient_id: number;
     trial_patient_id: string;
-    full_name?: string;
+    full_name?: string; // Restored full_name
     date_of_birth: string;
     gender: string;
     patient_status: string;
@@ -18,51 +19,48 @@ interface Patient {
 
 export const PatientRegistry: React.FC = () => {
     const { user } = useAuth();
+    const qc = useQueryClient();
+    
     const [searchTerm, setSearchTerm] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const ITEMS_PER_PAGE = 10;
-    const [patients, setPatients] = useState<Patient[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
 
-    //reset to page 1 when search term changes
+    // Reset to page 1 when search term changes
     useEffect(() => {
         setCurrentPage(1);
     }, [searchTerm]);
 
-    //registration modal state
+    // Registration modal state
     const [showModal, setShowModal] = useState(false);
+    // Restored full_name in the initial state
     const [regForm, setRegForm] = useState({ full_name: '', date_of_birth: '', gender: 'Male' });
-    const [regSubmitting, setRegSubmitting] = useState(false);
     const [regError, setRegError] = useState<string | null>(null);
 
-    useEffect(() => { fetchPatients(); }, []);
+    // Fetch Patients using React Query
+    const { data: patients = [], isLoading, isError, refetch } = useQuery<Patient[]>({
+        queryKey: ['patients'],
+        queryFn: () => patientAPI.getAll(),
+    });
 
-    const fetchPatients = async () => {
-        try {
-            setLoading(true);
-            setError(null);
-            const data = await patientAPI.getAll(); 
-            //this fetches all patients of users site_id
-            if (data.success && Array.isArray(data.patients)) {
-                setPatients(data.patients);
-            } else {
-                setPatients([]);
-            }
-        } catch (err: any) {
-            console.error('Error fetching patients:', err);
-            setError('Failed to load patients from server.');
-            setPatients([]);
-        } finally {
-            setLoading(false);
+    // Create Patient Mutation
+    const createMut = useMutation({
+        mutationFn: (newPatient: any) => patientAPI.create(newPatient),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['patients'] });
+            setShowModal(false);
+            setRegForm({ full_name: '', date_of_birth: '', gender: 'Male' });
+            setRegError(null);
+        },
+        onError: (err: any) => {
+            setRegError(err?.response?.data?.error || err?.response?.data?.message || 'Registration failed.');
         }
-    };
+    });
 
     const filteredPatients = patients.filter(p => {
         const term = searchTerm.toLowerCase();
         return (
             p.trial_patient_id?.toLowerCase().includes(term) ||
-            p.full_name?.toLowerCase().includes(term) ||
+            p.full_name?.toLowerCase().includes(term) || // Restored full_name search
             p.institution_name?.toLowerCase().includes(term) ||
             p.patient_status?.toLowerCase().includes(term)
         );
@@ -104,42 +102,35 @@ export const PatientRegistry: React.FC = () => {
 
     const handleExport = () => {
         const csvContent = [
-            ['Patient ID', 'Age', 'Gender', 'Site', 'Status', 'Enrollment Date'],
+            ['Patient ID', 'Name', 'Age', 'Gender', 'Site', 'Status', 'Enrollment Date'],
             ...patients.map(p => [
-                p.trial_patient_id, calculateAge(p.date_of_birth), p.gender,
-                p.institution_name || 'N/A', p.patient_status, p.enrollment_date ? formatDate(p.enrollment_date) : ''
+                p.trial_patient_id, 
+                p.full_name || 'N/A', // Restored full_name export
+                calculateAge(p.date_of_birth), 
+                p.gender,
+                p.institution_name || 'N/A', 
+                p.patient_status, 
+                p.enrollment_date ? formatDate(p.enrollment_date) : ''
             ])
         ].map(row => row.join(',')).join('\n');
+        
         const blob = new Blob([csvContent], { type: 'text/csv' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url; a.download = 'patients.csv'; a.click();
     };
 
-    // Registration Modal Submit
-    const handleRegister = async () => {
+    const handleRegister = () => {
         if (!regForm.date_of_birth || !regForm.gender) return;
-        setRegSubmitting(true);
         setRegError(null);
-        try {
-            //calls patientAPI create function with these params
-            await patientAPI.create({
-                full_name: regForm.full_name || undefined,
-                date_of_birth: regForm.date_of_birth,
-                gender: regForm.gender,
-                site_id: user?.site_id ?? 1,
-            });
-            setShowModal(false);
-            setRegForm({ full_name: '', date_of_birth: '', gender: 'Male' });
-            fetchPatients();
-        } catch (err: any) {
-            setRegError(err?.response?.data?.error || 'Registration failed.');
-        } finally {
-            setRegSubmitting(false);
-        }
+        createMut.mutate({
+            full_name: regForm.full_name || undefined, // Restored full_name payload
+            date_of_birth: regForm.date_of_birth,
+            gender: regForm.gender
+        });
     };
 
-    if (loading) {
+    if (isLoading) {
         return (
             <div className="registry-container">
                 <div className="section-header"><h1 className="page-title">Patient Registry</h1></div>
@@ -157,14 +148,14 @@ export const PatientRegistry: React.FC = () => {
                 <div>
                     <h1 className="page-title">Patient Registry</h1>
                     <p className="text-gray-500 text-sm">
-                        {error ? <span className="text-amber-600">⚠️ {error}</span> : `Total Patients: ${patients.length}`}
+                        {isError ? <span className="text-amber-600">⚠️ Failed to load patients</span> : `Total Patients: ${patients.length}`}
                     </p>
                 </div>
                 <div className="flex gap-2">
                     <button onClick={handleExport} className="btn-secondary flex items-center gap-2">
                         <Download size={16} /> Export CSV
                     </button>
-                    <button onClick={fetchPatients} className="btn-secondary flex items-center gap-2">
+                    <button onClick={() => refetch()} className="btn-secondary flex items-center gap-2">
                         <Search size={16} /> Refresh
                     </button>
                     <button onClick={() => setShowModal(true)} className="btn-primary flex items-center gap-2">
@@ -178,7 +169,7 @@ export const PatientRegistry: React.FC = () => {
                     <div className="search-box">
                         <Search size={18} className="search-icon" />
                         <input
-                            type="text" placeholder="Search by ID, site, or status..."
+                            type="text" placeholder="Search by ID, name, site, or status..."
                             value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
                         />
                     </div>
@@ -190,7 +181,7 @@ export const PatientRegistry: React.FC = () => {
                         <thead>
                             <tr>
                                 <th>Patient ID</th>
-                                <th>Name</th>
+                                <th>Name</th> {/* Restored full_name column */}
                                 <th>Age/Gender</th>
                                 <th>Site</th>
                                 <th>Status</th>
@@ -202,7 +193,7 @@ export const PatientRegistry: React.FC = () => {
                             {paginatedPatients.map((patient) => (
                                 <tr key={patient.patient_id}>
                                     <td className="font-mono font-medium">{patient.trial_patient_id}</td>
-                                    <td>{patient.full_name || '—'}</td>
+                                    <td>{patient.full_name || '—'}</td> {/* Restored full_name display */}
                                     <td>{calculateAge(patient.date_of_birth)} / {patient.gender}</td>
                                     <td>{patient.institution_name || 'N/A'}</td>
                                     <td>
@@ -275,6 +266,8 @@ export const PatientRegistry: React.FC = () => {
                                 A trial patient ID will be auto-generated. After registration, open the patient profile to record informed consent and complete the eligibility checklist.
                             </p>
                             {regError && <div style={{ padding: '8px 12px', background: '#fef2f2', color: '#b91c1c', borderRadius: 6, fontSize: '0.82rem', marginBottom: 12 }}>{regError}</div>}
+                            
+                            {/* Restored Full Name Input */}
                             <div className="form-group" style={{ marginBottom: 16 }}>
                                 <label className="form-label">Full Name</label>
                                 <input
@@ -284,6 +277,7 @@ export const PatientRegistry: React.FC = () => {
                                     onChange={e => setRegForm(f => ({ ...f, full_name: e.target.value }))}
                                 />
                             </div>
+
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
                                 <div className="form-group" style={{ marginBottom: 0 }}>
                                     <label className="form-label">Date of Birth <span style={{ color: 'var(--color-danger)' }}>*</span></label>
@@ -311,10 +305,10 @@ export const PatientRegistry: React.FC = () => {
                             <button className="btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
                             <button
                                 className="btn-primary"
-                                disabled={!regForm.date_of_birth || regSubmitting}
+                                disabled={!regForm.date_of_birth || createMut.isPending}
                                 onClick={handleRegister}
                             >
-                                {regSubmitting ? 'Registering…' : 'Register'}
+                                {createMut.isPending ? 'Registering…' : 'Register'}
                             </button>
                         </div>
                     </div>
