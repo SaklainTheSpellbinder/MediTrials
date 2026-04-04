@@ -203,20 +203,10 @@ export const PatientRegistry: React.FC = () => {
                                     </td>
                                     <td>{patient.enrollment_date ? formatDate(patient.enrollment_date) : '—'}</td>
                                     <td style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                        {patient.patient_status === 'Screened' && !patient.enrollment_date && (
-                                            <Link
-                                                to={`/patients/screening/${patient.patient_id}`}
-                                                className="btn-secondary"
-                                                title="PI review / enrollment"
-                                                style={{ padding: '4px 8px', fontSize: '0.70rem' }}
-                                            >
-                                                Review
-                                            </Link>
-                                        )}
-                                        <Link to={`/patients/${patient.patient_id}`} className="btn-icon" title="View Details">
-                                            <MoreHorizontal size={18} />
-                                        </Link>
-                                    </td>
+    <Link to={`/patients/${patient.patient_id}`} className="btn-icon" title="View Details">
+        <MoreHorizontal size={18} />
+    </Link>
+</td>
                                 </tr>
                             ))}
                         </tbody>
