@@ -36,7 +36,7 @@ export const PatientRegistry: React.FC = () => {
     const [regForm, setRegForm] = useState({ full_name: '', date_of_birth: '', gender: 'Male' });
     const [regError, setRegError] = useState<string | null>(null);
 
-    // Fetch Patients using React Query
+    // Fetch Patients
     const { data: patients = [], isLoading, isError, refetch } = useQuery<Patient[]>({
         queryKey: ['patients'],
         queryFn: () => patientAPI.getAll(),

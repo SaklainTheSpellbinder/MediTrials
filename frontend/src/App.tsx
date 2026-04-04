@@ -57,7 +57,7 @@ import { UserManagement } from './pages/admin/UserManagement';
 import { UserAccessLog } from './pages/admin/UserAccessLog';
 import { LockManagement } from './pages/admin/LockManagement';
 import { AdminAuditTrail } from './pages/admin/AdminAuditTrail';
-import { SystemSettings } from './pages/admin/SystemSettings';
+//import { SystemSettings } from './pages/admin/SystemSettings';
 import { SiteEdit } from './pages/admin/SiteEdit';
 
 

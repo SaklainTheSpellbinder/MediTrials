@@ -58,19 +58,16 @@ router.get('/', async (req, res) => {
     query += ` ORDER BY p.patient_id`;
 
     const result = await pool.query(query, params);
-    
-    // Returning just the array to match standard REST conventions used in api.ts
     res.json(result.rows); 
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// POST /api/patients — Register a subject pre-enrollment
+// POST /api/patients
 router.post('/', async (req: Request, res: Response) => {
-  const requestUser = req.user;
-  const isSiteScopedRole = ['Principal_Investigator', 'Study_Coordinator'].includes(requestUser?.role || '');
-  const effectiveSiteId = isSiteScopedRole ? requestUser?.site_id : req.body.site_id;
+  const requestUser = (req as any).user;
+  const effectiveSiteId = requestUser?.site_id;
   
   const {
     trial_patient_id: clientTrialId,
@@ -91,12 +88,14 @@ router.post('/', async (req: Request, res: Response) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    //set_config() to safely pass parameters for 21 CFR Part 11 auditing
+    await client.query(`SELECT set_config('app.current_user_id', $1::text, true)`, [requestUser?.user_id]);
+    await client.query(`SELECT set_config('app.change_reason', $1::text, true)`, ['Registered new patient into screening']);
     const status = patient_status || 'Screened';
-
-    // We pass clientTrialId (usually undefined) or null.
-    // The database trigger "trg_trial_patient_id" will intercept the NULL and auto-generate the PT-XXXXX ID
+    // 2. Insert patient. 
+    // Passing NULL to trial_patient_id relies safely on your BEFORE INSERT trigger to catch it.
     const result = await client.query(
-      `INSERT INTO patients (
+      `INSERT INTO public.patients (
         trial_patient_id, full_name, site_id, patient_status, date_of_birth, gender, enrollment_date
       ) VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING *`,
@@ -105,16 +104,21 @@ router.post('/', async (req: Request, res: Response) => {
     
     await client.query('COMMIT');
     res.status(201).json(result.rows[0]);
+
   } catch (err: any) {
     await client.query('ROLLBACK');
     console.error('Error creating patient:', err);
     if (err.code === '23505') {
-      return res.status(400).json({ success: false, message: 'Patient ID already exists' });
+      return res.status(400).json({ success: false, error: 'Patient ID already exists' });
     }
     if (err.code === '23514') {
       return res.status(400).json({ success: false, error: 'Invalid patient_status for database constraint' });
     }
-    res.status(500).json({ success: false, error: 'Server error' });
+    if (err.code === '23502' && err.message.includes('trial_patient_id')) {
+      return res.status(500).json({ success: false, error: 'Database trigger failed to auto-generate trial_patient_id (Null violation)' });
+    }
+    
+    res.status(500).json({ success: false, error: err.message });
   } finally {
     client.release();
   }

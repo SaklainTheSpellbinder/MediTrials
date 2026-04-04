@@ -3,7 +3,9 @@ import {
     LayoutDashboard, Users, ClipboardList, AlertTriangle, TestTube,
     BarChart2, Lock, CalendarCheck, ShieldAlert, Activity, FileWarning,
     Siren, Stethoscope, Microscope, FileText, AlertCircle, Database,
-    Search, TrendingUp, GitBranch, BookOpen, FlaskConical, Settings, Globe, UserCog,
+    Search, TrendingUp, GitBranch, BookOpen, FlaskConical, 
+    //Settings,
+    Globe, UserCog,
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';

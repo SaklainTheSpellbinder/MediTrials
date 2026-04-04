@@ -30,19 +30,21 @@ API.interceptors.response.use(
 // Patient API functions
 export const patientAPI = {
   //get all patients of users site id
+  //patientRoutes.ts
   getAll: async () => {
-    // Backend automatically filters by authenticated user's site_id from JWT
     const response = await API.get(`/patients`);
     return response.data;
   },
 
   // Get single patient
-  getById: async (id: number) => {
-    const response = await API.get(`/patients/${id}`);
-    return response.data;
-  },
+  //this is not used and also no route like this in backend either
+  // getById: async (id: number) => {
+  //   const response = await API.get(`/patients/${id}`);
+  //   return response.data;
+  // },
 
-  // Create new patient - backend auto-includes user's site_id from JWT
+  // Create new patient
+  //patientRoutes.ts
   create: async (patientData: any) => {
     const response = await API.post('/patients', patientData);
     return response.data;
@@ -60,7 +62,7 @@ export const patientAPI = {
     return response.data;
   },
 
-  // Record informed consent (coordinator action)
+  // Record informed consent (coordinator action) patientRoutes.ts 
   recordConsent: async (patientId: number, payload: any) => {
     const response = await API.post(`/patients/${patientId}/record-consent`, payload);
     return response.data;
@@ -69,26 +71,33 @@ export const patientAPI = {
 
 export const patientProfileAPI = {
   //this calls from patientProfileRoutes
+  //called from PatientProfile.tsx
   getHeader: async (patientId: number) => {
     const response = await API.get(`/patients/${patientId}/profile`);
     return response.data;
   },
+  //called from PatientProfile.tsx
   getTimeline: async (patientId: number) => {
     const response = await API.get(`/patients/${patientId}/timeline`);
     return response.data;
   },
+  
+  //called from PatientProfile.tsx
   getClinical: async (patientId: number) => {
     const response = await API.get(`/patients/${patientId}/clinical`);
     return response.data;
   },
+  //called from PatientProfile.tsx
   getSafety: async (patientId: number) => {
     const response = await API.get(`/patients/${patientId}/safety`);
     return response.data;
   },
+  //called from PatientProfile.tsx
   getLabs: async (patientId: number) => {
     const response = await API.get(`/patients/${patientId}/labs`);
     return response.data;
   },
+  //called from PatientProfile.tsx
   getDocuments: async (patientId: number) => {
     const response = await API.get(`/patients/${patientId}/documents`);
     return response.data;

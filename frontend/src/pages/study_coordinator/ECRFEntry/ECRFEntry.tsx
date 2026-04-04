@@ -1,21 +1,174 @@
 import React, { useState } from 'react';
-import { PatientList, type Patient } from './PatientList';
-import { ClinicalForm } from './ClinicalForm';
+import { Save, ArrowLeft } from 'lucide-react';
+import type { Patient } from './PatientList';
+import './ClinicalForm.css';
+import { ecrfAPI } from '../../../services/api';
 
-export const ECRFEntry: React.FC = () => {
-  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+interface ClinicalFormProps {
+  patient: Patient;
+  onBack: () => void;
+}
 
-  // Background styling for the whole page
+export const ClinicalForm: React.FC<ClinicalFormProps> = ({ patient, onBack }) => {
+  const [formData, setFormData] = useState({
+    visitDate: '',
+    systolicBP: '',
+    diastolicBP: '',
+    heartRate: '',
+    temp: '',
+  });
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      if (!patient.db_id) {
+        throw new Error('Patient ID not found');
+      }
+      const payload = {
+        patient_id: patient.db_id,
+        measurement_time: formData.visitDate, 
+        systolic_bp: formData.systolicBP ? parseInt(formData.systolicBP) : null,
+        diastolic_bp: formData.diastolicBP ? parseInt(formData.diastolicBP) : null,
+        heart_rate: formData.heartRate ? parseInt(formData.heartRate) : null,
+        temperature: formData.temp ? parseFloat(formData.temp) : null,
+      };
+
+      await ecrfAPI.submit(payload);
+      alert('Clinical data saved successfully!');
+      onBack();
+    } catch (err: any) {
+      console.error(err);
+      setError(err.response?.data?.error || err.message || 'Failed to save data');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50/50 p-6 md:p-12">
-      {!selectedPatient ? (
-        <PatientList onSelectPatient={setSelectedPatient} />
-      ) : (
-        <ClinicalForm
-          patient={selectedPatient}
-          onBack={() => setSelectedPatient(null)}
-        />
-      )}
+    <div className="clinical-form-container">
+      {/* Header */}
+      <div className="section-header">
+        <div className="header-content">
+          <button onClick={onBack} className="back-button" title="Back to Patient List">
+            <ArrowLeft size={24} />
+          </button>
+          <div>
+            <h1 className="page-title">Enter Vital Signs</h1>
+            <p className="text-gray-500 text-sm">
+              Patient: <strong>{patient.patient_id}</strong> • Site: {patient.siteId}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="card">
+        {error && (
+          <div className="bg-red-50 text-red-600 p-3 rounded-md mb-4 text-sm whitespace-pre-line">
+            {error}
+          </div>
+        )}
+        <form className="patient-form" onSubmit={handleSubmit}>
+
+          {/* Section: Assessment Details */}
+          <div>
+            <h3 className="form-subsection-title">Assessment Details</h3>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Date of Assessment *</label>
+                <input
+                  type="date"
+                  name="visitDate"
+                  className="form-input"
+                  value={formData.visitDate}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Section: Cardiovascular */}
+          <div>
+            <h3 className="form-subsection-title">Cardiovascular (Sitting)</h3>
+            <div className="form-row-3">
+              <div className="form-group">
+                <label className="form-label">Systolic BP (mmHg)</label>
+                <input
+                  type="number"
+                  name="systolicBP"
+                  placeholder="---"
+                  className="form-input"
+                  value={formData.systolicBP}
+                  onChange={handleChange}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Diastolic BP (mmHg)</label>
+                <input
+                  type="number"
+                  name="diastolicBP"
+                  placeholder="---"
+                  className="form-input"
+                  value={formData.diastolicBP}
+                  onChange={handleChange}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Heart Rate (bpm)</label>
+                <input
+                  type="number"
+                  name="heartRate"
+                  placeholder="---"
+                  className="form-input"
+                  value={formData.heartRate}
+                  onChange={handleChange}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Section: Other Measurements */}
+          <div>
+            <h3 className="form-subsection-title">Other Measurements</h3>
+            <div className="form-row-3">
+              <div className="form-group">
+                <label className="form-label">Temperature (°C)</label>
+                <input
+                  type="number"
+                  name="temp"
+                  placeholder="36.5"
+                  className="form-input"
+                  step="0.1"
+                  value={formData.temp}
+                  onChange={handleChange}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Form Actions */}
+          <div className="form-actions">
+            <button type="button" onClick={onBack} className="btn-secondary" disabled={isSubmitting}>
+              Cancel
+            </button>
+            <button type="submit" className="btn-primary" disabled={isSubmitting}>
+              <Save size={18} />
+              {isSubmitting ? 'Saving...' : 'Save Record'}
+            </button>
+          </div>
+
+        </form>
+      </div>
     </div>
   );
 };

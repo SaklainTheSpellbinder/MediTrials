@@ -24,7 +24,7 @@ export const PatientProfile: React.FC = () => {
     const [consentForm, setConsentForm] = useState({ consent_version: '', consent_date: new Date().toISOString().split('T')[0], e_signature_password: '' });
     const [consentError, setConsentError] = useState<string | null>(null);
 
-    // ─── 1. Aggregated Profile Query ─────────────────────────────────────────
+    // ─── 1. Aggregated Profile Query 
     const { data: profileData, isLoading, isFetching, refetch } = useQuery({
         queryKey: ['patient-profile', pid],
         queryFn: async () => {
@@ -72,7 +72,7 @@ export const PatientProfile: React.FC = () => {
         }
     }, [consentVersions]);
 
-    // ─── 3. Record Consent Mutation ──────────────────────────────────────────
+    //3. Record Consent Mutation 
     const consentMut = useMutation({
         mutationFn: (payload: any) => patientAPI.recordConsent(pid, payload),
         onSuccess: () => {
@@ -87,7 +87,7 @@ export const PatientProfile: React.FC = () => {
         }
     });
 
-    // ─── Formatting Helpers ──────────────────────────────────────────────────
+    //Formatting Helpers
     const calculateAge = (dob: string) => {
         try {
             const d = new Date(dob); const t = new Date();
@@ -136,7 +136,7 @@ export const PatientProfile: React.FC = () => {
         }
     };
 
-    // ─── LOADING STATE ───────────────────────────────────────────────────────
+    //LOADING STATE 
     if (isLoading) {
         return (
             <div className="profile-container">
@@ -161,11 +161,11 @@ export const PatientProfile: React.FC = () => {
     const patientAge = patient?.date_of_birth ? calculateAge(patient.date_of_birth) : '—';
     const initials = getInitials(patientName);
 
-    // ─── MAIN RENDER ─────────────────────────────────────────────────────────
+    //MAIN RENDER
     return (
         <div className="profile-container">
 
-            {/*HERO HEADER*/}
+            {/*HEADER*/}
             <div className="patient-header">
                 <div className="ph-main">
                     <div className="ph-avatar">{initials}</div>
