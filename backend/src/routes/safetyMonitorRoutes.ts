@@ -39,7 +39,9 @@ router.get('/safety-monitor', async (req: Request, res: Response) => {
         );
         const aeTrend = await pool.query(
             `SELECT
-               COUNT(*) FILTER (WHERE ae_start_date >= date_trunc('month', CURRENT_DATE)) AS this_month,
+               COUNT(*) FILTER (
+    WHERE ae_start_date >= date_trunc('month', CURRENT_DATE)::DATE
+) AS this_month,
                COUNT(*) FILTER (WHERE ae_start_date >= date_trunc('month', CURRENT_DATE - INTERVAL '1 month')
                                   AND ae_start_date < date_trunc('month', CURRENT_DATE)) AS last_month
              FROM public.adverse_events`
@@ -288,9 +290,9 @@ router.put('/alerts/:alertId/acknowledge', async (req: any, res: any) => {
             [userId, alertId]
         );
         await client.query(
-            `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,new_value,changed_by_user_id,change_reason)
-             VALUES ('safety_alerts',$1,'UPDATE',jsonb_build_object('alert_status','ACKNOWLEDGED','reason',$2),$3,$2)`,
-            [alertId, reason, userId]
+            `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,new_value,changed_by_user_id,change_reason,data_hash)
+             VALUES ('safety_alerts', $1, 'UPDATE', jsonb_build_object('alert_status', 'ACKNOWLEDGED', 'reason', $2::TEXT), $3, $2, md5($4::TEXT))`,
+            [alertId, reason, userId, alertId.toString()]
         );
         await client.query('COMMIT');
         res.json({ success: true });
@@ -319,14 +321,15 @@ router.put('/alerts/:alertId/escalate', async (req: any, res: any) => {
             [escalation_level ?? null, alertId]
         );
         await client.query(
-            `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,new_value,changed_by_user_id,change_reason)
-             VALUES ('safety_alerts',$1,'UPDATE',jsonb_build_object('action','ESCALATED','reason',$2),$3,$2)`,
-            [alertId, reason, userId]
+            `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,new_value,changed_by_user_id,change_reason,data_hash)
+             VALUES ('safety_alerts', $1, 'UPDATE', jsonb_build_object('action', 'ESCALATED', 'reason', $2::TEXT), $3, $2, md5($4::TEXT))`,
+            [alertId, reason, userId, alertId.toString()]
         );
         await client.query('COMMIT');
         res.json({ success: true });
     } catch (err: any) {
         await client.query('ROLLBACK');
+        console.error('Escalate Alert Error:', err.message);
         res.status(500).json({ error: err.message });
     } finally { client.release(); }
 });
@@ -346,14 +349,15 @@ router.put('/alerts/:alertId/dismiss', async (req: any, res: any) => {
             [alertId]
         );
         await client.query(
-            `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,new_value,changed_by_user_id,change_reason)
-             VALUES ('safety_alerts',$1,'UPDATE',jsonb_build_object('alert_status','DISMISSED','reason',$2),$3,$2)`,
-            [alertId, reason, userId]
+            `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,new_value,changed_by_user_id,change_reason,data_hash)
+             VALUES ('safety_alerts', $1, 'UPDATE', jsonb_build_object('alert_status', 'DISMISSED', 'reason', $2::TEXT), $3, $2, md5($4::TEXT))`,
+            [alertId, reason, userId, alertId.toString()]
         );
         await client.query('COMMIT');
         res.json({ success: true });
     } catch (err: any) {
         await client.query('ROLLBACK');
+        console.error('Dismiss Alert Error:', err.message);
         res.status(500).json({ error: err.message });
     } finally { client.release(); }
 });
@@ -439,32 +443,59 @@ router.put('/ae/:aeId', async (req: any, res: any) => {
         const aeId = parseInt(req.params.aeId);
         const { causality_relationship, outcome, reason } = req.body;
         const userId = req.user?.user_id;
-        if (!reason) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'reason required for 21 CFR Part 11' }); }
+
+        if (!reason) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: 'reason required for 21 CFR Part 11' });
+        }
+
         await set21CFRVars(client, userId, reason);
 
-        const oldRow = await client.query(`SELECT causality_relationship, outcome FROM public.adverse_events WHERE ae_id=$1`, [aeId]);
+        // Fetch old values for audit
+        const oldRow = await client.query(
+            `SELECT causality_relationship, outcome, ae_status 
+             FROM public.adverse_events WHERE ae_id = $1`, [aeId]
+        );
+        if (!oldRow.rows.length) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'AE not found' });
+        }
+
+        // Update — only touches causality, outcome, ae_status
         const { rows } = await client.query(
             `UPDATE public.adverse_events
              SET causality_relationship = COALESCE($1, causality_relationship),
-                 outcome = COALESCE($2, outcome),
-                 updated_at = NOW()
+                 outcome                = COALESCE($2, outcome),
+                 updated_at             = NOW()
              WHERE ae_id = $3 RETURNING *`,
             [causality_relationship ?? null, outcome ?? null, aeId]
         );
-        if (!rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'AE not found' }); }
 
+        // Audit INSERT with data_hash — was missing data_hash causing NOT NULL violation
         await client.query(
-            `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,old_value,new_value,changed_by_user_id,change_reason)
-             VALUES ('adverse_events',$1,'UPDATE',$2,$3,$4,$5)`,
-            [aeId, JSON.stringify(oldRow.rows[0]),
-                JSON.stringify({ causality_relationship, outcome }), userId, reason]
-        );
+    `INSERT INTO public.audit_trail_21cfr 
+        (table_name, record_id, action_type, old_value, new_value, 
+         changed_by_user_id, change_reason, data_hash)
+     VALUES ('adverse_events', $1, 'UPDATE', $2::jsonb, $3::jsonb, $4, $5, md5($6))`,
+    [
+        aeId,
+        JSON.stringify(oldRow.rows[0]),
+        JSON.stringify({ causality_relationship, outcome }),
+        userId,
+        reason,
+        aeId.toString()   // $6 — explicit string for md5
+    ]
+);
+
         await client.query('COMMIT');
         res.json(rows[0]);
     } catch (err: any) {
         await client.query('ROLLBACK');
+        console.error('AE Update Error:', err.message); // ← add this so you can see errors
         res.status(500).json({ error: err.message });
-    } finally { client.release(); }
+    } finally {
+        client.release();
+    }
 });
 
 // ── GET /api/safety/sae ───────────────────────────────────────────────────────
@@ -522,7 +553,12 @@ router.get('/sae/:saeId', async (req: any, res: any) => {
              JOIN public.patients p ON p.patient_id = ae.patient_id
              JOIN public.study_sites ss ON ss.site_id = p.site_id
              JOIN public.clinical_trials ct ON ct.trial_id = ss.trial_id
-             LEFT JOIN (SELECT ae_id, MIN(change_timestamp)::DATE AS awareness_date FROM public.audit_trail_21cfr WHERE table_name='adverse_events' GROUP BY ae_id) ra ON ra.ae_id = ae.ae_id
+             LEFT JOIN (
+                 SELECT record_id AS ae_id, MIN(change_timestamp)::DATE AS awareness_date 
+                 FROM public.audit_trail_21cfr 
+                 WHERE table_name='adverse_events' 
+                 GROUP BY record_id
+             ) ra ON ra.ae_id = ae.ae_id
              WHERE sae.sae_id = $1`, [parseInt(req.params.saeId)]
         );
         if (!rows.length) return res.status(404).json({ error: 'SAE not found' });
@@ -561,14 +597,15 @@ router.put('/sae/:saeId', async (req: any, res: any) => {
         if (!rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'SAE not found' }); }
 
         await client.query(
-            `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,new_value,changed_by_user_id,change_reason)
-             VALUES ('serious_adverse_events',$1,'UPDATE',$2::jsonb,$3,$4)`,
-            [saeId, JSON.stringify({ sae_status, report_submitted_date }), userId, reason]
-        );
+    `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,new_value,changed_by_user_id,change_reason,data_hash)
+     VALUES ('serious_adverse_events',$1,'UPDATE',$2::jsonb,$3,$4,md5($5))`,
+    [saeId, JSON.stringify({ sae_status, report_submitted_date }), userId, reason, saeId.toString()]
+);
         await client.query('COMMIT');
         res.json(rows[0]);
     } catch (err: any) {
         await client.query('ROLLBACK');
+        console.error('SAE Update Error:', err.message);
         res.status(500).json({ error: err.message });
     } finally { client.release(); }
 });
@@ -682,10 +719,17 @@ router.post('/dsmb', async (req: any, res: any) => {
             VALUES ($1, $2, $3, $4) RETURNING *`,
             [trial_id, meeting_date, meeting_type, data_cutoff_date]
         );
+
+        await client.query(
+    `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,new_value,changed_by_user_id,change_reason,data_hash)
+     VALUES ('dsmb_meetings',$1,'INSERT',$2::jsonb,$3,'DSMB meeting scheduled',md5($4))`,
+    [rows[0].meeting_id, JSON.stringify(rows[0]), userId, rows[0].meeting_id.toString()]
+);
         await client.query('COMMIT');
         res.status(201).json(rows[0]);
     } catch (err: any) {
         await client.query('ROLLBACK');
+        console.error('DSMB Create Error:', err.message);
         res.status(500).json({ error: err.message });
     } finally { client.release(); }
 });
@@ -727,11 +771,17 @@ router.put('/dsmb/:meetingId', async (req: any, res: any) => {
              WHERE meeting_id = $3 RETURNING *`,
             [recommendation ?? null, meeting_minutes ? JSON.stringify(meeting_minutes) : null, meetingId]
         );
+        await client.query(
+    `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,new_value,changed_by_user_id,change_reason,data_hash)
+     VALUES ('dsmb_meetings',$1,'UPDATE',$2::jsonb,$3,'DSMB recommendation update',md5($4))`,
+    [meetingId, JSON.stringify(rows[0]), userId, meetingId.toString()]
+);
         if (!rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Meeting not found' }); }
         await client.query('COMMIT');
         res.json(rows[0]);
     } catch (err: any) {
         await client.query('ROLLBACK');
+        console.error('DSMB Update Error:', err.message);
         res.status(500).json({ error: err.message });
     } finally { client.release(); }
 });
@@ -783,10 +833,10 @@ router.post('/unblind', async (req: any, res: any) => {
         );
         // Record additional details in audit
         await client.query(
-            `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,new_value,changed_by_user_id,change_reason)
-             VALUES ('randomization_assignments',$1,'UPDATE',jsonb_build_object('action','UNBLINDED','justification_category',$2,'requesting_physician',$3),$4,$5)`,
-            [patient_id, justification_category, requesting_physician, userId, reason]
-        );
+    `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,new_value,changed_by_user_id,change_reason,data_hash)
+     VALUES ('randomization_assignments',$1,'UPDATE',jsonb_build_object('action','UNBLINDED','justification_category',$2,'requesting_physician',$3),$4,$5,md5($6))`,
+    [patient_id, justification_category, requesting_physician, userId, reason, patient_id.toString()]
+);
         // Fetch result
         const { rows } = await client.query(
             `SELECT (ra.unblinding_date IS NOT NULL) AS is_unblinded, ta.arm_code, ta.arm_description as arm_name, ta.arm_description, ra.unblinded_at
@@ -798,6 +848,7 @@ router.post('/unblind', async (req: any, res: any) => {
         res.json({ success: true, result: rows[0] ?? null });
     } catch (err: any) {
         await client.query('ROLLBACK');
+        console.error('Unblind Error:', err.message); 
         res.status(500).json({ error: err.message });
     } finally { client.release(); }
 });
