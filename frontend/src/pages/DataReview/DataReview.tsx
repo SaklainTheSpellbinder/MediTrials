@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState , useMemo} from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -127,6 +127,15 @@ const ECRFCompletenessMatrix: React.FC<{ trialId: string }> = ({ trialId }) => {
         enabled: !!trialId,
     });
 
+    const parsedTrendData = useMemo(() => trendData.map(r => ({
+    ...r,
+    weekly_sign_rate:  Number(r.weekly_sign_rate),
+    queries_raised:    Number(r.queries_raised),
+    queries_resolved:  Number(r.queries_resolved),
+    forms_entered:     Number(r.forms_entered),
+    forms_signed:      Number(r.forms_signed),
+})), [trendData]);
+
     // Build matrix: unique patients × unique visits
     const patients = [...new Map(rows.map(r => [r.patient_id, { id: r.patient_id, pid: r.trial_patient_id, site: r.site_name }])).values()];
     const visits   = [...new Map(rows.map(r => [r.visit_id, { id: r.visit_id, name: r.visit_name, num: r.visit_number }])).values()].sort((a, b) => a.num - b.num);
@@ -152,7 +161,7 @@ const ECRFCompletenessMatrix: React.FC<{ trialId: string }> = ({ trialId }) => {
                         <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF', fontSize: '0.875rem' }}>No visit data in last 6 months</div>
                     ) : (
                         <ResponsiveContainer width="100%" height={220}>
-                            <LineChart data={trendData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                            <LineChart data={parsedTrendData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
                                 <XAxis dataKey="week" tickFormatter={(v) => v ? new Date(v).toLocaleDateString('en', { month: 'short', day: 'numeric' }) : ''} style={{ fontSize: 11 }} stroke="#D1D5DB" />
                                 <YAxis yAxisId="left" domain={[0, 100]} tickFormatter={(v) => `${v}%`} style={{ fontSize: 11 }} stroke="#D1D5DB" />

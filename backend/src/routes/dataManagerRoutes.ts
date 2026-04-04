@@ -31,7 +31,9 @@ router.get('/data-manager', async (req: Request, res: Response) => {
         const [queryStats, sitePerf, avgResolution, dataQuality, deviations, queryAge, lockReadiness, triggerActivity] =
             await Promise.all([
                 pool.query(`SELECT COUNT(*) FILTER (WHERE query_status='Open') AS open_total,
-                    COUNT(*) FILTER (WHERE query_status='Open' AND raised_date < CURRENT_DATE - 7) AS open_last_week
+                    COUNT(*) FILTER (WHERE query_status='Open' 
+  AND raised_date >= CURRENT_DATE - 14 
+  AND raised_date < CURRENT_DATE - 7) AS open_last_week
                     FROM public.data_queries`),
                 // Complex Query 2: site performance with window function RANK()
                 pool.query(`SELECT ss.institution_name, ss.site_id,
@@ -315,8 +317,10 @@ router.get('/site-performance', async (_req: Request, res: Response) => {
                 ROUND(AVG(EXTRACT(DAY FROM dq.resolved_date-dq.raised_date))
                     FILTER (WHERE dq.resolved_date IS NOT NULL)::NUMERIC,1) AS avg_days_to_resolve,
                 ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (
-                    ORDER BY EXTRACT(DAY FROM dq.resolved_date-dq.raised_date))
-                    FILTER (WHERE dq.resolved_date IS NOT NULL)::NUMERIC,1) AS median_days,
+  ORDER BY CASE WHEN dq.resolved_date IS NOT NULL
+    THEN EXTRACT(DAY FROM dq.resolved_date - dq.raised_date)
+    ELSE NULL END
+)::NUMERIC,1) AS median_days,
                 RANK() OVER (ORDER BY ROUND(AVG(EXTRACT(DAY FROM dq.resolved_date-dq.raised_date))
                     FILTER (WHERE dq.resolved_date IS NOT NULL)::NUMERIC,1) ASC NULLS LAST) AS resolution_rank
             FROM public.data_queries dq
