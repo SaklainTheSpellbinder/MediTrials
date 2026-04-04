@@ -722,8 +722,6 @@ DECLARE
     v_arm_id     INTEGER;
     v_random_seed VARCHAR;
 BEGIN
-    -- Eligibility is also enforced by trg_validate_randomization,
-    -- but explicit check here gives a friendlier error message
     IF NOT EXISTS (
         SELECT 1 FROM patient_screening
          WHERE patient_id = p_patient_id AND screening_status = 'Passed'
