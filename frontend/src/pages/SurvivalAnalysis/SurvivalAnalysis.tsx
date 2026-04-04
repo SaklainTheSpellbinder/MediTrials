@@ -16,8 +16,8 @@ export interface SurvivalAnalysisData {
     analysis_id: number;
     trial_id: number;
     endpoint_type: string;
-    time_points: number[][]; 
-    survival_probabilities: number[][]; 
+    time_points: number[];           // was number[][]
+    survival_probabilities: number[];
     hazard_ratio?: string | number;
     logrank_p_value?: string | number;
     confidence_interval_95?: string;
@@ -82,39 +82,33 @@ export const SurvivalAnalysis: React.FC = () => {
     const currentAnalysis = analyses.length > 0 ? analyses[0] : null;
 
     // Process KM data directly during render
-    let kmData: any[] = [];
-    if (currentAnalysis?.time_points && currentAnalysis?.survival_probabilities) {
-        try {
-            const timeA = currentAnalysis.time_points[0] || [];
-            const survA = currentAnalysis.survival_probabilities[0] || [];
-            const timeB = currentAnalysis.time_points[1] || [];
-            const survB = currentAnalysis.survival_probabilities[1] || [];
-            
-            // Combine all unique sorted time points safely
-            const allTimes = Array.from(new Set([...timeA, ...timeB])).sort((a: number, b: number) => a - b);
-            
-            let lastSurvA = 1.0;
-            let lastSurvB = 1.0;
-            
-            kmData = allTimes.map(t => {
-                const idxA = timeA.indexOf(t);
-                if (idxA !== -1) lastSurvA = survA[idxA];
-                const idxB = timeB.indexOf(t);
-                if (idxB !== -1) lastSurvB = survB[idxB];
-                return {
-                    time: t,
-                    survA: lastSurvA,
-                    survA_upper: Math.min(1, lastSurvA + 0.1), // Mock CI for demo
-                    survA_lower: Math.max(0, lastSurvA - 0.1),
-                    survB: lastSurvB,
-                    survB_upper: Math.min(1, lastSurvB + 0.1),
-                    survB_lower: Math.max(0, lastSurvB - 0.1)
-                };
-            });
-        } catch (e) {
-            console.error('Error parsing KM Data', e);
-        }
+    // Replace lines 85-117 with this:
+let kmData: any[] = [];
+if (currentAnalysis?.time_points && currentAnalysis?.survival_probabilities) {
+    try {
+        // Data comes as flat arrays from the procedure: [30,60,90,180,365]
+        const times = Array.isArray(currentAnalysis.time_points)
+            ? currentAnalysis.time_points.map(Number)
+            : [];
+        const probs = Array.isArray(currentAnalysis.survival_probabilities)
+            ? currentAnalysis.survival_probabilities.map(Number)
+            : [];
+
+        // Build chart data — single survival curve (overall, not split by arm)
+        // Add t=0, S=1.0 as starting point so the curve starts from the top-left
+        kmData = [
+            { time: 0, survival: 1.0, upper: 1.0, lower: 1.0 },
+            ...times.map((t, i) => ({
+                time: t,
+                survival: probs[i] ?? null,
+                upper: Math.min(1, (probs[i] ?? 0) + 0.08),
+                lower: Math.max(0, (probs[i] ?? 0) - 0.08),
+            }))
+        ];
+    } catch (e) {
+        console.error('Error parsing KM Data', e);
     }
+}
 
     // Custom Dot for censoring (mock setup using SVG path)
     const CustomizedDot = (props: any) => {
@@ -180,22 +174,43 @@ export const SurvivalAnalysis: React.FC = () => {
                                 ) : (
                                     <div className="km-chart-wrap" style={{ height: 420 }}>
                                         <ResponsiveContainer width="100%" height="100%">
-                                            <ComposedChart data={kmData} margin={{ top: 20, right: 30, left: 0, bottom: 20 }}>
-                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                                                <XAxis dataKey="time" type="number" domain={['dataMin', 'dataMax']} label={{ value: 'Time (Months)', position: 'bottom' }} tick={{ fontSize: 11 }} />
-                                                <YAxis label={{ value: 'Survival Probability', angle: -90, position: 'insideLeft' }} tick={{ fontSize: 11 }} domain={[0, 1]} />
-                                                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #E5E7EB', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }} />
-                                                <Legend wrapperStyle={{ fontSize: 12, paddingTop: 10 }} />
-                                                
-                                                {/* Mock CI Areas */}
-                                                <Area type="stepAfter" dataKey="survA_upper" stroke="none" fill="#3B82F6" fillOpacity={0.1} />
-                                                <Area type="stepAfter" dataKey="survA_lower" stroke="none" fill="#3B82F6" fillOpacity={0.1} />
-                                                <Area type="stepAfter" dataKey="survB_upper" stroke="none" fill="#F43F5E" fillOpacity={0.1} />
-                                                <Area type="stepAfter" dataKey="survB_lower" stroke="none" fill="#F43F5E" fillOpacity={0.1} />
-
-                                                <Line type="stepAfter" dataKey="survA" name="Treatment Arm A" stroke="#3B82F6" strokeWidth={2} dot={<CustomizedDot />} isAnimationActive={false} />
-                                                <Line type="stepAfter" dataKey="survB" name="Control Arm B" stroke="#F43F5E" strokeWidth={2} dot={<CustomizedDot />} isAnimationActive={false} />
-                                            </ComposedChart>
+<ComposedChart data={kmData} margin={{ top: 20, right: 30, left: 0, bottom: 20 }}>
+    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+    <XAxis 
+        dataKey="time" 
+        type="number" 
+        domain={[0, 365]}
+        label={{ value: 'Time (Days)', position: 'bottom' }} 
+        tick={{ fontSize: 11 }} 
+    />
+    <YAxis 
+        label={{ value: 'Survival Probability', angle: -90, position: 'insideLeft' }} 
+        tick={{ fontSize: 11 }} 
+        domain={[0, 1]} 
+        tickFormatter={(v) => `${(v * 100).toFixed(0)}%`}
+    />
+    <Tooltip 
+        formatter={(value: number) => [`${(value * 100).toFixed(1)}%`, 'Survival']}
+        labelFormatter={(label) => `Day ${label}`}
+        contentStyle={{ fontSize: 12, borderRadius: 8 }}
+    />
+    <Legend wrapperStyle={{ fontSize: 12, paddingTop: 10 }} />
+    
+    {/* CI band */}
+    <Area type="stepAfter" dataKey="upper" stroke="none" fill="#3B82F6" fillOpacity={0.12} name="95% CI" legendType="none" />
+    <Area type="stepAfter" dataKey="lower" stroke="none" fill="white" fillOpacity={1} legendType="none" />
+    
+    {/* Main KM curve */}
+    <Line 
+        type="stepAfter" 
+        dataKey="survival" 
+        name="Overall Survival" 
+        stroke="#3B82F6" 
+        strokeWidth={2.5} 
+        dot={false}
+        isAnimationActive={false} 
+    />
+</ComposedChart>
                                         </ResponsiveContainer>
                                     </div>
                                 )}
@@ -313,22 +328,42 @@ export const SurvivalAnalysis: React.FC = () => {
                         </div>
 
                         <div className="card">
-                            <div className="card-header"><h3 className="card-title" style={{ fontSize: 13 }}>Median Survival (Months)</h3></div>
-                            <div className="card-body">
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid #E5E7EB' }}>
-                                    <div style={{ color: '#374151', fontSize: 13, fontWeight: 600 }}>Treatment Arm</div>
-                                    <div style={{ color: '#111827', fontSize: 14, fontWeight: 700 }}>18.4</div>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-                                    <div style={{ color: '#374151', fontSize: 13, fontWeight: 600 }}>Control Arm</div>
-                                    <div style={{ color: '#111827', fontSize: 14, fontWeight: 700 }}>12.1</div>
-                                </div>
-                                <div style={{ background: '#EFF6FF', padding: 8, borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span style={{ fontSize: 11, fontWeight: 700, color: '#1E40AF' }}>DIFFERENCE</span>
-                                    <span style={{ fontSize: 13, fontWeight: 800, color: '#1D4ED8' }}>↑ 6.3 mo</span>
-                                </div>
-                            </div>
+    <div className="card-header">
+        <h3 className="card-title" style={{ fontSize: 13 }}>Median Survival</h3>
+    </div>
+    <div className="card-body">
+        {(() => {
+            const medianDay = kmData.find(d => 
+                d.survival !== undefined && d.survival <= 0.5
+            )?.time ?? null;
+
+            return (
+                <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid #E5E7EB' }}>
+                        <div style={{ color: '#374151', fontSize: 13, fontWeight: 600 }}>Median Survival</div>
+                        <div style={{ color: '#111827', fontSize: 14, fontWeight: 700 }}>
+                            {medianDay ? `Day ${medianDay}` : 'Not reached'}
                         </div>
+                    </div>
+                    <div style={{ 
+                        background: medianDay ? '#EFF6FF' : '#ECFDF5', 
+                        padding: 8, borderRadius: 6, 
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center' 
+                    }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: medianDay ? '#1E40AF' : '#065F46' }}>
+                            {medianDay ? 'MEDIAN REACHED' : 'MEDIAN NOT REACHED'}
+                        </span>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: medianDay ? '#1D4ED8' : '#059669' }}>
+                            {medianDay 
+                                ? `${(medianDay / 30.4).toFixed(1)} months` 
+                                : '>50% still alive at Day 365'}
+                        </span>
+                    </div>
+                </>
+            );
+        })()}
+    </div>
+</div>
                     </div>
                 </div>
             )}
