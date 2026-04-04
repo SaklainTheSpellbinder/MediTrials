@@ -18,7 +18,7 @@ import { ScreeningQueue } from './pages/Principal_Investigator/ScreeningQueue';
 // Coordinator pages
 import { ECRFEntry } from './pages/study_coordinator/ECRFEntry/ECRFEntry';
 import { VisitManagement } from './pages/study_coordinator/VisitManagement';
-import { LabResultsEntry } from './pages/study_coordinator/LabResultsEntry';
+// import { LabResultsEntry } from './pages/study_coordinator/LabResultsEntry';
 
 // Safety Monitor pages
 import { AllPatients } from './pages/safety_monitor/AllPatients';
@@ -105,7 +105,7 @@ function App() {
 
       {/*Coordinator Routes*/}
       <Route path="/visits" element={<W allowedRoles={['Study_Coordinator']}><VisitManagement /></W>} />
-      <Route path="/labs/entry" element={<W allowedRoles={['Study_Coordinator']}><LabResultsEntry /></W>} />
+      {/* <Route path="/labs/entry" element={<W allowedRoles={['Study_Coordinator']}><LabResultsEntry /></W>} /> */}
 
       {/* Safety Monitor Routes */}
       <Route path="/sm/patients" element={<W allowedRoles={['Safety_Monitor']}><AllPatients /></W>} />

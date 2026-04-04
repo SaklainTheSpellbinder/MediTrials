@@ -25,12 +25,12 @@ export const PatientList: React.FC<PatientListProps> = ({ onSelectPatient }) => 
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
 
-  // Reset to page 1 when search term changes
+
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm]);
 
-  // Fetch Patients
+
   useEffect(() => {
     const loadPatients = async () => {
       try {
@@ -100,8 +100,8 @@ export const PatientList: React.FC<PatientListProps> = ({ onSelectPatient }) => 
       {/* Header Section */}
       <div className="section-header">
         <div>
-          <h1 className="page-title">eCRF Data Entry</h1>
-          <p className="text-gray-500 text-sm">Select a subject from the list below to enter visit data.</p>
+          <h1 className="page-title">Visit Data Entry</h1>
+          <p className="text-gray-500 text-sm">Select a patient from the list below to enter visit data.</p>
         </div>
       </div>
 
@@ -121,7 +121,7 @@ export const PatientList: React.FC<PatientListProps> = ({ onSelectPatient }) => 
           </div>
 
           <div className="text-sm text-gray-500">
-            Showing <strong>{filteredPatients.length > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0}</strong> to <strong>{Math.min(currentPage * ITEMS_PER_PAGE, filteredPatients.length)}</strong> of <strong>{filteredPatients.length}</strong> subjects
+            Showing <strong>{filteredPatients.length > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0}</strong> to <strong>{Math.min(currentPage * ITEMS_PER_PAGE, filteredPatients.length)}</strong> of <strong>{filteredPatients.length}</strong> patients
           </div>
         </div>
 

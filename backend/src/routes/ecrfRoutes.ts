@@ -12,6 +12,7 @@ router.post('/submit', async (req: any, res: any) => {
     // 1. Extract the snake_case payload we built in ClinicalForm.tsx
     const {
         patient_id,
+        visit_instance_id: providedVisitInstanceId, // explicit visit from visit-gated workflow
         measurement_time,
         systolic_bp,
         diastolic_bp,
@@ -31,20 +32,27 @@ router.post('/submit', async (req: any, res: any) => {
         await client.query(`SELECT set_config('app.current_user_id', $1::text, true)`, [requestUser?.user_id]);
         await client.query(`SELECT set_config('app.change_reason', $1::text, true)`, ['Entered eCRF Vital Signs data']);
 
-        // 3. Get the most recent visit
-        const visitQuery = `
-            SELECT visit_instance_id 
-            FROM public.patient_visits 
-            WHERE patient_id = $1 
-            ORDER BY scheduled_date DESC 
-            LIMIT 1;
-        `;
-        const visitResult = await client.query(visitQuery, [patient_id]);
+        let visit_instance_id: number;
 
-        if (visitResult.rows.length === 0) {
-            throw new Error('No visit found for this patient to attach clinical data.');
+        if (providedVisitInstanceId) {
+            // Use the explicitly provided visit_instance_id (visit-gated workflow)
+            visit_instance_id = parseInt(providedVisitInstanceId);
+        } else {
+            // 3. Fallback: Get the most recent visit (legacy / backward-compat)
+            const visitQuery = `
+                SELECT visit_instance_id 
+                FROM public.patient_visits 
+                WHERE patient_id = $1 
+                ORDER BY scheduled_date DESC 
+                LIMIT 1;
+            `;
+            const visitResult = await client.query(visitQuery, [patient_id]);
+
+            if (visitResult.rows.length === 0) {
+                throw new Error('No visit found for this patient. Please schedule and check in a visit first.');
+            }
+            visit_instance_id = visitResult.rows[0].visit_instance_id;
         }
-        const visit_instance_id = visitResult.rows[0].visit_instance_id;
 
         const timestamp = measurement_time ? new Date(measurement_time).toISOString() : new Date().toISOString();
 
