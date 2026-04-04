@@ -18,7 +18,7 @@ export interface AdverseEventData {
     site_name: string;
     ae_start_date?: string;
     severity_grade: number;
-    status: string;
+    ae_status?: string;
     treatment_related: boolean;
     results_in_death: boolean;
     life_threatening: boolean;
@@ -67,7 +67,7 @@ useEffect(() => {
         mutationFn: async () => {
             // Verify password (21 CFR Part 11)
             const vr = await safetyManagerAPI.verifyPassword(password);
-            if (!vr.data.verified) throw new Error('Password verification failed');
+if (!vr.verified) throw new Error('Password verification failed');
             return safetyManagerAPI.updateAe(aeId, { causality_relationship: causality, outcome, reason });
         },
         onSuccess: () => { qc.invalidateQueries({ queryKey: ['ae-list'] }); setSaveMsg('Saved successfully ✓'); setTimeout(() => setSaveMsg(''), 3000); },
@@ -95,7 +95,7 @@ useEffect(() => {
                         <Field label="Site" value={ae.site_name} />
                         <Field label="Onset Date" value={ae.ae_start_date?.split('T')[0]} />
                         <Field label="Grade"><AEGradeBadge grade={ae.severity_grade} /></Field>
-                        <Field label="Status" value={ae.status} />
+                        <Field label="Status" value={ae.ae_status} />
                         <Field label="Treatment Related" value={ae.treatment_related ? '✓ Yes' : 'No'} />
                         <Field label="Results in Death" value={ae.results_in_death ? '✓ YES' : 'No'} />
                         <Field label="Life Threatening" value={ae.life_threatening ? '✓ YES' : 'No'} />
@@ -205,18 +205,21 @@ export const AdverseEvents: React.FC = () => {
     const { data: sites } = useQuery({ queryKey: ['safety-sites'], queryFn: () => safetyManagerAPI.getSites() });
 
     const { data: aes = [], isLoading } = useQuery({
-        queryKey: ['ae-list', trialId, siteId, gradeMin, gradeMax, causality, saeOnly, treatmentOnly, dateFrom, dateTo, page],
-        queryFn: () => safetyManagerAPI.getAes({
-            params: {
-                trial_id: trialId || undefined, site_id: siteId || undefined,
-                severity_min: gradeMin > 1 ? gradeMin : undefined,
-                severity_max: gradeMax < 5 ? gradeMax : undefined,
-                causality: causality || undefined,
-                sae_only: saeOnly || undefined, treatment_related: treatmentOnly || undefined,
-                date_from: dateFrom || undefined, date_to: dateTo || undefined, page, limit: 50
-            }
-        }).then(r => r.data),
-    });
+    queryKey: ['ae-list', trialId, siteId, gradeMin, gradeMax, causality, saeOnly, treatmentOnly, dateFrom, dateTo, page],
+    queryFn: () => safetyManagerAPI.getAes({
+        trial_id: trialId || undefined,
+        site_id: siteId || undefined,
+        severity_min: gradeMin > 1 ? gradeMin : undefined,
+        severity_max: gradeMax < 5 ? gradeMax : undefined,
+        causality: causality || undefined,
+        sae_only: saeOnly || undefined,
+        treatment_related: treatmentOnly || undefined,
+        date_from: dateFrom || undefined,
+        date_to: dateTo || undefined,
+        page,
+        limit: 50
+    }),
+});
 
     const handleExport = () => {
         const csv = ['AE ID,Patient,Site,AE Term,Onset,Grade,Causality,SAE,Treatment Related,Status',
@@ -312,7 +315,7 @@ export const AdverseEvents: React.FC = () => {
                                             <td style={{ fontSize: '0.78rem' }}>{ae.causality_relationship ?? '—'}</td>
                                             <td>{ae.sae_report_number ? <span style={{ color: '#DC2626', fontWeight: 700, fontSize: '0.75rem' }}>SAE</span> : <span style={{ color: 'var(--gray-300)' }}>—</span>}</td>
                                             <td style={{ textAlign: 'center' }}>{ae.treatment_related ? '✓' : '—'}</td>
-                                            <td><span style={{ fontSize: '0.75rem', color: 'var(--gray-500)' }}>{ae.status ?? 'Active'}</span></td>
+                                            <td><span style={{ fontSize: '0.75rem', color: 'var(--gray-500)' }}>{ae.ae_status ?? 'Active'}</span></td>
                                             <td><ChevronRight size={14} color="var(--gray-400)" /></td>
                                         </tr>
                                     ))}

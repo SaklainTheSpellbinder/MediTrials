@@ -360,12 +360,29 @@ export const SAEManagement: React.FC = () => {
                                             <td style={{ fontSize: '0.78rem' }}>{sae.site_name}</td>
                                             <td><AEGradeBadge grade={sae.severity_grade} /></td>
                                             <td>
-                                                <div style={{ display: 'flex', gap: 4 }}>
-                                                    {sae.results_in_death && <span title="Death" style={{ fontSize: '1rem' }}>💀</span>}
-                                                    {sae.life_threatening && <span title="Life-threatening" style={{ fontSize: '1rem' }}>⚠️</span>}
-                                                    {sae.requires_hospitalization && <span title="Hospitalization" style={{ fontSize: '1rem' }}>🏥</span>}
-                                                </div>
-                                            </td>
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {sae.results_in_death ? (
+            /* IF FATAL: Show only the Fatal badge */
+            <span style={{ background: '#111827', color: 'white', padding: '2px 6px', borderRadius: 4, fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.05em' }}>
+                FATAL
+            </span>
+        ) : (
+            /* IF NOT FATAL: Show whichever of the other two apply */
+            <>
+                {sae.life_threatening && (
+                    <span style={{ background: '#DC2626', color: 'white', padding: '2px 6px', borderRadius: 4, fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.05em' }}>
+                        LIFE-THREATENING
+                    </span>
+                )}
+                {sae.requires_hospitalization && (
+                    <span style={{ background: '#F59E0B', color: 'white', padding: '2px 6px', borderRadius: 4, fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.05em' }}>
+                        HOSPITALIZED
+                    </span>
+                )}
+            </>
+        )}
+    </div>
+</td>
                                             <td style={{ fontSize: '0.78rem' }}>{sae.report_deadline_date?.split('T')[0] ?? '—'}</td>
                                             <td><DeadlineBadge days_overdue={daysOver} hours={hoursLeft} /></td>
                                             <td>
