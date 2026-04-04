@@ -66,7 +66,7 @@ export const AllPatients: React.FC = () => {
 
     const statusColors: Record<string, string> = {
         'Active': '#10B981', 'Completed': '#6B7280', 'Withdrawn': '#F59E0B',
-        'Screen Failed': '#DC2626', 'Enrolled': '#2563EB',
+        'Screen Failure': '#DC2626', 'Enrolled': '#2563EB',
     };
 
     return (
@@ -107,7 +107,7 @@ export const AllPatients: React.FC = () => {
                         <label className="form-label">Status</label>
                         <select className="form-select" value={status} onChange={e => setStatus(e.target.value)}>
                             <option value="">All Statuses</option>
-                            {['Active', 'Enrolled', 'Completed', 'Withdrawn', 'Screen Failed'].map(s => <option key={s}>{s}</option>)}
+                            {['Active', 'Enrolled', 'Completed', 'Withdrawn', 'Screen Failure'].map(s => <option key={s}>{s}</option>)}
                         </select>
                     </div>
                     <div>

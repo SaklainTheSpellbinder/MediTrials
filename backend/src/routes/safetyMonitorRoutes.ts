@@ -2,6 +2,8 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { pool } from '../config/db';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import bcrypt from 'bcrypt';
+import nodeCrypto from 'crypto';
 
 const router = Router();
 router.use(requireRole(['Safety_Monitor']));
@@ -172,7 +174,7 @@ router.get('/patients', async (req: Request, res: Response) => {
                     ta.arm_code,
                     COUNT(sa.alert_id) FILTER (WHERE sa.alert_status = 'ACTIVE') as active_alert_count,
                     MAX(sa.alert_severity) FILTER (WHERE sa.alert_status = 'ACTIVE') as max_alert_severity,
-                    MAX(pv.visit_date) as last_visit_date,
+                    MAX(pv.actual_visit_date) as last_visit_date,
                     EXTRACT(YEAR FROM AGE(p.date_of_birth))::INT as age
              FROM public.patients p
              JOIN public.study_sites ss ON ss.site_id = p.site_id
@@ -234,12 +236,12 @@ router.get('/alerts', async (req: any, res: any) => {
                     sa.source_type, sa.source_record_id, sa.escalation_level, sa.escalated_at,
                     sa.acknowledged_by_user_id, sa.created_at,
                     EXTRACT(EPOCH FROM (NOW() - sa.created_at))/3600 AS hours_open,
-                    lr.test_value, lr.reference_range_low, lr.reference_range_high, lr.critical_result_flag,
+                    lr.result_value, lr.reference_low, lr.reference_high, lr.critical_result_flag,
                     lt.test_name
              FROM public.safety_alerts sa
              JOIN public.patients p ON p.patient_id = sa.patient_id
              JOIN public.study_sites ss ON ss.site_id = p.site_id
-             LEFT JOIN public.lab_results lr ON lr.lab_result_id = sa.source_record_id AND sa.source_type = 'LAB_RESULT'
+             LEFT JOIN public.lab_results lr ON lr.result_id = sa.source_record_id AND sa.source_type = 'LAB_RESULT'
              LEFT JOIN public.laboratory_tests lt ON lt.test_id = lr.test_id
              WHERE ($1::TEXT IS NULL OR sa.alert_severity = $1)
                AND ($2::TEXT IS NULL OR sa.alert_status = $2)
@@ -286,7 +288,7 @@ router.put('/alerts/:alertId/acknowledge', async (req: any, res: any) => {
             [userId, alertId]
         );
         await client.query(
-            `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,new_values,changed_by_user_id,change_reason)
+            `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,new_value,changed_by_user_id,change_reason)
              VALUES ('safety_alerts',$1,'UPDATE',jsonb_build_object('alert_status','ACKNOWLEDGED','reason',$2),$3,$2)`,
             [alertId, reason, userId]
         );
@@ -317,7 +319,7 @@ router.put('/alerts/:alertId/escalate', async (req: any, res: any) => {
             [escalation_level ?? null, alertId]
         );
         await client.query(
-            `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,new_values,changed_by_user_id,change_reason)
+            `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,new_value,changed_by_user_id,change_reason)
              VALUES ('safety_alerts',$1,'UPDATE',jsonb_build_object('action','ESCALATED','reason',$2),$3,$2)`,
             [alertId, reason, userId]
         );
@@ -344,7 +346,7 @@ router.put('/alerts/:alertId/dismiss', async (req: any, res: any) => {
             [alertId]
         );
         await client.query(
-            `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,new_values,changed_by_user_id,change_reason)
+            `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,new_value,changed_by_user_id,change_reason)
              VALUES ('safety_alerts',$1,'UPDATE',jsonb_build_object('alert_status','DISMISSED','reason',$2),$3,$2)`,
             [alertId, reason, userId]
         );
@@ -367,7 +369,7 @@ router.get('/ae', async (req: any, res: any) => {
                     ct.trial_title, ct.trial_id, ae.ae_term, ae.ae_start_date, ae.ae_end_date,
                     ae.severity_grade, ae.causality_relationship, ae.outcome,
                     ae.results_in_death, ae.life_threatening, ae.requires_hospitalization,
-                    ae.treatment_related, ae.status,
+                    ae.treatment_related, ae.ae_status,
                     sae.sae_id, sae.sae_report_number, sae.sae_status, sae.report_deadline_date
              FROM public.adverse_events ae
              JOIN public.patients p ON p.patient_id = ae.patient_id
@@ -452,7 +454,7 @@ router.put('/ae/:aeId', async (req: any, res: any) => {
         if (!rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'AE not found' }); }
 
         await client.query(
-            `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,old_values,new_values,changed_by_user_id,change_reason)
+            `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,old_value,new_value,changed_by_user_id,change_reason)
              VALUES ('adverse_events',$1,'UPDATE',$2,$3,$4,$5)`,
             [aeId, JSON.stringify(oldRow.rows[0]),
                 JSON.stringify({ causality_relationship, outcome }), userId, reason]
@@ -520,7 +522,7 @@ router.get('/sae/:saeId', async (req: any, res: any) => {
              JOIN public.patients p ON p.patient_id = ae.patient_id
              JOIN public.study_sites ss ON ss.site_id = p.site_id
              JOIN public.clinical_trials ct ON ct.trial_id = ss.trial_id
-             LEFT JOIN (SELECT ae_id, MIN(created_at)::DATE AS awareness_date FROM public.audit_trail_21cfr WHERE table_name='adverse_events' GROUP BY ae_id) ra ON ra.ae_id = ae.ae_id
+             LEFT JOIN (SELECT ae_id, MIN(change_timestamp)::DATE AS awareness_date FROM public.audit_trail_21cfr WHERE table_name='adverse_events' GROUP BY ae_id) ra ON ra.ae_id = ae.ae_id
              WHERE sae.sae_id = $1`, [parseInt(req.params.saeId)]
         );
         if (!rows.length) return res.status(404).json({ error: 'SAE not found' });
@@ -559,7 +561,7 @@ router.put('/sae/:saeId', async (req: any, res: any) => {
         if (!rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'SAE not found' }); }
 
         await client.query(
-            `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,new_values,changed_by_user_id,change_reason)
+            `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,new_value,changed_by_user_id,change_reason)
              VALUES ('serious_adverse_events',$1,'UPDATE',$2::jsonb,$3,$4)`,
             [saeId, JSON.stringify({ sae_status, report_submitted_date }), userId, reason]
         );
@@ -577,7 +579,7 @@ router.get('/signals', async (req: any, res: any) => {
         const trialId = req.query.trial_id;
         if (!trialId) return res.status(400).json({ error: 'trial_id required' });
         const { rows } = await pool.query(
-            `SELECT signals FROM (CALL public.sp_detect_safety_signals($1, NULL)) AS r`,
+            `CALL public.sp_detect_safety_signals($1, NULL::JSONB)`,
             [parseInt(trialId as string)]
         );
         res.json(rows[0]?.signals ?? []);
@@ -676,9 +678,9 @@ router.post('/dsmb', async (req: any, res: any) => {
         const userId = req.user?.user_id;
         await set21CFRVars(client, userId, 'DSMB meeting scheduled');
         const { rows } = await client.query(
-            `INSERT INTO public.dsmb_meetings (trial_id, meeting_date, meeting_type, data_cutoff_date, created_by_user_id)
-             VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-            [trial_id, meeting_date, meeting_type, data_cutoff_date, userId]
+            `INSERT INTO public.dsmb_meetings (trial_id, meeting_date, meeting_type, data_cutoff_date)
+            VALUES ($1, $2, $3, $4) RETURNING *`,
+            [trial_id, meeting_date, meeting_type, data_cutoff_date]
         );
         await client.query('COMMIT');
         res.status(201).json(rows[0]);
@@ -740,13 +742,13 @@ router.get('/unblinding/:patientId', async (req: any, res: any) => {
         const { rows } = await pool.query(
             `SELECT p.patient_id, p.trial_patient_id, p.patient_status, p.enrollment_date,
                     p.site_id, ss.institution_name,
-                    ra.is_unblinded, ra.unblinding_reason, ra.unblinded_at,
-                    ta.arm_code, ta.arm_name, ta.arm_description,
+                    (ra.unblinding_date IS NOT NULL) AS is_unblinded, ra.unblinded_at,
+                    ta.arm_code, ta.arm_description as arm_name ,ta.arm_description,
                     ra.unblinded_by_user_id
              FROM public.patients p
              JOIN public.study_sites ss ON ss.site_id = p.site_id
              LEFT JOIN public.randomization_assignments ra ON ra.patient_id = p.patient_id
-             LEFT JOIN public.treatment_arms ta ON ta.arm_id = ra.arm_id AND ra.is_unblinded = TRUE
+             LEFT JOIN public.treatment_arms ta ON ta.arm_id = ra.arm_id AND ra.unblinding_date IS NOT NULL
              WHERE p.patient_id = $1 OR p.trial_patient_id = $1::TEXT`, [req.params.patientId]
         );
         if (!rows.length) return res.status(404).json({ error: 'Patient not found' });
@@ -776,18 +778,18 @@ router.post('/unblind', async (req: any, res: any) => {
         await set21CFRVars(client, userId, reason);
         // Call stored procedure
         await client.query(
-            `CALL public.sp_unblind_patient($1, $2, $3)`,
+            `CALL public.sp_unblind_patient($1, $2, $3, NULL::VARCHAR)`,
             [patient_id, reason, userId]
         );
         // Record additional details in audit
         await client.query(
-            `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,new_values,changed_by_user_id,change_reason)
+            `INSERT INTO public.audit_trail_21cfr (table_name,record_id,action_type,new_value,changed_by_user_id,change_reason)
              VALUES ('randomization_assignments',$1,'UPDATE',jsonb_build_object('action','UNBLINDED','justification_category',$2,'requesting_physician',$3),$4,$5)`,
             [patient_id, justification_category, requesting_physician, userId, reason]
         );
         // Fetch result
         const { rows } = await client.query(
-            `SELECT ra.is_unblinded, ta.arm_code, ta.arm_name, ta.arm_description, ra.unblinded_at
+            `SELECT (ra.unblinding_date IS NOT NULL) AS is_unblinded, ta.arm_code, ta.arm_description as arm_name, ta.arm_description, ra.unblinded_at
              FROM public.randomization_assignments ra
              JOIN public.treatment_arms ta ON ta.arm_id = ra.arm_id
              WHERE ra.patient_id = $1`, [patient_id]
@@ -805,13 +807,48 @@ router.post('/verify-password', async (req: any, res: any) => {
     try {
         const { password } = req.body;
         const username = req.user?.username;
-        if (!password || !username) return res.status(400).json({ error: 'Missing credentials' });
+
+        if (!password || !username) {
+            return res.status(400).json({ error: 'Missing credentials' });
+        }
+
         const { rows } = await pool.query(
-            `SELECT user_id FROM public.users WHERE username=$1 AND password_hash=crypt($2,password_hash) AND is_active=TRUE`,
-            [username, password]
+            `SELECT user_id, password_hash FROM public.users
+             WHERE username = $1 AND is_active = TRUE`,
+            [username]
         );
-        if (!rows.length) return res.status(401).json({ verified: false });
+
+        if (!rows.length) {
+            return res.status(401).json({ verified: false });
+        }
+
+        const user = rows[0];
+        let isValid = false;
+
+        // Check 1: Exact match (Quick-Fill / raw hash sent directly)
+        if (user.password_hash === password) {
+            isValid = true;
+        }
+
+        // Check 2: Bcrypt (users created via Admin Dashboard)
+        if (!isValid && user.password_hash.startsWith('$2b$')) {
+            isValid = await bcrypt.compare(password, user.password_hash);
+        }
+
+        // Check 3: SHA-256 (original seeded users typing plaintext)
+        if (!isValid) {
+            const sha256Hash = nodeCrypto.createHash('sha256').update(password).digest('hex');
+            if (user.password_hash === sha256Hash) {
+                isValid = true;
+            }
+        }
+
+        if (!isValid) {
+            return res.status(401).json({ verified: false });
+        }
+
         res.json({ verified: true });
+
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }
@@ -825,7 +862,7 @@ router.get('/reports/generate', async (req: any, res: any) => {
         const cutoff = (cutoff_date as string) ?? new Date().toISOString().split('T')[0];
 
         const { rows } = await pool.query(
-            `SELECT report FROM (CALL public.sp_generate_safety_report($1, $2::DATE, NULL)) AS r`,
+            `CALL public.sp_generate_safety_report($1, $2::DATE, NULL::JSONB)`,
             [parseInt(trial_id as string), cutoff]
         );
 

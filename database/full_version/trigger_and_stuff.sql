@@ -1,6 +1,4 @@
-SET search_path TO meditrials;
 
--- Drop triggers first (they depend on functions)
 DROP TRIGGER IF EXISTS trg_screening_number          ON patients;
 DROP TRIGGER IF EXISTS trg_update_enrollment         ON patients;
 DROP TRIGGER IF EXISTS trg_audit_patients            ON patients;
@@ -25,7 +23,6 @@ DROP TRIGGER IF EXISTS trg_audit_randomization       ON randomization_assignment
 
 DROP TRIGGER IF EXISTS trg_invalidate_protocol       ON study_protocols;
 
--- Drop functions (CASCADE handles any remaining dependencies)
 DROP FUNCTION IF EXISTS generate_screening_number()      CASCADE;
 DROP FUNCTION IF EXISTS update_site_enrollment()         CASCADE;
 DROP FUNCTION IF EXISTS set_critical_lab_flag()          CASCADE;
@@ -40,7 +37,6 @@ DROP FUNCTION IF EXISTS detect_safety_signal()           CASCADE;
 DROP FUNCTION IF EXISTS invalidate_old_protocol()        CASCADE;
 DROP FUNCTION IF EXISTS audit_table_changes()            CASCADE;
 
--- Drop procedures
 DROP PROCEDURE IF EXISTS sp_randomize_patient(INTEGER, INTEGER, VARCHAR)                                          CASCADE;
 DROP PROCEDURE IF EXISTS sp_calculate_enrollment_metrics(INTEGER, INOUT INTEGER, INOUT JSONB, INOUT DECIMAL, INOUT DECIMAL, INOUT DATE) CASCADE;
 DROP PROCEDURE IF EXISTS sp_generate_safety_report(INTEGER, DATE, INOUT JSONB)                                    CASCADE;
@@ -54,11 +50,9 @@ DROP PROCEDURE IF EXISTS sp_unblind_patient(INTEGER, TEXT, INTEGER, INOUT VARCHA
 DROP PROCEDURE IF EXISTS sp_calculate_power_analysis(INTEGER, DECIMAL, DECIMAL, DECIMAL, INOUT INTEGER, INOUT DECIMAL) CASCADE;
 DROP PROCEDURE IF EXISTS sp_export_cdisc_sdtm(INTEGER, INOUT JSONB, INOUT JSONB, INOUT JSONB, INOUT JSONB)        CASCADE;
 
--- Drop views
 DROP VIEW  IF EXISTS vw_patient_timeline    CASCADE;
 DROP VIEW  IF EXISTS vw_site_performance    CASCADE;
 
--- Drop materialized views
 DROP MATERIALIZED VIEW IF EXISTS mv_site_enrollment             CASCADE;
 DROP MATERIALIZED VIEW IF EXISTS mv_safety_overview             CASCADE;
 DROP MATERIALIZED VIEW IF EXISTS mv_data_quality                CASCADE;
@@ -71,11 +65,6 @@ DROP MATERIALIZED VIEW IF EXISTS mv_query_resolution_time       CASCADE;
 DROP MATERIALIZED VIEW IF EXISTS mv_randomization_balance       CASCADE;
 
 
--- ============================================================
--- SECTION 1: HELPER / ADMIN FUNCTIONS
--- ============================================================
-
--- Refresh all materialized views (call this after bulk data loads)
 CREATE OR REPLACE FUNCTION refresh_all_materialized_views()
 RETURNS void AS $$
 BEGIN
@@ -92,45 +81,20 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Check consent expiry (meant to be called by a scheduled job / pg_cron)
--- NOTE: 'Reconsent Required' is not in the patient_status CHECK constraint.
---       This function is kept but will raise an error if called unless you
---       first ALTER the patients table to add that status value.
---       Currently it is safe — just won't update anything until you add the status.
 CREATE OR REPLACE FUNCTION check_consent_expiry()
 RETURNS void AS $$
 BEGIN
-    -- Uncomment and run this ALTER first if you want to use this function:
-    -- ALTER TABLE patients DROP CONSTRAINT patients_patient_status_check;
-    -- ALTER TABLE patients ADD CONSTRAINT patients_patient_status_check
-    --   CHECK (patient_status IN ('Screened','Enrolled','Active','Completed',
-    --                             'Withdrawn','Screen Failure','Reconsent Required'));
     RAISE NOTICE 'check_consent_expiry: skipped — Reconsent Required status not in constraint yet.';
 END;
 $$ LANGUAGE plpgsql;
 
-
--- ============================================================
--- SECTION 2: TRIGGER FUNCTIONS
--- ============================================================
-
--- ------------------------------------------------------------
--- TF-1  Auto-generate screening number
--- FIX: use nextval() so we never read a NULL patient_id
---      (patient_id serial is assigned AFTER before-trigger in normal
---       flow, but nextval on the same sequence gives us the same value
---       that will be used — safe because we advance the sequence once)
--- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION generate_screening_number()
 RETURNS TRIGGER AS $$
 BEGIN
     IF NEW.screening_number IS NULL THEN
-        -- Peek at the current value of the sequence without consuming it
-        -- The patient_id will be the current value since we're in BEFORE INSERT
-        -- Safest: just use a timestamp-based unique code
         NEW.screening_number := 'SCR-' || to_char(NOW(), 'YYYYMMDD') ||
                                  '-' || LPAD(
-                                     (nextval('meditrials.patients_patient_id_seq'))::TEXT,
+                                     (nextval('public.patients_patient_id_seq'))::TEXT,
                                      6, '0'
                                  );
     END IF;
@@ -139,9 +103,6 @@ END;
 $$ LANGUAGE plpgsql;
 
 
--- ------------------------------------------------------------
--- TF-2  Keep study_sites.current_enrollment in sync
--- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION update_site_enrollment()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -170,16 +131,11 @@ BEGIN
          WHERE site_id = OLD.site_id;
     END IF;
 
-    RETURN NULL; -- correct for AFTER triggers
+    RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
 
 
--- ------------------------------------------------------------
--- TF-3a  BEFORE INSERT/UPDATE on lab_results
---         Sets critical_result_flag and result_status on the row
---         (must be BEFORE so we can modify NEW)
--- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION set_critical_lab_flag()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -211,10 +167,6 @@ END;
 $$ LANGUAGE plpgsql;
 
 
--- ------------------------------------------------------------
--- TF-3b  AFTER INSERT/UPDATE on lab_results
---         Creates safety_alert — result_id is now available
--- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION create_critical_lab_alert()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -222,12 +174,10 @@ DECLARE
     v_critical_low  NUMERIC;
     v_critical_high NUMERIC;
 BEGIN
-    -- Only act when flag is Y
     IF NEW.critical_result_flag != 'Y' THEN
         RETURN NULL;
     END IF;
 
-    -- Avoid duplicate alerts for the same result (on UPDATE)
     IF EXISTS (
         SELECT 1 FROM safety_alerts
          WHERE source_type      = 'LAB_RESULT'
@@ -284,10 +234,6 @@ END;
 $$ LANGUAGE plpgsql;
 
 
--- ------------------------------------------------------------
--- TF-4  SAE escalation
--- FIX: guard against duplicate SAE records on UPDATE
--- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION escalate_to_sae()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -297,7 +243,6 @@ BEGIN
        OR NEW.requires_hospitalization = TRUE
        OR NEW.results_in_death       = TRUE
     THEN
-        -- Guard: don't insert SAE twice (fires on both INSERT and UPDATE)
         IF NOT EXISTS (
             SELECT 1 FROM serious_adverse_events WHERE ae_id = NEW.ae_id
         ) THEN
@@ -309,12 +254,11 @@ BEGIN
             ) VALUES (
                 NEW.ae_id,
                 'SAE-' || LPAD(NEW.ae_id::TEXT, 6, '0'),
-                CURRENT_DATE + 1,   -- 24-hour reporting deadline (next calendar day)
+                CURRENT_DATE + 1, 
                 'Open'
             );
         END IF;
 
-        -- Always create a fresh alert (deduplication is handled below)
         IF NOT EXISTS (
             SELECT 1 FROM safety_alerts
              WHERE source_type      = 'ADVERSE_EVENT'
@@ -345,14 +289,11 @@ BEGIN
         END IF;
     END IF;
 
-    RETURN NEW;  -- AFTER trigger — RETURN NEW or NULL both work; NEW is conventional
+    RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
 
--- ------------------------------------------------------------
--- TF-5  Visit window compliance check
--- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION check_visit_window()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -381,9 +322,6 @@ END;
 $$ LANGUAGE plpgsql;
 
 
--- ------------------------------------------------------------
--- TF-6  Auto-complete visit when all required eCRF forms are signed
--- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION check_form_completion()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -391,12 +329,10 @@ DECLARE
     v_required_forms  INTEGER;
     v_completed_forms INTEGER;
 BEGIN
-    -- Only act when a form transitions TO 'Signed'
     IF NEW.form_status != 'Signed' OR OLD.form_status = 'Signed' THEN
         RETURN NEW;
     END IF;
 
-    -- Resolve the trial this visit belongs to
     SELECT ss.trial_id
       INTO v_trial_id
       FROM patient_visits pv
@@ -405,7 +341,6 @@ BEGIN
           )
      WHERE pv.visit_instance_id = NEW.visit_instance_id;
 
-    -- Count required eCRF definitions for this trial (signature_required = TRUE)
     SELECT COUNT(*)
       INTO v_required_forms
       FROM ecrf_definitions
@@ -434,10 +369,8 @@ END;
 $$ LANGUAGE plpgsql;
 
 
--- ------------------------------------------------------------
 -- TF-7  Data lock enforcement
 --        Blocks edits to eCRF and lab data when trial is locked
--- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION enforce_data_lock()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -470,9 +403,8 @@ END;
 $$ LANGUAGE plpgsql;
 
 
--- ------------------------------------------------------------
+
 -- TF-8  Randomization validation
--- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION validate_randomization()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -510,10 +442,9 @@ END;
 $$ LANGUAGE plpgsql;
 
 
--- ------------------------------------------------------------
+
 -- TF-9  Safety signal detection
--- FIX: deduplicate signals so we don't spam alerts
--- ------------------------------------------------------------
+-- deduplicate signals so we don't spam alerts
 CREATE OR REPLACE FUNCTION detect_safety_signal()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -578,11 +509,9 @@ END;
 $$ LANGUAGE plpgsql;
 
 
--- ------------------------------------------------------------
 -- TF-10  Protocol version management
 --         Closes (valid_to = today) all prior active versions
 --         when a new protocol version is inserted
--- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION invalidate_old_protocol()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -597,11 +526,10 @@ END;
 $$ LANGUAGE plpgsql;
 
 
--- ------------------------------------------------------------
+
 -- TF-11  21 CFR Part 11 audit trail
--- FIX: use CASE to record the actual PK of the changed row,
+-- use CASE to record the actual PK of the changed row,
 --      not patient_id for every table
--- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION audit_table_changes()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -624,7 +552,6 @@ BEGIN
     END IF;
 
     -- Resolve the true primary key for each audited table
-    -- (using CASE so we record the record's own PK, not always patient_id)
     v_record_id := CASE TG_TABLE_NAME
         WHEN 'patients'                  THEN COALESCE((v_new_data->>'patient_id')::INTEGER,
                                                         (v_old_data->>'patient_id')::INTEGER)
@@ -783,9 +710,8 @@ AFTER INSERT OR UPDATE OR DELETE ON ecrf_data
 FOR EACH ROW EXECUTE FUNCTION audit_table_changes();
 
 
--- ------------------------------------------------------------
+
 -- SP-1  Randomize a patient into a treatment arm
--- ------------------------------------------------------------
 CREATE OR REPLACE PROCEDURE sp_randomize_patient(
     p_patient_id          INTEGER,
     p_trial_id            INTEGER,
@@ -850,10 +776,8 @@ END;
 $$;
 
 
--- ------------------------------------------------------------
 -- SP-2  Enrollment metrics for a trial
--- FIX: GROUP BY corrected; all aggregated columns are in GROUP BY
--- ------------------------------------------------------------
+-- GROUP BY corrected; all aggregated columns are in GROUP BY
 CREATE OR REPLACE PROCEDURE sp_calculate_enrollment_metrics(
     p_trial_id                   INTEGER,
     INOUT total_enrolled         INTEGER  DEFAULT NULL,
@@ -931,9 +855,7 @@ END;
 $$;
 
 
--- ------------------------------------------------------------
 -- SP-3  Generate safety report (snapshot up to cutoff date)
--- ------------------------------------------------------------
 CREATE OR REPLACE PROCEDURE sp_generate_safety_report(
     p_trial_id   INTEGER,
     p_cutoff_date DATE    DEFAULT CURRENT_DATE,
@@ -983,9 +905,7 @@ END;
 $$;
 
 
--- ------------------------------------------------------------
 -- SP-4  Detect safety signals using Proportional Reporting Ratio
--- ------------------------------------------------------------
 CREATE OR REPLACE PROCEDURE sp_detect_safety_signals(
     p_trial_id    INTEGER,
     INOUT signals JSONB DEFAULT NULL
@@ -1039,7 +959,6 @@ END;
 $$;
 
 
--- ------------------------------------------------------------
 -- SP-5  Lock database for interim / final analysis
 -- ------------------------------------------------------------
 CREATE OR REPLACE PROCEDURE public.sp_lock_database(
@@ -1094,10 +1013,8 @@ END;
 $$;
 
 
--- ------------------------------------------------------------
 -- SP-6  Calculate / store Kaplan-Meier survival analysis
 --        (time points are illustrative; plug in real calculation)
--- ------------------------------------------------------------
 CREATE OR REPLACE PROCEDURE sp_calculate_survival(
     p_trial_id     INTEGER,
     p_endpoint_type VARCHAR DEFAULT 'Overall Survival'
@@ -1128,10 +1045,8 @@ END;
 $$;
 
 
--- ------------------------------------------------------------
 -- SP-7  Protocol compliance check for one patient
 -- FIX: COALESCE to handle NULL from first query before concatenation
--- ------------------------------------------------------------
 CREATE OR REPLACE PROCEDURE sp_check_protocol_compliance(
     p_patient_id    INTEGER,
     INOUT deviations JSONB DEFAULT NULL
@@ -1177,9 +1092,7 @@ END;
 $$;
 
 
--- ------------------------------------------------------------
 -- SP-8  Clinical Study Data Review (CSDR) report
--- ------------------------------------------------------------
 CREATE OR REPLACE PROCEDURE sp_generate_csdr(
     p_trial_id       INTEGER,
     INOUT csdr_report JSONB DEFAULT NULL
@@ -1261,9 +1174,7 @@ END;
 $$;
 
 
--- ------------------------------------------------------------
 -- SP-9  Batch-sign eCRF forms
--- ------------------------------------------------------------
 CREATE OR REPLACE PROCEDURE sp_batch_sign_forms(
     p_user_id           INTEGER,
     p_ecrf_instance_ids INTEGER[],
@@ -1330,10 +1241,7 @@ BEGIN
 END;
 $$;
 
-
--- ------------------------------------------------------------
 -- SP-10  Emergency unblinding
--- ------------------------------------------------------------
 CREATE OR REPLACE PROCEDURE sp_unblind_patient(
     p_patient_id          INTEGER,
     p_reason              TEXT,
@@ -1374,7 +1282,9 @@ BEGIN
 
     -- Record unblinding date
     UPDATE randomization_assignments
-       SET unblinding_date = CURRENT_DATE
+       SET unblinding_date = CURRENT_DATE,
+       unblinded_at            = CURRENT_TIMESTAMP,
+       unblinded_by_user_id    = p_requested_by_user_id
      WHERE patient_id = p_patient_id;
 
     -- Audit / alert
@@ -1998,6 +1908,81 @@ COMMENT ON TABLE ecrf_data                    IS 'Electronic Case Report Form da
 COMMENT ON TABLE lab_results                  IS 'Lab test results with critical flagging';
 COMMENT ON TABLE protocol_deviations          IS 'Protocol deviations including IRB reportable ones';
 COMMENT ON TABLE data_locks                   IS 'Trial data lock records for analysis freezes';
+
+
+
+
+
+CREATE OR REPLACE FUNCTION public.get_patient_ae_summary(p_patient_id INTEGER)
+RETURNS TABLE(
+    patient_id              INTEGER,
+    trial_patient_id        VARCHAR,
+    total_ae                INTEGER,
+    grade3plus_ae           INTEGER,
+    sae_count               INTEGER,
+    open_sae_count          INTEGER,
+    deaths                  INTEGER,
+    life_threatening        INTEGER,
+    requires_hospitalization INTEGER,
+    treatment_related_count INTEGER,
+    most_recent_ae_date     DATE,
+    most_severe_grade       INTEGER,
+    ae_by_term              JSONB
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        p.patient_id::INTEGER,
+        p.trial_patient_id,
+
+        COUNT(DISTINCT ae.ae_id)::INTEGER                                              AS total_ae,
+
+        COUNT(DISTINCT ae.ae_id)
+            FILTER (WHERE ae.severity_grade >= 3)::INTEGER                             AS grade3plus_ae,
+
+        COUNT(DISTINCT sae.sae_id)::INTEGER                                            AS sae_count,
+
+        COUNT(DISTINCT sae.sae_id)
+            FILTER (WHERE sae.sae_status NOT IN ('Reported','Closed'))::INTEGER        AS open_sae_count,
+
+        COUNT(DISTINCT ae.ae_id)
+            FILTER (WHERE ae.results_in_death = TRUE)::INTEGER                         AS deaths,
+
+        COUNT(DISTINCT ae.ae_id)
+            FILTER (WHERE ae.life_threatening = TRUE)::INTEGER                         AS life_threatening,
+
+        COUNT(DISTINCT ae.ae_id)
+            FILTER (WHERE ae.requires_hospitalization = TRUE)::INTEGER                 AS requires_hospitalization,
+
+        COUNT(DISTINCT ae.ae_id)
+            FILTER (WHERE ae.treatment_related = TRUE)::INTEGER                        AS treatment_related_count,
+
+        MAX(ae.ae_start_date)                                                          AS most_recent_ae_date,
+
+        MAX(ae.severity_grade)::INTEGER                                                AS most_severe_grade,
+
+        COALESCE(
+            jsonb_agg(
+                jsonb_build_object(
+                    'ae_term',              ae.ae_term,
+                    'severity_grade',       ae.severity_grade,
+                    'ae_start_date',        ae.ae_start_date,
+                    'outcome',              ae.outcome,
+                    'causality',            ae.causality_relationship,
+                    'treatment_related',    ae.treatment_related,
+                    'is_sae',               sae.sae_id IS NOT NULL
+                ) ORDER BY ae.ae_start_date DESC
+            ) FILTER (WHERE ae.ae_id IS NOT NULL),
+            '[]'::JSONB
+        )                                                                              AS ae_by_term
+
+    FROM public.patients p
+    LEFT JOIN public.adverse_events       ae  ON ae.patient_id  = p.patient_id
+    LEFT JOIN public.serious_adverse_events sae ON sae.ae_id    = ae.ae_id
+    WHERE p.patient_id = p_patient_id
+    GROUP BY p.patient_id, p.trial_patient_id;
+END;
+$$ LANGUAGE plpgsql;
 
 CREATE TABLE IF NOT EXISTS public.system_settings (
     key VARCHAR PRIMARY KEY, 

@@ -700,49 +700,54 @@ router.post('/export/sdtm', async (req: Request, res: Response) => {
     const { trial_id, domains = ['DM', 'AE', 'VS', 'LB'] } = req.body;
     if (!trial_id) return res.status(400).json({ error: 'trial_id required' });
     try {
-        // Call the stored procedure (same as Data Manager uses)
-        const { rows } = await pool.query(`
-            SELECT dm_data, ae_data, vs_data, lb_data
-            FROM (CALL public.sp_export_cdisc_sdtm($1, NULL, NULL, NULL, NULL)) AS r
-        `, [trial_id]);
+        const result = await pool.query(
+            `CALL public.sp_export_cdisc_sdtm($1, NULL::JSONB, NULL::JSONB, NULL::JSONB, NULL::JSONB)`,
+            [trial_id]
+        );
 
-        const requested = Array.isArray(domains) ? domains.map((d: string) => d.toLowerCase()) : (domains as string).split(',').map((d: string) => d.trim().toLowerCase());
-        const result: Record<string, any> = {};
+        const row = result.rows[0] ?? {};
 
-        // Build result by domain with statistical augmentation
-        let dmData   = rows[0]?.dm_data ?? [];
-        let aeData   = rows[0]?.ae_data ?? [];
-        let vsData   = rows[0]?.vs_data ?? [];
-        let lbData   = rows[0]?.lb_data ?? [];
+        const requested = Array.isArray(domains)
+            ? (domains as string[]).map((d: string) => d.toUpperCase())
+            : (domains as string).split(',').map((d: string) => d.trim().toUpperCase());
 
-        // Statistical augmentation: AE domain — add AEGRPID and AEOUT
+        let dmData = row.dm_data ?? [];
+        let aeData = row.ae_data ?? [];
+        let vsData = row.vs_data ?? [];
+        let lbData = row.lb_data ?? [];
+
+        // AE augmentation: add AEGRPID (per-patient sequence) and AEOUT (outcome)
         if (Array.isArray(aeData)) {
             const ptGroups: Record<string, number> = {};
             aeData = aeData.map((ae: any) => {
                 const pt = ae.USUBJID ?? ae.usubjid ?? '';
                 ptGroups[pt] = (ptGroups[pt] ?? 0) + 1;
-                const aeout = ae.AEENDT || ae.ae_end_date ? 'Recovered' : 'Recovering';
-                return { ...ae, AEGRPID: ptGroups[pt], AEOUT: aeout };
+                return {
+                    ...ae,
+                    AEGRPID: ptGroups[pt],
+                    AEOUT: ae.AEENDTC || ae.ae_end_date ? 'Recovered' : 'Recovering',
+                };
             });
         }
 
-        // Statistical augmentation: LB domain — add LBNRIND and LBSTRESN
+        // LB augmentation: add LBNRIND and LBSTRESN
         if (Array.isArray(lbData)) {
-            lbData = lbData.map((lb: any) => {
-                const lbnrind = lb.LBNRIND ?? lb.lbnrind ?? (lb.critical_result_flag ? 'HIGH' : 'NORMAL');
-                const lbstresn = lb.LBORRES ?? lb.result_value ?? null;
-                return { ...lb, LBNRIND: lbnrind, LBSTRESN: lbstresn };
-            });
+            lbData = lbData.map((lb: any) => ({
+                ...lb,
+                LBNRIND: lb.LBNRIND ?? lb.lbnrind ?? (lb.critical_result_flag === 'Y' ? 'HIGH' : 'NORMAL'),
+                LBSTRESN: lb.LBORRES ?? lb.result_value ?? null,
+            }));
         }
 
-        if (requested.includes('dm')) result.DM = dmData;
-        if (requested.includes('ae')) result.AE = aeData;
-        if (requested.includes('vs')) result.VS = vsData;
-        if (requested.includes('lb')) result.LB = lbData;
+        const out: Record<string, any> = {};
+        if (requested.includes('DM')) out.DM = dmData;
+        if (requested.includes('AE')) out.AE = aeData;
+        if (requested.includes('VS')) out.VS = vsData;
+        if (requested.includes('LB')) out.LB = lbData;
 
-        res.json({ data: result, _procedure: 'sp_export_cdisc_sdtm' });
+        res.json({ data: out, _procedure: 'sp_export_cdisc_sdtm' });
     } catch (err: any) {
-        console.error('CDISC export error:', err.message);
+        console.error('SDTM export error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
