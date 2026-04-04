@@ -1,85 +1,66 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { TestTube, X, ArrowLeft, ArrowRight, ClipboardList, Thermometer, UserSquare2, ChevronRight, Droplet } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
+import { coordinatorAPI } from '../../services/api';
 import './Coordinator.css';
+//not using this file 
+// --- Interface ---
+interface PendingLab {
+    result_id: number;
+    trial_patient_id: string;
+    full_name: string;
+    test_name: string;
+    visit_name: string;
+    unit_of_measure: string;
+}
 
 export const LabResultsEntry: React.FC = () => {
     const navigate = useNavigate();
-    const { user } = useAuth();
-    const [pendingLabs, setPendingLabs] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [selectedLab, setSelectedLab] = useState<any | null>(null);
+    const qc = useQueryClient();
+    const [selectedLab, setSelectedLab] = useState<PendingLab | null>(null);
     const [resultValue, setResultValue] = useState('');
-    const [submitting, setSubmitting] = useState(false);
 
-    const fetchPendingLabs = async () => {
-        if (!user?.site_id) return;
-        setLoading(true);
-        try {
-            const response = await fetch(`http://localhost:5000/api/coordinator/labs/pending`, {
-                credentials: 'include', // Include httpOnly cookie
-            });
-            if (response.ok) {
-                const data = await response.json();
-                setPendingLabs(data);
-            }
-        } catch (error) {
-            console.error("Error fetching labs:", error);
-        } finally {
-            setLoading(false);
-        }
-    };
+    // Fetch pending labs via coordinatorAPI (centralized — no local fetch/axios)
+    const { data: pendingLabs = [], isLoading } = useQuery<PendingLab[]>({
+        queryKey: ['coord-pending-labs'],
+        queryFn: () => coordinatorAPI.getPendingLabs(),
+    });
 
-    useEffect(() => {
-        fetchPendingLabs();
-    }, [user?.site_id]);
+    // Update lab result mutation
+    const saveMut = useMutation({
+        mutationFn: () => coordinatorAPI.updateLabResult(
+            selectedLab!.result_id,
+            parseFloat(resultValue),
+            'Lab result entered by coordinator'
+        ),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['coord-pending-labs'] });
+            setSelectedLab(null);
+            setResultValue('');
+        },
+    });
 
-    const handleSave = async (e: React.FormEvent) => {
+    const handleSave = (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedLab || !resultValue) return;
-
-        setSubmitting(true);
-        try {
-            const response = await fetch(`http://localhost:5000/api/coordinator/labs/update`, {
-                method: 'POST',
-                credentials: 'include', // Include httpOnly cookie
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    result_id: selectedLab.result_id,
-                    result_value: parseFloat(resultValue)
-                })
-            });
-
-            if (response.ok) {
-                await fetchPendingLabs();
-                setSelectedLab(null);
-                setResultValue('');
-            } else {
-                console.error("Failed to save result");
-            }
-        } catch (error) {
-            console.error("Error updating lab:", error);
-        } finally {
-            setSubmitting(false);
-        }
+        saveMut.mutate();
     };
 
     const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
-        if (e.target === e.currentTarget) {
-            setSelectedLab(null);
-        }
+        if (e.target === e.currentTarget) setSelectedLab(null);
     };
 
     return (
         <div className="coord-container" style={{ maxWidth: '1000px', position: 'relative' }}>
-            
+
             {/* Header */}
             <div className="coord-flex-row-between" style={{ marginBottom: '2rem' }}>
                 <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'flex-start' }}>
-                    <button 
-                        onClick={() => navigate(-1)} 
-                        className="coord-action-icon" style={{ width: '2.75rem', height: '2.75rem', background: '#ffffff', border: '1px solid #e5e7eb', color: '#4b5563', cursor: 'pointer', marginBottom: 0 }}
+                    <button
+                        onClick={() => navigate(-1)}
+                        className="coord-action-icon"
+                        style={{ width: '2.75rem', height: '2.75rem', background: '#ffffff', border: '1px solid #e5e7eb', color: '#4b5563', cursor: 'pointer', marginBottom: 0 }}
                     >
                         <ArrowLeft size={22} />
                     </button>
@@ -91,7 +72,7 @@ export const LabResultsEntry: React.FC = () => {
                         <p className="coord-page-subtitle">Process pending laboratory workloads efficiently.</p>
                     </div>
                 </div>
-                
+
                 <div style={{ background: '#ffffff', padding: '0.5rem 1rem', borderRadius: '0.75rem', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     <div style={{ width: '0.75rem', height: '0.75rem', borderRadius: '50%', background: '#10b981' }}></div>
                     <span style={{ fontWeight: 800, color: '#1f2937' }}>{pendingLabs.length} <span style={{ color: '#6b7280', fontWeight: 500 }}>Pending</span></span>
@@ -110,7 +91,7 @@ export const LabResultsEntry: React.FC = () => {
                 </div>
 
                 <div className="coord-card-body no-padding" style={{ minHeight: '400px' }}>
-                    {loading ? (
+                    {isLoading ? (
                         <div className="coord-empty-state">
                             <div className="coord-spinner" style={{ width: '3rem', height: '3rem', color: '#0d9488', borderWidth: '4px', marginBottom: '1rem' }}></div>
                             <p style={{ fontWeight: 700, color: '#4b5563' }}>Querying central database...</p>
@@ -127,14 +108,14 @@ export const LabResultsEntry: React.FC = () => {
                         <div style={{ padding: '0.5rem' }}>
                             {pendingLabs.map((lab) => (
                                 <div key={lab.result_id} className="coord-action-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem', padding: '1.25rem', gap: '1.5rem' }}>
-                                    
+
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
                                         <div style={{ width: '3.5rem', height: '3.5rem', borderRadius: '1rem', background: '#f0fdfa', border: '1px solid #ccfbf1', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0d9488', fontWeight: 800, fontSize: '1.125rem' }}>
                                             {lab.test_name.substring(0, 3).toUpperCase()}
                                         </div>
                                         <div>
                                             <h4 style={{ margin: '0 0 0.25rem 0', fontWeight: 800, fontSize: '1.125rem', color: '#111827' }}>{lab.test_name}</h4>
-                                            
+
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
                                                 <span className="coord-badge coord-badge-gray">
                                                     <UserSquare2 size={14} /> {lab.full_name || lab.trial_patient_id}
@@ -151,10 +132,7 @@ export const LabResultsEntry: React.FC = () => {
                                     </div>
 
                                     <button
-                                        onClick={() => {
-                                            setSelectedLab(lab);
-                                            setResultValue('');
-                                        }}
+                                        onClick={() => { setSelectedLab(lab); setResultValue(''); }}
                                         className="coord-btn-outline"
                                         style={{ border: '2px solid #e5e7eb', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'white' }}
                                     >
@@ -167,7 +145,7 @@ export const LabResultsEntry: React.FC = () => {
                 </div>
             </div>
 
-            {/* Pure CSS Glassmorphic Modal overlay */}
+            {/* Modal */}
             {selectedLab && (
                 <div className="coord-modal-backdrop" onClick={handleBackdropClick}>
                     <div className="coord-modal" onClick={e => e.stopPropagation()}>
@@ -182,7 +160,7 @@ export const LabResultsEntry: React.FC = () => {
                             <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', padding: '1rem', borderRadius: '1rem', marginBottom: '1.5rem' }}>
                                 <p style={{ fontSize: '0.7rem', color: '#0d9488', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.1em', margin: '0 0 0.25rem 0' }}>Target Test</p>
                                 <p style={{ fontWeight: 800, color: '#111827', fontSize: '1.125rem', margin: '0 0 1rem 0' }}>{selectedLab.test_name}</p>
-                                
+
                                 <p style={{ fontSize: '0.7rem', color: '#0d9488', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.1em', margin: '0 0 0.5rem 0' }}>Subject Profile</p>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                     <div style={{ width: '2rem', height: '2rem', borderRadius: '50%', background: '#e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 800, color: '#4b5563' }}>
@@ -196,7 +174,9 @@ export const LabResultsEntry: React.FC = () => {
                             </div>
 
                             <div style={{ marginBottom: '2rem' }}>
-                                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 800, color: '#374151', marginBottom: '0.5rem' }}>Numeric Result Value</label>
+                                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 800, color: '#374151', marginBottom: '0.5rem' }}>
+                                    Numeric Result Value {selectedLab.unit_of_measure ? `(${selectedLab.unit_of_measure})` : ''}
+                                </label>
                                 <input
                                     type="number"
                                     className="coord-input-field"
@@ -209,13 +189,24 @@ export const LabResultsEntry: React.FC = () => {
                                 />
                             </div>
 
+                            {saveMut.isError && (
+                                <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '0.5rem', padding: '0.75rem', color: '#b91c1c', fontSize: '0.875rem', marginBottom: '1rem' }}>
+                                    Failed to save. Please try again.
+                                </div>
+                            )}
+
                             <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1px solid #f3f4f6', paddingTop: '1rem' }}>
                                 <button type="button" className="coord-btn-outline" style={{ flex: 1, padding: '0.75rem', fontWeight: 800, background: 'white' }} onClick={() => setSelectedLab(null)}>Cancel</button>
-                                <button type="submit" disabled={!resultValue || submitting} className="coord-btn-primary" style={{ flex: 1, padding: '0.75rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-                                    {submitting ? (
-                                        <><div className="coord-spinner" style={{ width: '1rem', height: '1rem', borderWidth: '2px' }}></div> Saving</>
+                                <button
+                                    type="submit"
+                                    disabled={!resultValue || saveMut.isPending}
+                                    className="coord-btn-primary"
+                                    style={{ flex: 1, padding: '0.75rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                                >
+                                    {saveMut.isPending ? (
+                                        <><div className="coord-spinner" style={{ width: '1rem', height: '1rem', borderWidth: '2px' }} /> Saving</>
                                     ) : (
-                                        <>Save Profile <ArrowRight size={16} strokeWidth={2.5}/></>
+                                        <>Save Result <ArrowRight size={16} strokeWidth={2.5} /></>
                                     )}
                                 </button>
                             </div>

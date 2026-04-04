@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
     Users,
     UserCheck,
@@ -9,64 +10,53 @@ import {
     Clock
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { dashboardAPI } from '../../services/api';
 import { StatCard } from '../../components/dashboard/StatCard';
 import { PendingScreeningsWidget } from '../../components/dashboard/PendingScreeningsWidget';
 import '../Dashboard.css';
 
 export const PIDashboard: React.FC = () => {
     const { user } = useAuth();
-    const [stats, setStats] = useState<any>(null);
-    const [, setLoading] = useState(true);
 
-    useEffect(() => {
-        //defining fetchDashboardStats function inside the argument of useEffect (argument is an arrow function)
-        const fetchDashboardStats = async () => {
-            if (!user?.site_id) {
-                // Use dummy if no site_id
-                setStats({
-                    total_patients: 142,
-                    active_patients: 89,
-                    screen_failures: 12,
-                    retention_rate: 96,
-                    enrollment_current: 89,
-                    enrollment_target: 140,
-                    enrollment_percentage: 63.5
-                });
-                setLoading(false);
-                return;
-            }
+    // 1. Fetch Materialized View Stats
+    const { data: stats, isLoading: statsLoading } = useQuery({
+        queryKey: ['pi-stats', user?.site_id],
+        queryFn: () => dashboardAPI.getPIStats(),
+        enabled: !!user?.site_id,
+    });
 
-            try {
-                // Fetch from the Materialized View endpoint
-                //this dashboard/stats is in dashboardRoutes
-                const response = await fetch(`http://localhost:5000/api/dashboard/stats`, {
-                    credentials: 'include', // Include httpOnly cookie
-                });
-                if (response.ok) {
-                    const data = await response.json();
-                    setStats(data);
-                } else {
-                    console.error("Failed to fetch dashboard stats");
-                }
-            } catch (error) {
-                console.error("Error fetching dashboard stats:", error);
-            } finally {
-                setLoading(false);
-            }
-        };
+    // 2. Fetch Alerts (AEs, Critical Labs, Deviations)
+    const { data: alerts = [], isLoading: alertsLoading } = useQuery({
+        queryKey: ['pi-alerts', user?.site_id],
+        queryFn: () => dashboardAPI.getAlerts(),
+        enabled: !!user?.site_id,
+    });
 
-        fetchDashboardStats();
-    }, [user?.site_id]);
+    // 3. Fetch Today's Schedule
+    const { data: schedule = [], isLoading: scheduleLoading } = useQuery({
+        queryKey: ['pi-schedule', user?.site_id],
+        queryFn: () => dashboardAPI.getTodaysSchedule(),
+        enabled: !!user?.site_id,
+    });
+
+    if (statsLoading || alertsLoading || scheduleLoading) {
+        return (
+            <div className="dashboard-container" style={{ display: 'flex', justifyContent: 'center', padding: '100px' }}>
+                <div className="coord-spinner" style={{ width: '3rem', height: '3rem', borderWidth: '4px', color: '#4f46e5' }} />
+            </div>
+        );
+    }
 
     return (
         <div className="dashboard-container">
             <div className="section-header">
                 <div>
                     <h1 className="page-title">Principal Investigator Dashboard</h1>
+                    <p className="text-gray-500 text-sm">Site: {user?.site_id || 'Unknown'}</p>
                 </div>
             </div>
 
-         
+            {/* KPI Cards mapping directly to mv_pi_dashboard_stats columns */}
             <div className="stats-grid">
                 <StatCard
                     label="Total Patients"
@@ -97,40 +87,37 @@ export const PIDashboard: React.FC = () => {
             <div className="dashboard-layout">
                 {/* Left Column: Alerts & Enrollment */}
                 <div className="dash-col-left">
-                    {/* Safety Alerts */}
+                    
+                    {/* Dynamic Safety Alerts */}
                     <div className="card alert-card">
                         <div className="card-header">
                             <h3 className="card-title text-danger">
                                 <AlertCircle size={20} />
-                                Safety Alerts (3 Urgent)
+                                Safety Alerts ({alerts.length})
                             </h3>
                         </div>
                         <div className="alert-list">
-                            <div className="alert-item urgent">
-                                <div className="alert-content">
-                                    <span className="alert-patient">Patient #45</span>
-                                    <p>Grade 4 AE - Anaphylaxis. Needs immediate reporting.</p>
+                            {alerts.length === 0 ? (
+                                <div style={{ padding: '2rem', textAlign: 'center', color: '#6b7280', fontSize: '0.9rem' }}>
+                                    No active safety alerts for your site.
                                 </div>
-                                <button className="btn-xs btn-danger-outline">Report</button>
-                            </div>
-                            <div className="alert-item high">
-                                <div className="alert-content">
-                                    <span className="alert-patient">Patient #12</span>
-                                    <p>Critical lab value - AST 300 U/L (5x ULN)</p>
-                                </div>
-                                <button className="btn-xs">Review</button>
-                            </div>
-                            <div className="alert-item medium">
-                                <div className="alert-content">
-                                    <span className="alert-tag">Protocol</span>
-                                    <p>Visit window exceeded for PT-00123 (Visit 4)</p>
-                                </div>
-                                <button className="btn-xs">Details</button>
-                            </div>
+                            ) : (
+                                alerts.map((alert: any, index: number) => (
+                                    <div key={index} className={`alert-item ${alert.severity === 'Urgent' ? 'urgent' : alert.severity === 'High' ? 'high' : 'medium'}`}>
+                                        <div className="alert-content">
+                                            <span className="alert-patient">{alert.patient_id || 'System'}</span>
+                                            <p>{alert.message}</p>
+                                        </div>
+                                        <button className={`btn-xs ${alert.severity === 'Urgent' ? 'btn-danger-outline' : ''}`}>
+                                            Review
+                                        </button>
+                                    </div>
+                                ))
+                            )}
                         </div>
                     </div>
 
-                    {/* Enrollment Progress */}
+                    {/* Dynamic Enrollment Progress (using MV logic) */}
                     <div className="card my-4">
                         <div className="card-header">
                             <h3 className="card-title">
@@ -144,11 +131,16 @@ export const PIDashboard: React.FC = () => {
                                 <span className="text-gray-500">of target ({stats?.enrollment_current || 0}/{stats?.enrollment_target || 0})</span>
                             </div>
                             <div className="progress-bar-bg">
-                                <div className="progress-bar-fill" style={{ width: `${Math.min(stats?.enrollment_percentage || 0, 100)}%` }}></div>
+                                <div 
+                                    className="progress-bar-fill" 
+                                    style={{ width: `${Math.min(parseFloat(stats?.enrollment_percentage) || 0, 100)}%`, background: '#4f46e5' }}
+                                ></div>
                             </div>
                             <div className="progress-meta text-warning mt-2 flex items-center gap-2">
                                 <Clock size={14} />
-                                <span className="text-sm">Status: In Progress</span>
+                                <span className="text-sm">
+                                    Last Refreshed: {stats?.last_refreshed ? new Date(stats.last_refreshed).toLocaleTimeString() : 'Just now'}
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -164,52 +156,31 @@ export const PIDashboard: React.FC = () => {
                                 <Calendar size={18} />
                                 Today's Schedule
                             </h3>
-                            <span className="badge-neutral">Jan 15, 2024</span>
+                            <span className="badge-neutral">{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                         </div>
                         <div className="schedule-list">
-                            <div className="schedule-item">
-                                <div className="time-col">09:00</div>
-                                <div className="event-col">
-                                    <strong>PT-00456</strong>
-                                    <span className="event-type">Visit 3 - Follow up</span>
+                            {schedule.length === 0 ? (
+                                <div style={{ padding: '2rem', textAlign: 'center', color: '#6b7280', fontSize: '0.9rem' }}>
+                                    No visits scheduled for today.
                                 </div>
-                                <div className="status-col">
-                                    <span className="status-badge done">Done</span>
-                                </div>
-                            </div>
-
-                            <div className="schedule-item">
-                                <div className="time-col">11:30</div>
-                                <div className="event-col">
-                                    <strong>PT-00987</strong>
-                                    <span className="event-type">Screening Visit</span>
-                                </div>
-                                <div className="status-col">
-                                    <span className="status-badge active">Now</span>
-                                </div>
-                            </div>
-
-                            <div className="schedule-item">
-                                <div className="time-col">14:00</div>
-                                <div className="event-col">
-                                    <strong>Site Meeting</strong>
-                                    <span className="event-type">AE Review Board</span>
-                                </div>
-                                <div className="status-col">
-                                    <span className="status-badge pending">Pending</span>
-                                </div>
-                            </div>
-
-                            <div className="schedule-item">
-                                <div className="time-col">16:30</div>
-                                <div className="event-col">
-                                    <strong>PT-00112</strong>
-                                    <span className="event-type">Unscheduled Visit</span>
-                                </div>
-                                <div className="status-col">
-                                    <span className="status-badge pending">Pending</span>
-                                </div>
-                            </div>
+                            ) : (
+                                schedule.map((visit: any, index: number) => (
+                                    <div key={index} className="schedule-item">
+                                        <div className="time-col">
+                                            {new Date(visit.scheduled_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </div>
+                                        <div className="event-col">
+                                            <strong>{visit.trial_patient_id}</strong>
+                                            <span className="event-type">{visit.visit_name}</span>
+                                        </div>
+                                        <div className="status-col">
+                                            <span className={`status-badge ${visit.visit_status.toLowerCase() === 'checked in' ? 'active' : visit.visit_status.toLowerCase() === 'completed' ? 'done' : 'pending'}`}>
+                                                {visit.visit_status}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
                         </div>
                     </div>
                 </div>

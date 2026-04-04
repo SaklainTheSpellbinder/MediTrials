@@ -355,3 +355,37 @@
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
 }
+
+/* Form utilities — used in Schedule Visit modal and inline forms */
+.form-label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: #374151;
+    margin-bottom: 0.4rem;
+}
+
+.form-select,
+.form-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.65rem 1rem;
+    font-size: 0.95rem;
+    font-weight: 500;
+    border: 1.5px solid #e5e7eb;
+    border-radius: 0.6rem;
+    outline: none;
+    color: #111827;
+    background: #ffffff;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    font-family: inherit;
+}
+
+.form-select:focus,
+.form-input:focus {
+    border-color: #4f46e5;
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+/* Teal badge variant */
+.coord-badge-teal { background: #f0fdfa; color: #0f766e; border: 1px solid #99f6e4; }

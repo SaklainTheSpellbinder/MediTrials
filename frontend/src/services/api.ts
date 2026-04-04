@@ -69,6 +69,24 @@ export const patientAPI = {
   },
 };
 
+export const dashboardAPI = {
+  // Fetches from your materialized view: mv_pi_dashboard_stats
+  getPIStats: async () => {
+    const response = await API.get('/dashboard/stats');
+    return response.data;
+  },
+  // Fetches urgent safety alerts / critical labs
+  getAlerts: async () => {
+    const response = await API.get('/dashboard/alerts');
+    return response.data;
+  },
+  // Fetches today's visits for the schedule column
+  getTodaysSchedule: async () => {
+    const response = await API.get('/dashboard/schedule/today');
+    return response.data;
+  }
+};
+
 export const patientProfileAPI = {
   //this calls from patientProfileRoutes
   //called from PatientProfile.tsx
@@ -157,34 +175,180 @@ export const screeningAPI = {
 };
 
 export const visitAPI = {
+  // called from VisitManagement.tsx — fetches today's scheduled visits for the site
   getAll: async () => {
     const response = await API.get('/visits');
     return response.data;
   },
 
+  // called from ECRFEntry PatientList / ClinicalForm — visits for a specific patient
   getByPatientId: async (patientId: number) => {
     const response = await API.get(`/patients/${patientId}/visits`);
     return response.data;
   },
 };
 
+export const coordinatorAPI = {
+  // called from VisitManagement.tsx — today's visits for check-in list
+  getTodayVisits: async () => {
+    const response = await API.get('/coordinator/visits/today'); // coordinatorRoutes.ts
+    return response.data;
+  },
+
+  // called from VisitManagement.tsx — check in a patient for a visit
+  checkIn: async (visitInstanceId: number) => {
+    const response = await API.post('/coordinator/visits/checkin', { visit_instance_id: visitInstanceId }); // coordinatorRoutes.ts
+    return response.data;
+  },
+
+  // called from VisitManagement.tsx (Schedule Visit modal) — patients list for dropdown
+  getPatients: async () => {
+    const response = await API.get('/coordinator/patients'); // coordinatorRoutes.ts
+    return response.data;
+  },
+
+  // called from VisitManagement.tsx (Schedule Visit modal) — visit template types for dropdown
+  getVisitSchedules: async () => {
+    const response = await API.get('/coordinator/visit-schedules'); // coordinatorRoutes.ts
+    return response.data;
+  },
+
+  // called from ECRFEntry / LabResultsEntry — active/checked-in visits for a patient (data entry gate)
+  getActiveVisits: async (patientId?: number) => {
+    const params = patientId ? { patient_id: patientId } : {};
+    const response = await API.get('/coordinator/visits/active', { params }); // coordinatorRoutes.ts
+    return response.data;
+  },
+
+  // called from VisitManagement.tsx — schedule a new visit for a patient
+  scheduleVisit: async (data: { patient_id: number; visit_id: number; scheduled_date: string }) => {
+    const response = await API.post('/coordinator/visits/schedule', data); // coordinatorRoutes.ts
+    return response.data;
+  },
+
+  // called from LabResultsEntry.tsx — fetch pending labs for coordinator entry
+  getPendingLabs: async () => {
+    const response = await API.get('/coordinator/labs/pending'); // coordinatorRoutes.ts
+    return response.data;
+  },
+
+  // called from LabResultsEntry.tsx — update a lab result value
+  updateLabResult: async (resultId: number, resultValue: number, changeReason?: string) => {
+    const response = await API.post('/coordinator/labs/update', {
+      result_id: resultId,
+      result_value: resultValue,
+      change_reason: changeReason,
+    }); // coordinatorRoutes.ts
+    return response.data;
+  },
+
+  // called from CoordinatorDashboard.tsx — site stats KPIs
+  getStats: async () => {
+    const res = await API.get('/coordinator/stats'); // coordinatorRoutes.ts
+    return res.data;
+  },
+
+  // called from CoordinatorDashboard.tsx — today's visit list (alias for check-in view)
+  getTodaysVisits: async () => {
+    const res = await API.get('/coordinator/visits/today'); // coordinatorRoutes.ts
+    return res.data;
+  },
+
+  // called from LabEntryForm.tsx — all laboratory tests from laboratory_tests table
+  getLabTests: async () => {
+    const response = await API.get('/coordinator/lab-tests'); // coordinatorRoutes.ts
+    return response.data;
+  },
+
+  // called from LabEntryForm.tsx — submit a lab result for a patient visit
+  submitLabResult: async (data: {
+    patient_id: number;
+    visit_instance_id: number;
+    test_id: number;
+    result_value: number;
+  }) => {
+    const response = await API.post('/coordinator/lab-results/submit', data); // coordinatorRoutes.ts
+    return response.data;
+  },
+
+  // called from AEEntryForm.tsx — submit a new adverse event linked to a patient visit
+  submitAdverseEvent: async (data: {
+    patient_id: number;
+    visit_instance_id?: number | null;
+    ae_term: string;
+    ae_start_date: string;
+    ae_end_date?: string;
+    severity_grade: number;
+    causality_relationship: string;
+    treatment_related: boolean;
+    results_in_death: boolean;
+    life_threatening: boolean;
+    requires_hospitalization: boolean;
+    ae_description?: string;
+    ae_status: string;
+  }) => {
+    const response = await API.post('/coordinator/adverse-events/submit', data); // coordinatorRoutes.ts
+    return response.data;
+  },
+};
+
+
+// PI Safety API — called from PI pages
+export const piSafetyAPI = {
+  // called from LabResults.tsx (PI) — all enrolled patients at PI's site for filtering dropdown
+  getPatients: async () => {
+    const response = await API.get('/pi-safety/patients'); // piSafetyRoutes.ts
+    return response.data;
+  },
+
+  // called from ECRFEntry (PI) — active/checked-in visits for a specific patient
+  getActiveVisits: async (patientId: number) => {
+    const response = await API.get(`/pi-safety/active-visits/${patientId}`); // piSafetyRoutes.ts
+    return response.data;
+  },
+
+  // called from PISafetyMonitoring.tsx — full safety dashboard for PI
+  getDashboard: async () => {
+    const response = await API.get('/pi-safety/dashboard'); // piSafetyRoutes.ts
+    return response.data;
+  },
+
+  // called from PISafetyMonitoring.tsx — site overview
+  getSiteOverview: async () => {
+    const response = await API.get('/pi-safety/site-overview'); // piSafetyRoutes.ts
+    return response.data;
+  },
+
+  // called from PISafetyMonitoring.tsx — acknowledge a safety alert
+  acknowledgeAlert: async (alertId: number, reason: string) => {
+    const response = await API.put(`/pi-safety/alerts/${alertId}/acknowledge`, { reason }); // piSafetyRoutes.ts
+    return response.data;
+  },
+};
+
 // Lab API functions
 export const labAPI = {
+  // called from LabResults.tsx (PI) — all labs at caller's site (site_id from JWT on backend)
   getAll: async () => {
     const response = await API.get('/labs'); //this is in labroutes.ts
     return response.data;
   },
 
-  getSiteLabs: async (siteId: number) => {
-    const response = await API.get(`/labs?site_id=${siteId}`); //labroutes.ts
+  // called from LabResults.tsx (PI) — labs at caller's site (site_id from JWT), optionally filtered by patient_id
+  getSiteLabs: async (patientId?: number) => {
+    const params: any = {};
+    if (patientId) params.patient_id = patientId;
+    const response = await API.get('/labs', { params }); //labroutes.ts — uses req.user.site_id
     return response.data;
   },
 
+  // called from LabResults.tsx (PI) — sign off / mark lab result as Completed
   review: async (resultId: number) => {
     const response = await API.post(`/labs/${resultId}/review`); //this is in labroutes.ts
     return response.data;
   },
 
+  // called from PatientProfile — labs for a specific patient
   getByPatientId: async (patientId: number) => {
     const response = await API.get(`/patients/${patientId}/labs`);
     return response.data;
@@ -192,10 +356,17 @@ export const labAPI = {
 };
 
 export const ecrfAPI = {
+  // called from ClinicalForm.tsx — general ECRF submit (auto-picks last visit on backend)
   submit: async (data: any) => {
     const response = await API.post('/ecrf/submit', data);
     return response.data;
-  }
+  },
+
+  // called from ClinicalForm.tsx — ECRF submit with explicit visit_instance_id (visit-gated workflow)
+  submitWithVisit: async (data: { patient_id: number; visit_instance_id: number; [key: string]: any }) => {
+    const response = await API.post('/ecrf/submit', data); // ecrfRoutes.ts accepts visit_instance_id
+    return response.data;
+  },
 };
 
 
@@ -212,19 +383,6 @@ export const safetyAPI = {
   },
 };
 
-
-export const coordinatorAPI = {
-    getStats: async () => {
-      //called from coordinatorDashboard
-        const res = await API.get('/coordinator/stats');
-        return res.data;
-    },
-    //called from coordinatorDashboard
-    getTodaysVisits: async () => {
-        const res = await API.get('/coordinator/visits/today');
-        return res.data;
-    }
-};
 
 //this is actually safetyMonitor
 export const safetyManagerAPI ={
