@@ -12,7 +12,7 @@ router.use(requireRole(['Principal_Investigator', 'Study_Coordinator']));
 
 const PI_QUEUE_PREFIX = '[PI_QUEUE]';
 
-// ─── Helper Functions ────────────────────────────────────────────────────────
+//Helper Functions
 
 async function verifyUserPassword(inputPassword: string, storedHash: string): Promise<boolean> {
   if (storedHash === inputPassword) return true;
@@ -250,9 +250,7 @@ router.post('/submit-for-review/:patient_id', async (req: Request, res: Response
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────
 // POST /api/screening/pi-enroll/:patient_id — PI e-sign enrollment
-// ─────────────────────────────────────────────────────────────────────────
 router.post('/pi-enroll/:patient_id', async (req: Request, res: Response) => {
   const patientId = parseInt(req.params.patient_id);
   const userId = req.user?.user_id;
@@ -339,9 +337,7 @@ router.post('/pi-enroll/:patient_id', async (req: Request, res: Response) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────
 // GET /api/screening/pending-pi-review
-// ─────────────────────────────────────────────────────────────────────────
 router.get('/pending-pi-review', async (req: Request, res: Response) => {
   const siteId = req.user?.site_id || parseInt(req.query.site_id as string);
   if (!siteId) return res.status(400).json({ error: 'site_id is required' });
@@ -354,16 +350,13 @@ router.get('/pending-pi-review', async (req: Request, res: Response) => {
         SELECT * FROM patient_screening ps WHERE ps.patient_id = p.patient_id ORDER BY screening_id DESC LIMIT 1
       ) ps ON true
       LEFT JOIN study_sites s ON p.site_id = s.site_id
-      WHERE p.site_id = $1 AND p.patient_status = 'Screened' AND p.enrollment_date IS NULL
+      WHERE p.site_id = $1 
+        AND p.patient_status = 'Screened' 
+        AND p.enrollment_date IS NULL
         AND ps.screening_status = 'Pending Review'
-        AND (
-          (ps.override_reason LIKE $2 AND EXISTS (
-            SELECT 1 FROM informed_consent ic WHERE ic.patient_id = p.patient_id AND ic.is_withdrawn = FALSE
-          ))
-          OR
-          (NOT EXISTS (
-            SELECT 1 FROM informed_consent ic WHERE ic.patient_id = p.patient_id AND ic.is_withdrawn = FALSE
-          ))
+        AND ps.override_reason LIKE $2
+        AND EXISTS (
+          SELECT 1 FROM informed_consent ic WHERE ic.patient_id = p.patient_id AND ic.is_withdrawn = FALSE
         )
       ORDER BY p.patient_id`,
       [siteId, `${PI_QUEUE_PREFIX}%`]

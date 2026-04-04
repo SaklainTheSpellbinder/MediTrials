@@ -23,9 +23,13 @@ const PIScreeningQueue: React.FC = () => {
         setLoading(true);
         try {
             const data = await screeningAPI.getPendingPiReview(user!.site_id!);
-            setPending(data.success ? data.patients : []);
-        } catch { setPending([]); }
-        finally { setLoading(false); }
+            const pendingPatients = Array.isArray(data) ? data : (data.patients || []);
+            setPending(pendingPatients);
+        } catch { 
+            setPending([]); 
+        } finally { 
+            setLoading(false); 
+        }
     };
 
     const calcAge = (dob: string) => {
@@ -133,15 +137,16 @@ const CoordinatorScreeningQueue: React.FC = () => {
         setLoading(true);
         try {
             const data = await patientAPI.getAll();
-            if (data.success && Array.isArray(data.patients)) {
-                // Show only patients in screening phase (Screened status, no enrollment date)
-                const screened = data.patients.filter((p: any) =>
-                    p.patient_status === 'Screened' && !p.enrollment_date
-                );
-                setPatients(screened);
-            }
-        } catch { setPatients([]); }
-        finally { setLoading(false); }
+            const rawPatients = Array.isArray(data) ? data : (data.patients || []);
+            const screened = rawPatients.filter((p: any) =>
+                p.patient_status === 'Screened' && !p.enrollment_date
+            );
+            setPatients(screened);
+        } catch { 
+            setPatients([]); 
+        } finally { 
+            setLoading(false); 
+        }
     };
 
     const calcAge = (dob: string) => {

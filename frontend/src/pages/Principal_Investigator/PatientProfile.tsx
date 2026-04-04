@@ -221,15 +221,20 @@ export const PatientProfile: React.FC = () => {
                             <ClipboardList size={14} /> Eligibility Checklist
                         </button>
                     )}
-                    <button className="btn-action btn-action-ghost" onClick={() => alert("Scheduling system coming soon!")}>
-                        <Calendar size={14} /> Schedule Visit
-                    </button>
+                    {user?.role === 'Study_Coordinator' && (
+    <button 
+        className="btn-action btn-action-ghost" 
+        onClick={() => navigate('/visits', { state: { preselectPatientId: pid } })}
+    >
+        <Calendar size={14} /> Schedule Visit
+    </button>
+)}
                     {user?.role === 'Principal_Investigator' && (
-                        <button className="btn-action btn-action-white" onClick={() => alert("eCRF Signing coming in V2")}>
+                        <button className="btn-action btn-action-white" onClick={() => navigate(`/ecrf`)}>
                             <PenTool size={14} /> Sign eCRF
                         </button>
                     )}
-                    <button className="btn-action btn-action-danger" onClick={() => alert("AE Report Modal coming soon!")}>
+                    <button className="btn-action btn-action-danger" onClick={() => navigate(`/ecrf`)}>
                         <AlertCircle size={14} /> Report AE
                     </button>
                 </div>
