@@ -15,18 +15,36 @@ const Tab: React.FC<{ label: string; active: boolean; onClick: () => void }> = (
     }}>{label}</button>
 );
 
-const InlineForm: React.FC<{ fields: { name: string; label: string; type?: string }[]; onSubmit: (v: Record<string, any>) => void; loading?: boolean }> = ({ fields, onSubmit, loading }) => {
+const InlineForm: React.FC<{ fields: { name: string; label: string; type?: string; placeholder?: string }[]; onSubmit: (v: Record<string, any>) => void; loading?: boolean }> = ({ fields, onSubmit, loading }) => {
     const [v, setV] = useState<Record<string, any>>({});
     return (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', padding: '10px 0', borderTop: '1px solid #F3F4F6', marginTop: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start', padding: '10px 0', borderTop: '1px solid #F3F4F6', marginTop: 8 }}>
             {fields.map(f => (
-                <div key={f.name} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <label style={{ fontSize: 11, color: '#9CA3AF' }}>{f.label}</label>
-                    <input type={f.type ?? 'text'} value={v[f.name] ?? ''} onChange={e => setV(p => ({ ...p, [f.name]: e.target.value }))}
-                        style={{ border: '1px solid #E5E7EB', borderRadius: 6, padding: '5px 8px', fontSize: 12, width: 140 }} />
+                <div key={f.name} style={{ display: 'flex', flexDirection: f.type === 'checkbox' ? 'row' : 'column', gap: f.type === 'checkbox' ? 6 : 2, alignItems: f.type === 'checkbox' ? 'center' : 'flex-start', marginTop: f.type === 'checkbox' ? 14 : 0 }}>
+                    {f.type !== 'checkbox' && <label style={{ fontSize: 11, color: '#9CA3AF' }}>{f.label}</label>}
+                    
+                    {f.type === 'textarea' ? (
+                        <textarea 
+                            value={v[f.name] ?? ''} 
+                            onChange={e => setV(p => ({ ...p, [f.name]: e.target.value }))}
+                            placeholder={f.placeholder}
+                            style={{ border: '1px solid #E5E7EB', borderRadius: 6, padding: '5px 8px', fontSize: 11, width: 220, height: 40, fontFamily: 'monospace', resize: 'vertical' }} 
+                        />
+                    ) : (
+                        <input 
+                            type={f.type ?? 'text'} 
+                            checked={f.type === 'checkbox' ? !!v[f.name] : undefined}
+                            value={f.type !== 'checkbox' ? (v[f.name] ?? '') : undefined} 
+                            placeholder={f.placeholder}
+                            onChange={e => setV(p => ({ ...p, [f.name]: f.type === 'checkbox' ? e.target.checked : e.target.value }))}
+                            style={f.type === 'checkbox' ? {} : { border: '1px solid #E5E7EB', borderRadius: 6, padding: '5px 8px', fontSize: 12, width: 140 }} 
+                        />
+                    )}
+                    
+                    {f.type === 'checkbox' && <label style={{ fontSize: 11, color: '#6B7280', cursor: 'pointer' }}>{f.label}</label>}
                 </div>
             ))}
-            <button onClick={() => { onSubmit(v); setV({}); }} disabled={loading} className="btn-primary" style={{ height: 30, padding: '0 14px', fontSize: 12 }}>
+            <button onClick={() => { onSubmit(v); setV({}); }} disabled={loading} className="btn-primary" style={{ height: 30, padding: '0 14px', fontSize: 12, marginTop: 14 }}>
                 {loading ? '…' : '+ Add'}
             </button>
         </div>
@@ -274,13 +292,16 @@ export const TrialDetail: React.FC = () => {
                                 <div>No eCRF definitions yet. Add one below.</div>
                             </div>
                         ) : ecrfDefs?.map((e: any) => (
-                            <div key={e.ecrf_id ?? e.ecrf_definition_id} style={{ padding: '10px 14px', background: '#F9FAFB', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 14, border: '1px solid #F3F4F6' }}>
+                            <div key={e.ecrf_id} style={{ padding: '10px 14px', background: '#F9FAFB', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 14, border: '1px solid #F3F4F6' }}>
                                 <div style={{ width: 32, height: 32, background: '#EEF2FF', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                     <FileText size={16} color="#4F46E5" />
                                 </div>
                                 <div>
                                     <div style={{ fontWeight: 700, fontSize: 13 }}>{e.ecrf_name}</div>
-                                    <div style={{ fontSize: 11, color: '#9CA3AF' }}>Version {e.version ?? '—'} &nbsp;·&nbsp; {Object.keys(e.ecrf_schema?.fields ?? {}).length} fields defined</div>
+                                    <div style={{ fontSize: 11, color: '#9CA3AF' }}>
+                                        {e.signature_required ? 'Signature Required' : 'No Signature'} &nbsp;·&nbsp; 
+                                        {e.ecrf_schema?.fields?.length ?? 0} fields defined
+                                    </div>
                                 </div>
                                 <span className="admin-badge admin-badge-blue" style={{ marginLeft: 'auto', fontSize: 10 }}>Active</span>
                             </div>
@@ -289,10 +310,25 @@ export const TrialDetail: React.FC = () => {
                     <InlineForm
                         fields={[
                             { name: 'ecrf_name', label: 'Form Name' },
-                            { name: 'version', label: 'Version (e.g. 1.0)' },
-                            { name: 'description', label: 'Short Description' },
+                            { name: 'signature_required', label: 'Signature Required?', type: 'checkbox' },
+                            { name: 'ecrf_schema', label: 'Schema (JSON)', type: 'textarea', placeholder: '{"fields": []}' },
+                            { name: 'validation_rules', label: 'Validation Rules (JSON)', type: 'textarea', placeholder: '{"rules": []}' }
                         ]}
-                        onSubmit={v => addEcrf.mutate(v)}
+                        onSubmit={v => {
+                            try {
+                                const schemaObj = v.ecrf_schema ? JSON.parse(v.ecrf_schema) : { fields: [] };
+                                const rulesObj = v.validation_rules ? JSON.parse(v.validation_rules) : null;
+                                
+                                addEcrf.mutate({
+                                    ecrf_name: v.ecrf_name,
+                                    signature_required: !!v.signature_required,
+                                    ecrf_schema: schemaObj,
+                                    validation_rules: rulesObj
+                                });
+                            } catch (err) {
+                                alert("Invalid JSON format! Please check your Schema and Validation Rules.");
+                            }
+                        }}
                         loading={addEcrf.isPending}
                     />
                 </div>
