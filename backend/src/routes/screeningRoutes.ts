@@ -278,7 +278,12 @@ router.post('/pi-enroll/:patient_id', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Invalid electronic signature password' });
     }
 
-    const p = await client.query(`SELECT patient_status, trial_patient_id, enrollment_date FROM patients WHERE patient_id = $1`, [patientId]);
+    const p = await client.query(`
+    SELECT p.patient_status, p.trial_patient_id, p.enrollment_date, ss.trial_id 
+    FROM patients p
+    JOIN study_sites ss ON p.site_id = ss.site_id
+    WHERE p.patient_id = $1
+`, [patientId]);
     if (p.rows.length === 0) throw new Error('NOT_FOUND');
     if (p.rows[0].enrollment_date != null) {
       await client.query('ROLLBACK');
@@ -323,8 +328,15 @@ router.post('/pi-enroll/:patient_id', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Eligibility failures are present without PI override; enrollment is not allowed.' });
     }
 
+    const changeReason = `PI ${piAction} enrollment and randomization`;
+    await client.query(`SET LOCAL app.current_user_id = '${userId}'`);
+    await client.query(`SET LOCAL app.change_reason = '${changeReason.replace(/'/g, "''")}'`);
+
     await client.query(`UPDATE patient_screening SET screening_status = 'Passed' WHERE screening_id = $1`, [screening_id]);
-    await client.query(`UPDATE patients SET patient_status = 'Enrolled', enrollment_date = CURRENT_DATE, updated_at = CURRENT_TIMESTAMP WHERE patient_id = $1`, [patientId]);
+
+    const trialId = p.rows[0].trial_id;
+
+    await client.query(`CALL public.sp_randomize_patient($1, $2, 'Simple')`, [patientId, trialId]);
 
     await client.query('COMMIT');
     res.json({ success: true, message: 'Patient enrolled successfully.', trial_patient_id: p.rows[0].trial_patient_id });
