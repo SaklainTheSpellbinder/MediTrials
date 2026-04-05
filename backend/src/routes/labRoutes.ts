@@ -24,10 +24,9 @@ router.get('/', async (req: Request, res: Response) => {
                 lr.result_date,
                 lr.result_status,
                 (lr.critical_result_flag = 'Y') as critical_result_flag,
-                -- FIX: Use ->> for both to guarantee text output
+                
                 COALESCE(lt.reference_ranges->>LOWER(p.gender), lt.reference_ranges->>'all') as reference_range_text,
                 lt.unit_of_measure,
-                -- FIX: Handle NULL values so pending labs don't show as 'Normal'
                 CASE 
                     WHEN lr.result_value IS NULL THEN 'Pending'
                     WHEN lr.result_value <= lt.critical_low_value THEN 'Low'
