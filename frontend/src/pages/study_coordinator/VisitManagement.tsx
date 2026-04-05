@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
     Calendar as CalendarIcon, Clock, CheckCircle, Search,
-    Plus, UserCheck, AlertTriangle, ArrowRight, User, X
+    Plus, ArrowRight, User, X
 } from 'lucide-react';
 import { coordinatorAPI } from '../../services/api';
 import './Coordinator.css';
@@ -167,6 +167,7 @@ export const VisitManagement: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [showScheduleModal, setShowScheduleModal] = useState(false);
     const [checkingInId, setCheckingInId] = useState<number | null>(null);
+    const [completingId, setCompletingId] = useState<number | null>(null);
 
     
     const { data: visits = [], isLoading } = useQuery<Visit[]>({
@@ -188,6 +189,21 @@ export const VisitManagement: React.FC = () => {
     const handleCheckIn = (visitInstanceId: number) => {
         setCheckingInId(visitInstanceId);
         checkInMut.mutate(visitInstanceId);
+    };
+
+    // Complete mutation
+    const completeMut = useMutation({
+        mutationFn: (visitInstanceId: number) => coordinatorAPI.completeVisit(visitInstanceId),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['coord-today-visits'] });
+            setCompletingId(null);
+        },
+        onError: () => setCompletingId(null),
+    });
+
+    const handleComplete = (visitInstanceId: number) => {
+        setCompletingId(visitInstanceId);
+        completeMut.mutate(visitInstanceId);
     };
 
     const filteredVisits = visits.filter(v =>
@@ -264,22 +280,24 @@ export const VisitManagement: React.FC = () => {
                     ) : (
                         <div className="coord-flex-col" style={{ gap: '1rem' }}>
                             {filteredVisits.map((visit) => {
-                                const isCheckedIn = ['Checked In', 'In Progress', 'Completed'].includes(visit.visit_status);
+                                const isCompleted = visit.visit_status === 'Completed';
+                                const isCheckedIn = ['Checked In', 'In Progress'].includes(visit.visit_status);
                                 const isCheckingIn = checkingInId === visit.visit_instance_id || (checkInMut.isPending && checkingInId === visit.visit_instance_id);
+                                const isCompleting = completingId === visit.visit_instance_id || (completeMut.isPending && completingId === visit.visit_instance_id);
 
                                 return (
                                     <div key={visit.visit_instance_id} className="coord-action-card" style={{
                                         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                                        padding: '1.25rem', background: isCheckedIn ? '#f0fdf4' : '#ffffff',
-                                        borderColor: isCheckedIn ? '#bbf7d0' : '#e5e7eb', flexWrap: 'wrap', gap: '1.5rem'
+                                        padding: '1.25rem', background: isCompleted ? '#f0fdf4' : isCheckedIn ? '#eff6ff' : '#ffffff',
+                                        borderColor: isCompleted ? '#bbf7d0' : isCheckedIn ? '#bfdbfe' : '#e5e7eb', flexWrap: 'wrap', gap: '1.5rem'
                                     }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
                                             <div style={{
                                                 width: '3.5rem', height: '3.5rem', borderRadius: '1rem',
-                                                border: `2px solid ${isCheckedIn ? '#ffffff' : '#f3f4f6'}`,
+                                                border: `2px solid ${isCompleted ? '#ffffff' : isCheckedIn ? '#ffffff' : '#f3f4f6'}`,
                                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                background: isCheckedIn ? '#dcfce3' : '#f9fafb',
-                                                color: isCheckedIn ? '#16a34a' : '#6b7280'
+                                                background: isCompleted ? '#dcfce3' : isCheckedIn ? '#dbeafe' : '#f9fafb',
+                                                color: isCompleted ? '#16a34a' : isCheckedIn ? '#2563eb' : '#6b7280'
                                             }}>
                                                 <User size={24} strokeWidth={2.5} />
                                             </div>
@@ -311,10 +329,28 @@ export const VisitManagement: React.FC = () => {
                                         </div>
 
                                         <div>
-                                            {isCheckedIn ? (
+                                            {isCompleted ? (
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#15803d', fontWeight: 800, fontSize: '0.875rem', padding: '0.75rem 1.5rem', background: '#dcfce3', borderRadius: '0.75rem', border: '1px solid #bbf7d0' }}>
                                                     <CheckCircle size={18} strokeWidth={2.5} />
-                                                    Checked In
+                                                    Completed
+                                                </div>
+                                            ) : isCheckedIn ? (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#1d4ed8', fontWeight: 800, fontSize: '0.875rem', padding: '0.75rem 1rem', background: '#eff6ff', borderRadius: '0.75rem', border: '1px solid #bfdbfe' }}>
+                                                        <Clock size={18} strokeWidth={2.5} />
+                                                        In Progress
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleComplete(visit.visit_instance_id)}
+                                                        disabled={isCompleting}
+                                                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#16a34a', color: 'white', padding: '0.75rem 1.25rem', borderRadius: '0.75rem', fontWeight: 800, border: 'none', cursor: 'pointer', transition: 'all 0.2s', opacity: isCompleting ? 0.7 : 1 }}
+                                                    >
+                                                        {isCompleting ? (
+                                                            <><div className="coord-spinner"></div></>
+                                                        ) : (
+                                                            <>Close Visit</>
+                                                        )}
+                                                    </button>
                                                 </div>
                                             ) : (
                                                 <button

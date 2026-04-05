@@ -104,7 +104,7 @@ function App() {
       <Route path="/labs" element={<W allowedRoles={['Principal_Investigator']}><LabResults /></W>} />
 
       {/*Coordinator Routes*/}
-      <Route path="/visits" element={<W allowedRoles={['Study_Coordinator']}><VisitManagement /></W>} />
+      <Route path="/visits" element={<W allowedRoles={['Principal_Investigator', 'Study_Coordinator']}><VisitManagement /></W>} />
       {/* <Route path="/labs/entry" element={<W allowedRoles={['Study_Coordinator']}><LabResultsEntry /></W>} /> */}
 
       {/* Safety Monitor Routes */}

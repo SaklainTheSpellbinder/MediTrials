@@ -72,7 +72,7 @@ export const ClinicalForm: React.FC<ClinicalFormProps> = ({ patient, visitInstan
           <p style={{ color: '#6b7280', marginBottom: '2rem' }}>
             Clinical data for <strong>{patient.patient_id}</strong> — <strong>{visitName}</strong> has been recorded and locked.
           </p>
-          <button className="btn-primary" onClick={onBack}>Return to Patient List</button>
+          <button className="btn-primary" onClick={onBack}>Return to Selection Page</button>
         </div>
       </div>
     );

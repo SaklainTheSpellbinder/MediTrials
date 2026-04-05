@@ -53,6 +53,7 @@ export const Sidebar: React.FC<SidebarProps> = () => {
         { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
         { label: 'Patient Registry', icon: Users, path: '/patients' },
         { label: 'Screening & Consent', icon: ClipboardList, path: '/patients/screening' },
+        { label: 'Visit Management', icon: CalendarCheck, path: '/visits' },
         { label: 'Visit Data Entry', icon: ClipboardList, path: '/ecrf' },
         { label: 'Safety Monitoring', icon: AlertTriangle, path: '/safety' },
         { label: 'Lab Results', icon: TestTube, path: '/labs' },

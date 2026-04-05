@@ -201,6 +201,12 @@ export const coordinatorAPI = {
     return response.data;
   },
 
+  // called from VisitManagement.tsx — complete a visit
+  completeVisit: async (visitInstanceId: number) => {
+    const response = await API.post('/coordinator/visits/complete', { visit_instance_id: visitInstanceId }); // coordinatorRoutes.ts
+    return response.data;
+  },
+
   // called from VisitManagement.tsx (Schedule Visit modal) — patients list for dropdown
   getPatients: async () => {
     const response = await API.get('/coordinator/patients'); // coordinatorRoutes.ts
