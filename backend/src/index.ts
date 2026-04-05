@@ -38,8 +38,9 @@ app.use(cookieParser());
 app.use('/api/auth', authRoutes);
 
 app.use(authMiddleware);
-app.use('/api/patients', patientRoutes);
 app.use('/api/patients', patientProfileRoutes);
+app.use('/api/patients', patientRoutes);
+
 app.use('/api/screening', screeningRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/coordinator', coordinatorRoutes);

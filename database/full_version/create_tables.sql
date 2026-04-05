@@ -192,7 +192,7 @@ CREATE TABLE patient_visits (
     scheduled_date DATE NOT NULL,
     actual_visit_date DATE,
     visit_status VARCHAR(50) DEFAULT 'Scheduled' 
-        CHECK (visit_status IN ('Scheduled', 'Completed', 'Missed', 'Cancelled')),
+        CHECK (visit_status IN ('Scheduled','Checked In','In Progress','Completed', 'Missed', 'Cancelled')),
     visit_window_status VARCHAR(50) 
         CHECK (visit_window_status IN ('Within Window', 'Early', 'Late', 'Outside Window')),
     data_queries_count INTEGER DEFAULT 0,

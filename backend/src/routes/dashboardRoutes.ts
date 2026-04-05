@@ -91,5 +91,83 @@ router.get('/stats', async (req: any, res: any) => {
         res.status(500).json({ error: 'Error Fetching Live Stats' });
     }
 });
+// GET /api/dashboard/alerts
+router.get('/alerts', async (req: any, res: any) => {
+    try {
+        const role = req.user?.role;
+        const tokenSiteId = req.user?.site_id;
+        const querySiteId = req.query.site_id;
+        
+        const isSiteScopedRole = role === 'Principal_Investigator' || role === 'Study_Coordinator';
+        const siteId = isSiteScopedRole ? tokenSiteId : querySiteId;
 
+        if (!siteId) {
+            return res.status(400).json({ error: 'Missing site_id' });
+        }
+
+        const query = `
+            SELECT 
+                p.trial_patient_id AS patient_id,
+                sa.alert_message AS message,
+                CASE 
+                    WHEN sa.alert_severity = 'CRITICAL' THEN 'Urgent'
+                    WHEN sa.alert_severity = 'HIGH' THEN 'High'
+                    ELSE 'Medium'
+                END AS severity
+            FROM public.safety_alerts sa
+            JOIN public.patients p ON sa.patient_id = p.patient_id
+            WHERE p.site_id = $1 AND sa.alert_status != 'Resolved'
+            ORDER BY 
+                CASE sa.alert_severity 
+                    WHEN 'CRITICAL' THEN 1 
+                    WHEN 'HIGH' THEN 2 
+                    ELSE 3 
+                END, 
+                sa.created_at DESC
+            LIMIT 5;
+        `;
+
+        const result = await pool.query(query, [siteId]);
+        res.json(result.rows);
+    } catch (err: any) {
+        console.error("Dashboard Alerts Error:", err);
+        res.status(500).json({ error: 'Error fetching safety alerts' });
+    }
+});
+
+// GET /api/dashboard/schedule/today
+router.get('/schedule/today', async (req: any, res: any) => {
+    try {
+        const role = req.user?.role;
+        const tokenSiteId = req.user?.site_id;
+        const querySiteId = req.query.site_id;
+        
+        const isSiteScopedRole = role === 'Principal_Investigator' || role === 'Study_Coordinator';
+        const siteId = isSiteScopedRole ? tokenSiteId : querySiteId;
+
+        if (!siteId) {
+            return res.status(400).json({ error: 'Missing site_id' });
+        }
+
+        const query = `
+            SELECT 
+                pv.scheduled_date,
+                p.trial_patient_id,
+                vs.visit_name,
+                pv.visit_status
+            FROM public.patient_visits pv
+            JOIN public.patients p ON pv.patient_id = p.patient_id
+            JOIN public.visit_schedules vs ON pv.visit_id = vs.visit_id
+            WHERE p.site_id = $1 
+              AND pv.scheduled_date::DATE = CURRENT_DATE
+            ORDER BY pv.scheduled_date ASC;
+        `;
+
+        const result = await pool.query(query, [siteId]);
+        res.json(result.rows);
+    } catch (err: any) {
+        console.error("Dashboard Schedule Error:", err);
+        res.status(500).json({ error: 'Error fetching today schedule' });
+    }
+});
 export default router;

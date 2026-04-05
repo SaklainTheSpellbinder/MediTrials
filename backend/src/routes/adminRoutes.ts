@@ -415,7 +415,30 @@ router.post('/trials/:trialId/lab-tests', async (req: Request, res: Response) =>
     } finally { client.release(); }
 });
 
+// POST /admin/trials/:trialId/ecrf-defs — add a new eCRF definition for a trial
+router.post('/trials/:trialId/ecrf-defs', async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    const { trialId } = req.params;
+    const { ecrf_name, version, description } = req.body;
+    if (!ecrf_name) return res.status(400).json({ error: 'ecrf_name is required' });
 
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        const { rows } = await client.query(`
+            INSERT INTO public.ecrf_definitions (trial_id, ecrf_name, version, ecrf_schema)
+            VALUES ($1, $2, $3, $4)
+            RETURNING ecrf_id, ecrf_name, version
+        `, [trialId, ecrf_name, version || '1.0', JSON.stringify({ description: description || '' })]);
+
+        await auditLog(client, 'ecrf_definitions', rows[0].ecrf_id, 'INSERT', rows[0], user?.user_id, 'Admin added eCRF definition');
+        await client.query('COMMIT');
+        res.status(201).json(rows[0]);
+    } catch (err: any) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ error: err.message });
+    } finally { client.release(); }
+});
 
 // SITE MANAGEMENT
 router.get('/sites', async (req: Request, res: Response) => {

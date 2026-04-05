@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { Plus, Trash2, Edit2 } from 'lucide-react';
+import { Trash2, Edit2, FileText } from 'lucide-react';
 
 import { adminAPI } from '../../services/api';
 import '../Dashboard.css';
@@ -35,6 +35,38 @@ const InlineForm: React.FC<{ fields: { name: string; label: string; type?: strin
 
 const TABS = ['Overview', 'Sites', 'Protocol', 'Treatment Arms', 'Eligibility', 'Visit Schedule', 'eCRF Defs', 'Lab Tests'];
 
+const BLINDING_OPTIONS = ['Open-label', 'Single-blind', 'Double-blind', 'Triple-blind'];
+
+// Separate add-row for treatment arms so the Blinding field is a <select> not a free text input
+const ArmAddRow: React.FC<{ onSubmit: (v: Record<string, any>) => void; loading?: boolean }> = ({ onSubmit, loading }) => {
+    const [v, setV] = useState({ arm_code: '', arm_description: '', blinding_level: BLINDING_OPTIONS[0] });
+    return (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', padding: '10px 0', borderTop: '1px solid #F3F4F6', marginTop: 8 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <label style={{ fontSize: 11, color: '#9CA3AF' }}>Arm Code</label>
+                <input value={v.arm_code} onChange={e => setV(p => ({ ...p, arm_code: e.target.value }))}
+                    placeholder="e.g. A, B, CTRL" style={{ border: '1px solid #E5E7EB', borderRadius: 6, padding: '5px 8px', fontSize: 12, width: 100 }} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <label style={{ fontSize: 11, color: '#9CA3AF' }}>Description</label>
+                <input value={v.arm_description} onChange={e => setV(p => ({ ...p, arm_description: e.target.value }))}
+                    placeholder="Treatment description" style={{ border: '1px solid #E5E7EB', borderRadius: 6, padding: '5px 8px', fontSize: 12, width: 180 }} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <label style={{ fontSize: 11, color: '#9CA3AF' }}>Blinding</label>
+                <select value={v.blinding_level} onChange={e => setV(p => ({ ...p, blinding_level: e.target.value }))}
+                    style={{ border: '1px solid #E5E7EB', borderRadius: 6, padding: '5px 8px', fontSize: 12, width: 140, background: 'white' }}>
+                    {BLINDING_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
+            </div>
+            <button onClick={() => { onSubmit(v); setV({ arm_code: '', arm_description: '', blinding_level: BLINDING_OPTIONS[0] }); }}
+                disabled={loading || !v.arm_code} className="btn-primary" style={{ height: 30, padding: '0 14px', fontSize: 12 }}>
+                {loading ? '…' : '+ Add'}
+            </button>
+        </div>
+    );
+};
+
 export const TrialDetail: React.FC = () => {
     const { trialId } = useParams();
     const navigate = useNavigate();
@@ -57,6 +89,7 @@ export const TrialDetail: React.FC = () => {
     const addElig = mut('eligibility');
     const addVisit = mut('visits');
     const addLab = mut('lab-tests');
+    const addEcrf = mut('ecrf-defs');
 
     if (isLoading) return <div className="dashboard-container"><div className="sm-loading">Loading trial data…</div></div>;
     if (!data) return <div className="dashboard-container"><div className="sm-error">Trial not found.</div></div>;
@@ -187,8 +220,8 @@ export const TrialDetail: React.FC = () => {
                             {arms?.map((a: any) => <tr key={a.arm_id}><td style={{ padding: '8px 10px', fontFamily: 'monospace' }}>{a.arm_code}</td><td style={{ padding: '8px 10px' }}>{a.arm_description}</td><td style={{ padding: '8px 10px', color: '#6B7280' }}>{a.blinding_level}</td></tr>)}
                         </tbody>
                     </table>
-                    <InlineForm fields={[{ name: 'arm_code', label: 'Code' }, { name: 'arm_description', label: 'Description' }, { name: 'blinding_level', label: 'Blinding' }]}
-                        onSubmit={v => addArm.mutate(v)} loading={addArm.isPending} />
+                    {/* Custom add-arm row with blinding dropdown instead of free text */}
+                    <ArmAddRow onSubmit={v => addArm.mutate(v)} loading={addArm.isPending} />
                 </div>
             )}
 
@@ -234,16 +267,34 @@ export const TrialDetail: React.FC = () => {
             {/* Tab 6 — eCRF Defs */}
             {tab === 6 && (
                 <div className="card">
-                    <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 10 }}>eCRF editor is out of scope for this sprint — showing existing definitions.</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {ecrfDefs?.length === 0 ? <div className="sm-empty">No eCRF definitions</div> : ecrfDefs?.map((e: any) => (
-                            <div key={e.ecrf_definition_id} style={{ padding: '8px 12px', background: '#F9FAFB', borderRadius: 6, display: 'flex', gap: 12 }}>
-                                <span style={{ fontWeight: 700 }}>{e.ecrf_name}</span>
-                                <span style={{ color: '#6B7280', fontSize: 12 }}>v{e.version}</span>
-                                <span style={{ color: '#9CA3AF', fontSize: 12, marginLeft: 'auto' }}>{Object.keys(e.ecrf_schema?.fields ?? {}).length} fields</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+                        {ecrfDefs?.length === 0 ? (
+                            <div className="sm-empty" style={{ padding: '20px', textAlign: 'center', color: '#9CA3AF' }}>
+                                <FileText size={28} style={{ margin: '0 auto 8px' }} />
+                                <div>No eCRF definitions yet. Add one below.</div>
+                            </div>
+                        ) : ecrfDefs?.map((e: any) => (
+                            <div key={e.ecrf_id ?? e.ecrf_definition_id} style={{ padding: '10px 14px', background: '#F9FAFB', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 14, border: '1px solid #F3F4F6' }}>
+                                <div style={{ width: 32, height: 32, background: '#EEF2FF', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <FileText size={16} color="#4F46E5" />
+                                </div>
+                                <div>
+                                    <div style={{ fontWeight: 700, fontSize: 13 }}>{e.ecrf_name}</div>
+                                    <div style={{ fontSize: 11, color: '#9CA3AF' }}>Version {e.version ?? '—'} &nbsp;·&nbsp; {Object.keys(e.ecrf_schema?.fields ?? {}).length} fields defined</div>
+                                </div>
+                                <span className="admin-badge admin-badge-blue" style={{ marginLeft: 'auto', fontSize: 10 }}>Active</span>
                             </div>
                         ))}
                     </div>
+                    <InlineForm
+                        fields={[
+                            { name: 'ecrf_name', label: 'Form Name' },
+                            { name: 'version', label: 'Version (e.g. 1.0)' },
+                            { name: 'description', label: 'Short Description' },
+                        ]}
+                        onSubmit={v => addEcrf.mutate(v)}
+                        loading={addEcrf.isPending}
+                    />
                 </div>
             )}
 

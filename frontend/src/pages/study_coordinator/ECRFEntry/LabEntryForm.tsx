@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { ArrowLeft, TestTube, X, AlertTriangle, CheckCircle, Plus } from 'lucide-react';
 import type { Patient } from './PatientList';
 import { coordinatorAPI } from '../../../services/api';
@@ -24,8 +24,8 @@ interface LabEntryFormProps {
 export const LabEntryForm: React.FC<LabEntryFormProps> = ({
   patient, visitInstanceId, visitName, onBack
 }) => {
-  const qc = useQueryClient();
   const [activeTest, setActiveTest] = useState<LabTest | null>(null);
+
   const [inputValue, setInputValue] = useState('');
   const [savedTests, setSavedTests] = useState<number[]>([]); // test_ids already logged this session
 

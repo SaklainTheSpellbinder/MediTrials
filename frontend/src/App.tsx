@@ -94,7 +94,7 @@ function App() {
       <Route path="/patients/screening/:patient_id" element={
         <W allowedRoles={['Principal_Investigator','Study_Coordinator']}>{user?.role === 'Principal_Investigator' ? <ScreeningReview /> : <Screening />}</W>
       } />
-      <Route path="/patients/:patient_id" element={<W allowedRoles={['Principal_Investigator','Study_Coordinator']}><PatientProfile /></W>} />
+      <Route path="/patients/:patient_id" element={<W allowedRoles={['Principal_Investigator','Study_Coordinator','Safety_Monitor']}><PatientProfile /></W>} />
       <Route path="/safety" element={<W allowedRoles={['Principal_Investigator']}><PISafetyMonitoring /></W>} />
 
       {/* eCRF */}

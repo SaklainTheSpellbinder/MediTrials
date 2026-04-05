@@ -216,7 +216,7 @@ export const PatientProfile: React.FC = () => {
                         </button>
                     )}
                     {/* Checklist button — visible when consent is on file but not enrolled */}
-                    {patient?.patient_status === 'Screened' && !patient?.enrollment_date && documents.consent?.length > 0 && (
+                    {patient?.patient_status === 'Screened' && !patient?.enrollment_date && documents.consent?.length > 0 && user?.role !== 'Principal_Investigator' && (
                         <button className="btn-action btn-action-white" onClick={() => navigate(`/patients/screening/${patient_id}`)}>
                             <ClipboardList size={14} /> Eligibility Checklist
                         </button>

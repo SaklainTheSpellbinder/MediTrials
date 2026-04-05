@@ -3,7 +3,7 @@ import { pool } from '../config/db';
 import { requireRole } from '../middleware/authMiddleware';
 
 const router = Router();
-router.use(requireRole(['Principal_Investigator','Study_Coordinator']));
+router.use(requireRole(['Principal_Investigator','Study_Coordinator','Safety_Monitor']));
 // Middleware to ensure patient_id is provided and valid
 const requirePatientId = (req: any, res: any, next: any) => {
     const patientId = parseInt(req.params.patientId);

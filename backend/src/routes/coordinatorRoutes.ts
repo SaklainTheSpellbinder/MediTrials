@@ -6,7 +6,7 @@ import { requireRole } from '../middleware/authMiddleware';
 import type { Request, Response } from 'express';
 import '../middleware/authMiddleware';
 const router = Router();
-router.use(requireRole(['Study_Coordinator']));
+router.use(requireRole(['Study_Coordinator', 'Principal_Investigator']));
 
 const queriesDir = path.join(__dirname, '../../../database/study_coordinator_queries');
 const getQuery = (filename: string) => fs.readFileSync(path.join(queriesDir, filename), 'utf8');
@@ -139,6 +139,44 @@ router.post('/visits/checkin', async (req: Request, res: Response) => {
     } catch (err: any) {
         await client.query('ROLLBACK');
         console.error('Check-In Error:', err);
+        res.status(500).json({ error: err.message || 'Server Error' });
+    } finally {
+        client.release();
+    }
+});
+
+// POST /api/coordinator/visits/complete
+// Marks a Checked-In visit as Completed and stamps actual_visit_date = today.
+// Body: { visit_instance_id }
+router.post('/visits/complete', async (req: Request, res: Response) => {
+    const { visit_instance_id } = req.body;
+
+    if (!visit_instance_id) {
+        return res.status(400).json({ error: 'Missing visit_instance_id' });
+    }
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // Set audit context for trigger-based audit log
+        await client.query(`SELECT set_config('app.current_user_id', $1::text, true)`, [req.user?.user_id]);
+        await client.query(`SELECT set_config('app.change_reason', $1::text, true)`, ['Visit completed by coordinator/PI']);
+
+        const query = getQuery('007_complete_visit.sql');
+        const result = await client.query(query, [visit_instance_id]);
+
+        if (result.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Visit not found or not in Checked-In status' });
+        }
+
+        await client.query('COMMIT');
+        res.json({ message: 'Visit marked as completed', data: result.rows[0] });
+
+    } catch (err: any) {
+        await client.query('ROLLBACK');
+        console.error('Complete Visit Error:', err);
         res.status(500).json({ error: err.message || 'Server Error' });
     } finally {
         client.release();
