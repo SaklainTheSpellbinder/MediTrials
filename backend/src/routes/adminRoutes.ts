@@ -381,16 +381,20 @@ router.post('/trials/:trialId/visits', async (req: Request, res: Response) => {
         await client.query('BEGIN');
         const { rows } = await client.query(`
             INSERT INTO public.visit_schedules (trial_id, visit_name, day_offset, visit_number, visit_window_before_days, visit_window_after_days)
-            VALUES ($1,$2,$3,$3,$4,$5) RETURNING *
+            VALUES ($1, $2, $3, $3, $4, $5) 
+            RETURNING *
         `, [trialId, visit_name, visit_day, window_before_days, window_after_days]);
         
-        await auditLog(client, 'visit_schedules', rows[0].schedule_id, 'INSERT', rows[0], user?.user_id, 'Admin added visit schedule');
+        await auditLog(client, 'visit_schedules', rows[0].visit_id, 'INSERT', rows[0], user?.user_id, 'Admin added visit schedule');
+        
         await client.query('COMMIT');
         res.status(201).json(rows[0]);
     } catch (err: any) { 
         await client.query('ROLLBACK');
         res.status(500).json({ error: err.message }); 
-    } finally { client.release(); }
+    } finally { 
+        client.release(); 
+    }
 });
 
 router.post('/trials/:trialId/lab-tests', async (req: Request, res: Response) => {
