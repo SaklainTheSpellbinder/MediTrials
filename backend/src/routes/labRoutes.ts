@@ -41,8 +41,6 @@ router.get('/', async (req: Request, res: Response) => {
         `;
 
         const params: any[] = [siteId];
-
-        // Safe check for valid number instead of truthiness
         if (patientId !== null && !isNaN(patientId)) {
             params.push(patientId);
             query += ` AND p.patient_id = $${params.length}`;
@@ -51,9 +49,6 @@ router.get('/', async (req: Request, res: Response) => {
         query += ` ORDER BY lr.result_date DESC;`;
 
         const result = await pool.query(query, params);
-
-        // Optional but recommended: Log this "VIEW" action to your user_access_log!
-        // Because viewing patient lab results is PHI, HIPAA usually requires tracking this read access.
 
         res.json({ success: true, labs: result.rows });
     } catch (err: any) {

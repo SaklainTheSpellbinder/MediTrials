@@ -88,12 +88,11 @@ router.post('/', async (req: Request, res: Response) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    //set_config() to safely pass parameters for 21 CFR Part 11 auditing
     await client.query(`SELECT set_config('app.current_user_id', $1::text, true)`, [requestUser?.user_id]);
     await client.query(`SELECT set_config('app.change_reason', $1::text, true)`, ['Registered new patient into screening']);
     const status = patient_status || 'Screened';
-    // 2. Insert patient. 
-    // Passing NULL to trial_patient_id relies safely on your BEFORE INSERT trigger to catch it.
+    
+    // Passing NULL to trial_patient_id relies safely on BEFORE INSERT trigger to catch it.
     const result = await client.query(
       `INSERT INTO public.patients (
         trial_patient_id, full_name, site_id, patient_status, date_of_birth, gender, enrollment_date
@@ -128,8 +127,6 @@ router.post('/', async (req: Request, res: Response) => {
 router.post('/:patientId/record-consent', async (req: Request, res: Response) => {
   const patientId = parseInt(req.params.patientId, 10);
   const { consent_version, consent_date, e_signature_password } = req.body;
-  
-  // SECURE: Extract user ID from JWT, never from req.body
   const userId = req.user?.user_id;
 
   if (isNaN(patientId) || !consent_version || !consent_date || !e_signature_password || !userId) {
@@ -140,7 +137,7 @@ router.post('/:patientId/record-consent', async (req: Request, res: Response) =>
   try {
     await client.query('BEGIN');
 
-    // 1. Verify the User's Password using Multi-Tier Logic (21 CFR Part 11 Requirement)
+    // Verify the User's Password using Multi-Tier Logic (21 CFR Part 11 Requirement)
     const userQuery = await client.query(`SELECT password_hash FROM users WHERE user_id = $1`, [userId]);
     if (userQuery.rows.length === 0) throw new Error('User not found');
     
@@ -150,7 +147,7 @@ router.post('/:patientId/record-consent', async (req: Request, res: Response) =>
       return res.status(401).json({ error: 'Invalid electronic signature password' });
     }
 
-    // 2. Validate Patient Status
+    // Validate Patient Status
     const pRow = await client.query(
       `SELECT patient_id, patient_status, trial_patient_id, enrollment_date FROM patients WHERE patient_id = $1`,
       [patientId]
@@ -164,18 +161,18 @@ router.post('/:patientId/record-consent', async (req: Request, res: Response) =>
       return res.status(409).json({ error: 'Consent can only be recorded for patients in screening.' });
     }
 
-    // 3. Ensure no duplicate consent
+    // Ensure no duplicate consent
     const existing = await client.query(`SELECT consent_id FROM informed_consent WHERE patient_id = $1`, [patientId]);
     if (existing.rows.length > 0) {
       await client.query('ROLLBACK');
       return res.status(409).json({ error: 'Informed consent is already on file for this patient.' });
     }
 
-    // 4. Generate cryptographic hash for the signature
+    // Generate cryptographic hash for the signature
     const sigPayload = `${userId}|${patientId}|${consent_version}|${new Date().toISOString()}`;
     const signatureHash = crypto.createHash('sha256').update(sigPayload).digest('hex');
 
-    // 5. Insert Consent Record
+    // Insert Consent Record
     const consentResult = await client.query(
       `INSERT INTO informed_consent (patient_id, consent_version, consent_date, digital_signature_hash)
        VALUES ($1, $2, $3, $4) RETURNING consent_id`,
@@ -183,14 +180,14 @@ router.post('/:patientId/record-consent', async (req: Request, res: Response) =>
     );
     const consentId = consentResult.rows[0].consent_id;
 
-    // 6. Record in global electronic_signatures table
+    // Record in global electronic_signatures table
     await client.query(
       `INSERT INTO electronic_signatures (signatory_user_id, document_type, document_id, signature_hash, signing_reason)
        VALUES ($1, 'Consent', $2, $3, 'Coordinator attested patient consent')`,
       [userId, consentId, signatureHash]
     );
 
-    // 7. Update Screening Status
+    // Update Screening Status
     const scr = await client.query(`SELECT screening_id FROM patient_screening WHERE patient_id = $1`, [patientId]);
     if (scr.rows.length === 0) {
       await client.query(

@@ -75,8 +75,6 @@ router.post('/labs/update', async (req: Request, res: Response) => {
 
     try {
         await client.query('BEGIN');
-        
-        // ADD THESE TWO LINES:
         const reason = change_reason || 'Lab result updated by coordinator';
         await client.query(`SELECT set_config('app.current_user_id', $1::text, true)`, [req.user?.user_id]);
         await client.query(`SELECT set_config('app.change_reason', $1::text, true)`, [reason]);
@@ -116,8 +114,6 @@ router.post('/visits/checkin', async (req: Request, res: Response) => {
 
     try {
         await client.query('BEGIN');
-
-        // ADD THESE TWO LINES:
         const reason = change_reason || 'Patient checked in for visit';
         await client.query(`SELECT set_config('app.current_user_id', $1::text, true)`, [req.user?.user_id]);
         await client.query(`SELECT set_config('app.change_reason', $1::text, true)`, [reason]);
@@ -158,8 +154,6 @@ router.post('/visits/complete', async (req: Request, res: Response) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-
-        // Set audit context for trigger-based audit log
         await client.query(`SELECT set_config('app.current_user_id', $1::text, true)`, [req.user?.user_id]);
         await client.query(`SELECT set_config('app.change_reason', $1::text, true)`, ['Visit completed by coordinator/PI']);
 
@@ -227,7 +221,6 @@ router.get('/visit-schedules', async (req: any, res: any) => {
 });
 
 // GET /api/coordinator/visits/active — visits that are scheduled/checked-in (data entry gate)
-// Accepts optional ?patient_id=N query param to filter by patient
 router.get('/visits/active', async (req: any, res: any) => {
     try {
         const siteId = req.user?.site_id;
@@ -273,8 +266,6 @@ router.post('/visits/schedule', async (req: any, res: any) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-
-        // ADD THESE TWO LINES:
         await client.query(`SELECT set_config('app.current_user_id', $1::text, true)`, [req.user?.user_id]);
         await client.query(`SELECT set_config('app.change_reason', $1::text, true)`, ['Visit scheduled by coordinator']);
 

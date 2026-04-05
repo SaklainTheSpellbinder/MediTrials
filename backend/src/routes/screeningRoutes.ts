@@ -12,8 +12,6 @@ router.use(requireRole(['Principal_Investigator', 'Study_Coordinator']));
 
 const PI_QUEUE_PREFIX = '[PI_QUEUE]';
 
-//Helper Functions
-
 async function verifyUserPassword(inputPassword: string, storedHash: string): Promise<boolean> {
   if (storedHash === inputPassword) return true;
   if (storedHash.startsWith('$2b$') || storedHash.startsWith('$2a$')) {
@@ -68,9 +66,9 @@ function replaceFailuresPlaceholder(failures: any[]): { criterion_id: number; fa
   }));
 }
 
-// ─────────────────────────────────────────────────────────────────────────
+
 // GET /api/screening/criteria
-// ─────────────────────────────────────────────────────────────────────────
+
 router.get('/criteria', async (req: Request, res: Response) => {
   const siteId = req.user?.site_id || parseInt(req.query.site_id as string);
   if (!siteId) return res.status(400).json({ error: 'site_id is required' });
@@ -90,9 +88,9 @@ router.get('/criteria', async (req: Request, res: Response) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────
+
 // GET /api/screening/protocol-versions
-// ─────────────────────────────────────────────────────────────────────────
+
 router.get('/protocol-versions', async (req: Request, res: Response) => {
   const siteId = req.user?.site_id || parseInt(req.query.site_id as string);
   if (!siteId) return res.status(400).json({ error: 'site_id is required' });
@@ -379,9 +377,9 @@ router.get('/pending-pi-review', async (req: Request, res: Response) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────
+
 // GET /api/screening/:patient_id
-// ─────────────────────────────────────────────────────────────────────────
+
 router.get('/:patient_id', async (req: Request, res: Response) => {
   const patientId = parseInt(req.params.patient_id);
   if (isNaN(patientId)) return res.status(400).json({ error: 'Valid patient_id is required' });
@@ -406,9 +404,9 @@ router.get('/:patient_id', async (req: Request, res: Response) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────
+
 // POST /api/screening/submit — Legacy: single-session screening
-// ─────────────────────────────────────────────────────────────────────────
+
 router.post('/submit', async (req: Request, res: Response) => {
   const userId = req.user?.user_id;
   const siteId = req.user?.site_id || req.body.site_id;
@@ -446,8 +444,7 @@ router.post('/submit', async (req: Request, res: Response) => {
     const isDraft = !consent_version;
     const initialPatientStatus = isDraft ? 'Screened' : 'Enrolled';
 
-    // REMOVED manual `trial_patient_id` generation.
-    // We pass NULL for `trial_patient_id`, and the database trigger creates it!
+    // passing NULL for `trial_patient_id`, and the database trigger will create it
     const patientResult = await client.query(
       `INSERT INTO patients (trial_patient_id, site_id, screening_number, patient_status, date_of_birth, gender, enrollment_date)
        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING patient_id, trial_patient_id, screening_number`,

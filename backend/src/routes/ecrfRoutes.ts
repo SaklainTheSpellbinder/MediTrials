@@ -8,11 +8,9 @@ router.use(requireRole(['Principal_Investigator','Study_Coordinator']));
 // POST /api/ecrf/submit
 router.post('/submit', async (req: any, res: any) => {
     const requestUser = req.user;
-    
-    // 1. Extract the snake_case payload we built in ClinicalForm.tsx
     const {
         patient_id,
-        visit_instance_id: providedVisitInstanceId, // explicit visit from visit-gated workflow
+        visit_instance_id: providedVisitInstanceId,
         measurement_time,
         systolic_bp,
         diastolic_bp,
@@ -26,19 +24,17 @@ router.post('/submit', async (req: any, res: any) => {
 
     const client = await pool.connect();
     try {
-        await client.query('BEGIN'); // START TRANSACTION
+        await client.query('BEGIN');
 
-        // 2. Set 21 CFR Part 11 Audit Context
         await client.query(`SELECT set_config('app.current_user_id', $1::text, true)`, [requestUser?.user_id]);
         await client.query(`SELECT set_config('app.change_reason', $1::text, true)`, ['Entered eCRF Vital Signs data']);
 
         let visit_instance_id: number;
 
         if (providedVisitInstanceId) {
-            // Use the explicitly provided visit_instance_id (visit-gated workflow)
             visit_instance_id = parseInt(providedVisitInstanceId);
         } else {
-            // 3. Fallback: Get the most recent visit (legacy / backward-compat)
+
             const visitQuery = `
                 SELECT visit_instance_id 
                 FROM public.patient_visits 
@@ -56,7 +52,7 @@ router.post('/submit', async (req: any, res: any) => {
 
         const timestamp = measurement_time ? new Date(measurement_time).toISOString() : new Date().toISOString();
 
-        // 4. Insert into ecrf_data (The Audit Wrap)
+        
         const ecrfDataQuery = `
             INSERT INTO public.ecrf_data (
                 ecrf_id,
@@ -77,14 +73,14 @@ router.post('/submit', async (req: any, res: any) => {
         });
 
         await client.query(ecrfDataQuery, [
-            1, // Assuming ecrf_id 1 is 'Vital Signs'
+            1, 
             patient_id,
             visit_instance_id,
             'Locked', 
             rawFormData
         ]);
 
-        // 5. Insert into vital_sign
+       
         const insertQuery = `
             INSERT INTO public.vital_signs (
                 patient_id, 

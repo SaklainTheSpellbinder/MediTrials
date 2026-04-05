@@ -11,7 +11,6 @@ async function withTransaction(userId: number, reason: string, fn: (client: any)
     const client = await (pool as any).connect();
     try {
         await client.query('BEGIN');
-        // SET LOCAL does not support $1 parameters — must inline the values
         await client.query(`SET LOCAL app.current_user_id = '${userId}'`);
         await client.query(`SET LOCAL app.change_reason = '${reason.replace(/'/g, "''")}'`);
         const result = await fn(client);
@@ -107,7 +106,7 @@ router.get('/data-manager', async (req: Request, res: Response) => {
     }
 });
 
-// ── GET /api/data-management/trials ──────────────────────────────────────────
+//GET /api/data-management/trials
 router.get('/trials', async (_req: Request, res: Response) => {
     try {
         const { rows } = await pool.query(`SELECT trial_id, trial_title, trial_status FROM public.clinical_trials ORDER BY trial_title`);
@@ -115,7 +114,7 @@ router.get('/trials', async (_req: Request, res: Response) => {
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// ── GET /api/data-management/sites ───────────────────────────────────────────
+//GET /api/data-management/sites
 router.get('/sites', async (req: Request, res: Response) => {
     try {
         const { trial_id } = req.query;
@@ -127,7 +126,7 @@ router.get('/sites', async (req: Request, res: Response) => {
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// ── GET /api/data-management/patients ────────────────────────────────────────
+//GET /api/data-management/patients
 router.get('/patients', async (req: Request, res: Response) => {
     try {
         const { trial_id, site_id } = req.query;
@@ -144,7 +143,7 @@ router.get('/patients', async (req: Request, res: Response) => {
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// ── GET /api/data-management/patients/:patientId/visits ──────────────────────
+//GET /api/data-management/patients/:patientId/visits
 router.get('/patients/:patientId/visits', async (req: Request, res: Response) => {
     try {
         const { rows } = await pool.query(
@@ -156,7 +155,7 @@ router.get('/patients/:patientId/visits', async (req: Request, res: Response) =>
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// ── GET /api/data-management/visits/:visitInstanceId/forms ───────────────────
+//GET /api/data-management/visits/:visitInstanceId/forms
 router.get('/visits/:visitInstanceId/forms', async (req: Request, res: Response) => {
     try {
         const { rows } = await pool.query(
@@ -168,8 +167,7 @@ router.get('/visits/:visitInstanceId/forms', async (req: Request, res: Response)
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// ── GET /api/data-management/queries ─────────────────────────────────────────
-// Query list with enriched joins — Complex Query (multi-table, date arithmetic)
+// GET /api/data-management/queries
 router.get('/queries', async (req: Request, res: Response) => {
     try {
         const { status, site_id, trial_id, date_from, date_to, search, page = '1', limit = '50' } = req.query;
@@ -218,7 +216,7 @@ router.get('/queries', async (req: Request, res: Response) => {
     } catch (err: any) { console.error('DM queries:', err.message); res.status(500).json({ error: err.message }); }
 });
 
-// ── GET /api/data-management/queries/:queryId ─────────────────────────────────
+//GET /api/data-management/queries/:queryId 
 router.get('/queries/:queryId', async (req: Request, res: Response) => {
     try {
         // Single query detail
@@ -250,7 +248,7 @@ router.get('/queries/:queryId', async (req: Request, res: Response) => {
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// ── POST /api/data-management/queries ─────────────────────────────────────────
+// POST /api/data-management/queries
 // Raise new query — explicit transaction, sets 21 CFR session vars, increments query_count
 router.post('/queries', async (req: Request, res: Response) => {
     const { ecrf_instance_id, field_name, query_text } = req.body;
@@ -271,8 +269,8 @@ router.post('/queries', async (req: Request, res: Response) => {
     } catch (err: any) { console.error('Raise query:', err.message); res.status(500).json({ error: err.message }); }
 });
 
-// ── PUT /api/data-management/queries/:queryId ─────────────────────────────────
-// Update query status (resolve / reject / close) — requires 21 CFR re-auth
+//PUT /api/data-management/queries/:queryId
+//Update query status (resolve / reject / close) — requires 21 CFR re-auth
 router.put('/queries/:queryId', async (req: Request, res: Response) => {
     const { queryId } = req.params;
     const { action, rejection_comment, reason } = req.body;
@@ -305,7 +303,7 @@ router.put('/queries/:queryId', async (req: Request, res: Response) => {
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// ── GET /api/data-management/site-performance ─────────────────────────────────
+//GET /api/data-management/site-performance
 // Complex Query 2: window function RANK() for site resolution ranking
 router.get('/site-performance', async (_req: Request, res: Response) => {
     try {
@@ -333,7 +331,7 @@ router.get('/site-performance', async (_req: Request, res: Response) => {
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// ── GET /api/data-management/completeness ─────────────────────────────────────
+// GET /api/data-management/completeness
 // eCRF completeness matrix — cross join patients × visits
 router.get('/completeness', async (req: Request, res: Response) => {
     const { trial_id } = req.query;
@@ -363,7 +361,7 @@ router.get('/completeness', async (req: Request, res: Response) => {
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// ── GET /api/data-management/missing-data ─────────────────────────────────────
+//GET /api/data-management/missing-data
 router.get('/missing-data', async (req: Request, res: Response) => {
     const { trial_id } = req.query;
     if (!trial_id) return res.status(400).json({ error: 'trial_id required' });
@@ -391,7 +389,7 @@ router.get('/missing-data', async (req: Request, res: Response) => {
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// ── GET /api/data-management/deviations ───────────────────────────────────────
+//GET /api/data-management/deviations
 router.get('/deviations', async (req: Request, res: Response) => {
     const { trial_id, type, site_id, irb_reported, date_from, date_to } = req.query;
     if (!trial_id) return res.status(400).json({ error: 'trial_id required' });
@@ -420,7 +418,7 @@ router.get('/deviations', async (req: Request, res: Response) => {
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// ── PUT /api/data-management/deviations/:deviationId ─────────────────────────
+// PUT /api/data-management/deviations/:deviationId
 // Toggle IRB reported — only field DM can edit; requires 21 CFR re-auth
 router.put('/deviations/:deviationId', async (req: Request, res: Response) => {
     const { reported_to_irb, reason } = req.body;
@@ -436,7 +434,7 @@ router.put('/deviations/:deviationId', async (req: Request, res: Response) => {
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// ── GET /api/data-management/trend/:trialId ───────────────────────────────────
+//GET /api/data-management/trend/:trialId 
 // Complex Query 3: data completeness trend over last 6 months (weekly buckets)
 router.get('/trend/:trialId', async (req: Request, res: Response) => {
     try {
@@ -492,7 +490,7 @@ router.get('/lock-readiness/:trialId', async (req: Request, res: Response) => {
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// ── GET /api/data-management/locks ───────────────────────────────────────────
+// ── GET /api/data-management/locks ────────
 router.get('/locks', async (_req: Request, res: Response) => {
     try {
         const { rows } = await pool.query(`
@@ -507,7 +505,7 @@ router.get('/locks', async (_req: Request, res: Response) => {
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// ── POST /api/data-management/lock ───────────────────────────────────────────
+// ── POST /api/data-management/lock ────────
 // Calls sp_lock_database stored procedure — 21 CFR re-auth required
 router.post('/lock', async (req: Request, res: Response) => {
     const { trial_id, lock_type, reason } = req.body;
@@ -534,7 +532,7 @@ router.post('/lock', async (req: Request, res: Response) => {
     }
 });
 
-// ── POST /api/data-management/export/sdtm ────────────────────────────────────
+// ── POST /api/data-management/export/sdtm ─
 // Calls sp_export_cdisc_sdtm — procedure returns INOUT JSONB datasets
 router.post('/export/sdtm', async (req: Request, res: Response) => {
     const { trial_id, domains = ['DM', 'AE', 'VS', 'LB'] } = req.body;
@@ -592,7 +590,7 @@ router.post('/export/sdtm', async (req: Request, res: Response) => {
     }
 });
 
-// ── POST /api/data-management/export/custom ───────────────────────────────────
+// ── POST /api/data-management/export/custom 
 // ALLOWLIST-validated custom export — never interpolates raw user input into SQL
 const EXPORT_ALLOWLIST: Record<string, string[]> = {
     patients: ['patient_id','trial_patient_id','patient_status','date_of_birth','gender','enrollment_date','site_id'],
@@ -643,7 +641,7 @@ router.post('/export/custom', async (req: Request, res: Response) => {
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// ── GET /api/data-management/datasets ─────────────────────────────────────────
+// ── GET /api/data-management/datasets ──────
 router.get('/datasets', async (req: Request, res: Response) => {
     const { trial_id } = req.query;
     if (!trial_id) return res.status(400).json({ error: 'trial_id required' });
@@ -653,7 +651,7 @@ router.get('/datasets', async (req: Request, res: Response) => {
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// ── POST /api/data-management/datasets ────────────────────────────────────────
+// ── POST /api/data-management/datasets ─────
 // Calls sp_generate_csdr stored procedure — inserts & populates analysis_results JSONB
 router.post('/datasets', async (req: Request, res: Response) => {
     const { trial_id, dataset_name, dataset_type, data_cutoff_date, population_definition } = req.body;
@@ -686,7 +684,7 @@ router.get('/datasets/:datasetId', async (req: Request, res: Response) => {
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// ── GET /api/data-management/audit ────────────────────────────────────────────
+// ── GET /api/data-management/audit ─────────
 // Paginated 21 CFR Part 11 audit trail with enriched user data
 router.get('/audit', async (req: Request, res: Response) => {
     const { table_name, user_id, action_type, date_from, date_to, record_id, page = '1', limit = '50' } = req.query;
@@ -719,7 +717,7 @@ router.get('/audit', async (req: Request, res: Response) => {
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// ── GET /api/data-management/audit/users ──────────────────────────────────────
+// ── GET /api/data-management/audit/users ───
 router.get('/audit/users', async (_req: Request, res: Response) => {
     try {
         const { rows } = await pool.query(`SELECT DISTINCT u.user_id, u.username, u.role
@@ -759,7 +757,7 @@ router.get('/protocols/:trialId', async (req: Request, res: Response) => {
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// ── POST /api/data-management/protocols ───────────────────────────────────────
+// POST /api/data-management/protocols
 // Upload new protocol version — triggers trg_invalidate_protocol automatically
 router.post('/protocols', async (req: Request, res: Response) => {
     const { trial_id, version_number, amendment_number, approval_date, approved_by_user_id, protocol_document, reason } = req.body;
@@ -782,7 +780,7 @@ router.post('/protocols', async (req: Request, res: Response) => {
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// ── GET /api/data-management/protocols/:trialId/compare ──────────────────────
+// GET /api/data-management/protocols/:trialId/compare
 router.get('/protocols/:trialId/compare', async (req: Request, res: Response) => {
     const { v1, v2 } = req.query;
     if (!v1 || !v2) return res.status(400).json({ error: 'v1 and v2 version numbers required' });
@@ -796,7 +794,7 @@ router.get('/protocols/:trialId/compare', async (req: Request, res: Response) =>
     } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// ── GET /api/data-management/sites/:siteId/quality-score 
+// GET /api/data-management/sites/:siteId/quality-score 
 router.get('/sites/:siteId/quality-score', async (req: Request, res: Response) => {
     try {
         const { rows } = await pool.query(

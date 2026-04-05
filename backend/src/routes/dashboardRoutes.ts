@@ -5,7 +5,6 @@ import { requireRole } from '../middleware/authMiddleware';
 const router = Router();
 
 // GET /api/dashboard/stats
-// GET /api/dashboard/stats
 router.get('/stats', async (req: any, res: any) => {
     try {
         const role = req.user?.role;
@@ -19,7 +18,6 @@ router.get('/stats', async (req: any, res: any) => {
             return res.status(400).json({ error: 'Missing site_id' });
         }
 
-        // Live calculation query written directly in the route
         const query = `
             WITH site_counts AS (
                 SELECT 
