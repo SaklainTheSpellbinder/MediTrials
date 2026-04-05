@@ -72,7 +72,7 @@ router.get('/admin', async (req: Request, res: Response) => {
         try {
             const sovRes = await pool.query(`SELECT * FROM public.mv_safety_overview`);
             safetyOverviewRows = sovRes.rows;
-        } catch { /* MV may not exist */ }
+        } catch { }
         const safetyMap: Record<number, any> = Object.fromEntries(safetyOverviewRows.map((r: any) => [r.trial_id, r]));
 
         const activeTrials = trialsRaw.rows.filter((t: any) => ['Active', 'Recruiting'].includes(t.trial_status));
