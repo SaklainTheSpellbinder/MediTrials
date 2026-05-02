@@ -18,7 +18,7 @@ import { ScreeningQueue } from './pages/Principal_Investigator/ScreeningQueue';
 // Coordinator pages
 import { ECRFEntry } from './pages/study_coordinator/ECRFEntry/ECRFEntry';
 import { VisitManagement } from './pages/study_coordinator/VisitManagement';
-import { LabResultsEntry } from './pages/study_coordinator/LabResultsEntry';
+// import { LabResultsEntry } from './pages/study_coordinator/LabResultsEntry';
 
 // Safety Monitor pages
 import { AllPatients } from './pages/safety_monitor/AllPatients';
@@ -57,21 +57,20 @@ import { UserManagement } from './pages/admin/UserManagement';
 import { UserAccessLog } from './pages/admin/UserAccessLog';
 import { LockManagement } from './pages/admin/LockManagement';
 import { AdminAuditTrail } from './pages/admin/AdminAuditTrail';
-import { SystemSettings } from './pages/admin/SystemSettings';
+//import { SystemSettings } from './pages/admin/SystemSettings';
+import { SiteEdit } from './pages/admin/SiteEdit';
 
-/* ── Protected wrapper: redirects to /login if not authenticated ────── */
-/* ── Protected wrapper: checks both login AND roles ────── */
+
 const W = ({ children, allowedRoles }: { children: React.ReactNode, allowedRoles?: string[] }) => {
   const { user, loading } = useAuth();
   
   if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: '#6B7280' }}>Loading session…</div>;
   
-  // 1. Are they logged in at all?
+  
   if (!user) return <Navigate to="/login" replace />;
   
-  // 2. Are they allowed in this specific room?
+  
   if (allowedRoles && !allowedRoles.includes(user.role)) {
-    // If their role isn't in the list, kick them to the dashboard!
     return <Navigate to="/dashboard" replace />; 
   }
   
@@ -95,7 +94,7 @@ function App() {
       <Route path="/patients/screening/:patient_id" element={
         <W allowedRoles={['Principal_Investigator','Study_Coordinator']}>{user?.role === 'Principal_Investigator' ? <ScreeningReview /> : <Screening />}</W>
       } />
-      <Route path="/patients/:patient_id" element={<W allowedRoles={['Principal_Investigator','Study_Coordinator']}><PatientProfile /></W>} />
+      <Route path="/patients/:patient_id" element={<W allowedRoles={['Principal_Investigator','Study_Coordinator','Safety_Monitor']}><PatientProfile /></W>} />
       <Route path="/safety" element={<W allowedRoles={['Principal_Investigator']}><PISafetyMonitoring /></W>} />
 
       {/* eCRF */}
@@ -105,8 +104,8 @@ function App() {
       <Route path="/labs" element={<W allowedRoles={['Principal_Investigator']}><LabResults /></W>} />
 
       {/*Coordinator Routes*/}
-      <Route path="/visits" element={<W allowedRoles={['Study_Coordinator']}><VisitManagement /></W>} />
-      <Route path="/labs/entry" element={<W allowedRoles={['Study_Coordinator']}><LabResultsEntry /></W>} />
+      <Route path="/visits" element={<W allowedRoles={['Principal_Investigator', 'Study_Coordinator']}><VisitManagement /></W>} />
+      {/* <Route path="/labs/entry" element={<W allowedRoles={['Study_Coordinator']}><LabResultsEntry /></W>} /> */}
 
       {/* Safety Monitor Routes */}
       <Route path="/sm/patients" element={<W allowedRoles={['Safety_Monitor']}><AllPatients /></W>} />
@@ -141,15 +140,16 @@ function App() {
       <Route path="/admin/trials/:trialId/edit" element={<W allowedRoles={['System_Admin']}><TrialForm /></W>} />
       <Route path="/admin/sites" element={<W allowedRoles={['System_Admin']}><SiteManagement /></W>} />
       <Route path="/admin/sites/:siteId" element={<W allowedRoles={['System_Admin']}><SiteDetail /></W>} />
+      <Route path="/admin/sites/:siteId/edit" element={<W allowedRoles={['System_Admin']}><SiteEdit /></W>} />
       <Route path="/admin/users" element={<W allowedRoles={['System_Admin']}><UserManagement /></W>} />
       <Route path="/admin/users/:userId" element={<W allowedRoles={['System_Admin']}><UserAccessLog /></W>} />
       <Route path="/admin/locks" element={<W allowedRoles={['System_Admin']}><LockManagement /></W>} />
-      <Route path="/admin/settings" element={<W allowedRoles={['System_Admin']}><SystemSettings /></W>} />
+      {/* <Route path="/admin/settings" element={<W allowedRoles={['System_Admin']}><SystemSettings /></W>} /> */}
 
-      {/* ── Shared: Audit Trail (role-aware) ───────────────── */}
+      {/*Shared: Audit Trail (role-aware) */}
       <Route path="/audit" element={<W allowedRoles={['System_Admin', 'Data_Manager']}>{user?.role === 'Data_Manager' ? <AuditTrail /> : <AdminAuditTrail />}</W>} />
 
-      {/* ── Catch-all ─────────────────────────────────────── */}
+      {/* Catch-all*/}
       <Route path="*" element={<W><div style={{ padding: 32, textAlign: 'center', color: 'var(--gray-500)' }}><h2>404 — Page Not Found</h2><p>The page you're looking for doesn't exist.</p></div></W>} />
     </Routes>
   );

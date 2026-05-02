@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { Search, TestTube, AlertTriangle, Clock, X } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
-import { labAPI } from '../../services/api';
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Search, TestTube, AlertTriangle, Clock, X, ChevronDown } from 'lucide-react';
+import { labAPI, piSafetyAPI } from '../../services/api';
 import './LabResults.css';
 
+// --- Interfaces ---
 interface LabResult {
     result_id: number;
     trial_patient_id: string;
@@ -18,50 +19,44 @@ interface LabResult {
     range_flag: 'High' | 'Low' | 'Normal';
 }
 
+interface PatientOption {
+    patient_id: number;
+    trial_patient_id: string;
+    full_name: string;
+}
+
 export const LabResults: React.FC = () => {
-    const { user } = useAuth();
-    const [labs, setLabs] = useState<LabResult[]>([]);
-    const [loading, setLoading] = useState(true);
+    const qc = useQueryClient();
     const [searchTerm, setSearchTerm] = useState('');
     const [activeTab, setActiveTab] = useState<'All' | 'Pending' | 'Critical'>('All');
-
-    // Modal state
+    const [selectedPatientId, setSelectedPatientId] = useState<number | ''>('');
     const [selectedLab, setSelectedLab] = useState<LabResult | null>(null);
-    const [isSigning, setIsSigning] = useState(false);
 
-    const fetchLabs = async () => {
-        if (!user?.site_id) return;
-        try {
-            setLoading(true);
-            const data = await labAPI.getSiteLabs(user.site_id);
-            if (data.success) {
-                setLabs(data.labs);
-            }
-        } catch (error) {
-            console.error("Failed to fetch lab results", error);
-        } finally {
-            setLoading(false);
-        }
-    };
+    // Fetch enrolled patients for the dropdown (site_id comes from JWT on backend)
+    const { data: patients = [] } = useQuery<PatientOption[]>({
+        queryKey: ['pi-lab-patients'],
+        queryFn: () => piSafetyAPI.getPatients(),
+    });
 
-    useEffect(() => {
-        fetchLabs();
-    }, [user?.site_id]);
+    const { data: labData, isLoading } = useQuery({
+        queryKey: ['pi-site-labs', selectedPatientId],
+        queryFn: () => labAPI.getSiteLabs(selectedPatientId || undefined),
+    });
 
-    const handleReviewSign = async () => {
-        if (!selectedLab) return;
-        setIsSigning(true);
-        try {
-            await labAPI.review(selectedLab.result_id);
-            alert('Lab result reviewed and signed off successfully!');
+    const labs: LabResult[] = labData?.labs ?? [];
+
+    
+    const reviewMut = useMutation({
+        mutationFn: (resultId: number) => labAPI.review(resultId),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['pi-site-labs'] });
             setSelectedLab(null);
-            fetchLabs(); // Refresh data
-        } catch (error) {
-            console.error('Error signing off lab:', error);
-            alert('Failed to sign off lab result.');
-        } finally {
-            setIsSigning(false);
-        }
+        },
+    });
+
+    const handleReviewSign = () => {
+        if (!selectedLab) return;
+        reviewMut.mutate(selectedLab.result_id);
     };
 
     const filteredLabs = labs.filter((lab) => {
@@ -92,22 +87,13 @@ export const LabResults: React.FC = () => {
                 </div>
 
                 <div className="labs-tabs">
-                    <button
-                        className={`lab-tab ${activeTab === 'All' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('All')}
-                    >
+                    <button className={`lab-tab ${activeTab === 'All' ? 'active' : ''}`} onClick={() => setActiveTab('All')}>
                         All Results ({labs.length})
                     </button>
-                    <button
-                        className={`lab-tab ${activeTab === 'Pending' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('Pending')}
-                    >
+                    <button className={`lab-tab ${activeTab === 'Pending' ? 'active' : ''}`} onClick={() => setActiveTab('Pending')}>
                         Pending Review ({pendingCount})
                     </button>
-                    <button
-                        className={`lab-tab ${activeTab === 'Critical' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('Critical')}
-                    >
+                    <button className={`lab-tab ${activeTab === 'Critical' ? 'active' : ''}`} onClick={() => setActiveTab('Critical')}>
                         Critical / Abnormal ({labs.filter(l => l.critical_result_flag || l.range_flag !== 'Normal').length})
                     </button>
                 </div>
@@ -116,37 +102,47 @@ export const LabResults: React.FC = () => {
             {/* KPI Overview */}
             <div className="labs-overview">
                 <div className="lab-stat-card">
-                    <div className="lab-stat-icon primary">
-                        <TestTube size={24} />
-                    </div>
-                    <div className="lab-stat-info">
-                        <h3>Total Reports</h3>
-                        <p>{labs.length}</p>
-                    </div>
+                    <div className="lab-stat-icon primary"><TestTube size={24} /></div>
+                    <div className="lab-stat-info"><h3>Total Reports</h3><p>{labs.length}</p></div>
                 </div>
                 <div className="lab-stat-card">
-                    <div className="lab-stat-icon warning">
-                        <Clock size={24} />
-                    </div>
-                    <div className="lab-stat-info">
-                        <h3>Pending Review</h3>
-                        <p>{pendingCount}</p>
-                    </div>
+                    <div className="lab-stat-icon warning"><Clock size={24} /></div>
+                    <div className="lab-stat-info"><h3>Pending Review</h3><p>{pendingCount}</p></div>
                 </div>
                 <div className="lab-stat-card">
-                    <div className="lab-stat-icon danger">
-                        <AlertTriangle size={24} />
-                    </div>
-                    <div className="lab-stat-info">
-                        <h3>Critical Flags</h3>
-                        <p>{criticalCount}</p>
-                    </div>
+                    <div className="lab-stat-icon danger"><AlertTriangle size={24} /></div>
+                    <div className="lab-stat-info"><h3>Critical Flags</h3><p>{criticalCount}</p></div>
                 </div>
             </div>
 
             {/* Main Wrapper */}
             <div className="labs-card">
                 <div className="labs-toolbar">
+                    {/* Patient filter dropdown (fetched from backend via piSafetyAPI) */}
+                    <div style={{ position: 'relative', minWidth: '220px' }}>
+                        <select
+                            id="patient-filter-dropdown"
+                            value={selectedPatientId}
+                            onChange={(e) => setSelectedPatientId(e.target.value ? parseInt(e.target.value) : '')}
+                            style={{
+                                appearance: 'none', width: '100%',
+                                padding: '0.6rem 2.5rem 0.6rem 1rem',
+                                border: '1px solid #e5e7eb', borderRadius: '0.5rem',
+                                background: 'white', fontSize: '0.875rem',
+                                color: selectedPatientId ? '#111827' : '#6b7280',
+                                cursor: 'pointer', fontWeight: selectedPatientId ? 600 : 400,
+                            }}
+                        >
+                            <option value="">All Patients</option>
+                            {patients.map(p => (
+                                <option key={p.patient_id} value={p.patient_id}>
+                                    {p.trial_patient_id}{p.full_name ? ` — ${p.full_name}` : ''}
+                                </option>
+                            ))}
+                        </select>
+                        <ChevronDown size={16} style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af', pointerEvents: 'none' }} />
+                    </div>
+
                     <div className="search-box">
                         <Search size={18} className="search-icon" />
                         <input
@@ -156,6 +152,15 @@ export const LabResults: React.FC = () => {
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
                     </div>
+
+                    {selectedPatientId && (
+                        <button
+                            onClick={() => setSelectedPatientId('')}
+                            style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', fontWeight: 600, color: '#6b7280', background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '0.5rem 0.875rem', cursor: 'pointer' }}
+                        >
+                            <X size={14} /> Clear Filter
+                        </button>
+                    )}
                 </div>
 
                 <div className="overflow-x-auto">
@@ -172,20 +177,16 @@ export const LabResults: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {loading ? (
-                                <tr>
-                                    <td colSpan={7} className="text-center py-8 text-gray-500">Loading laboratory results...</td>
-                                </tr>
+                            {isLoading ? (
+                                <tr><td colSpan={7} className="text-center py-8 text-gray-500">Loading laboratory results...</td></tr>
                             ) : filteredLabs.length === 0 ? (
-                                <tr>
-                                    <td colSpan={7} className="text-center py-8 text-gray-500">No lab results found.</td>
-                                </tr>
+                                <tr><td colSpan={7} className="text-center py-8 text-gray-500">
+                                    {selectedPatientId ? 'No lab results found for the selected patient.' : 'No lab results found.'}
+                                </td></tr>
                             ) : (
                                 filteredLabs.map((lab) => (
                                     <tr key={lab.result_id}>
-                                        <td className="text-gray-600">
-                                            {new Date(lab.result_date).toLocaleDateString()}
-                                        </td>
+                                        <td className="text-gray-600">{new Date(lab.result_date).toLocaleDateString()}</td>
                                         <td>
                                             <div className="patient-info">
                                                 <span className="patient-id">{lab.trial_patient_id}</span>
@@ -194,9 +195,7 @@ export const LabResults: React.FC = () => {
                                         </td>
                                         <td className="font-medium text-gray-700">
                                             {lab.test_name}
-                                            {lab.critical_result_flag && (
-                                                <span className="critical-badge">CRITICAL</span>
-                                            )}
+                                            {lab.critical_result_flag && <span className="critical-badge">CRITICAL</span>}
                                         </td>
                                         <td>
                                             <div className="result-value-col">
@@ -232,7 +231,7 @@ export const LabResults: React.FC = () => {
                 </div>
             </div>
 
-            {/* Modal */}
+            {/* Detail / Sign-off Modal */}
             {selectedLab && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
@@ -281,10 +280,10 @@ export const LabResults: React.FC = () => {
                                 {selectedLab.result_status === 'Pending' && (
                                     <button
                                         onClick={handleReviewSign}
-                                        disabled={isSigning}
+                                        disabled={reviewMut.isPending}
                                         className="btn-primary px-4 py-2 text-sm font-medium disabled:opacity-50"
                                     >
-                                        {isSigning ? 'Signing...' : 'Sign & Complete'}
+                                        {reviewMut.isPending ? 'Signing...' : 'Sign & Complete'}
                                     </button>
                                 )}
                             </div>

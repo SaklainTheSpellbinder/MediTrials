@@ -30,19 +30,21 @@ API.interceptors.response.use(
 // Patient API functions
 export const patientAPI = {
   //get all patients of users site id
+  //patientRoutes.ts
   getAll: async () => {
-    // Backend automatically filters by authenticated user's site_id from JWT
     const response = await API.get(`/patients`);
     return response.data;
   },
 
   // Get single patient
-  getById: async (id: number) => {
-    const response = await API.get(`/patients/${id}`);
-    return response.data;
-  },
+  //this is not used and also no route like this in backend either
+  // getById: async (id: number) => {
+  //   const response = await API.get(`/patients/${id}`);
+  //   return response.data;
+  // },
 
-  // Create new patient - backend auto-includes user's site_id from JWT
+  // Create new patient
+  //patientRoutes.ts
   create: async (patientData: any) => {
     const response = await API.post('/patients', patientData);
     return response.data;
@@ -60,35 +62,60 @@ export const patientAPI = {
     return response.data;
   },
 
-  // Record informed consent (coordinator action)
+  // Record informed consent (coordinator action) patientRoutes.ts 
   recordConsent: async (patientId: number, payload: any) => {
     const response = await API.post(`/patients/${patientId}/record-consent`, payload);
     return response.data;
   },
 };
 
+export const dashboardAPI = {
+  // Fetches from your materialized view: mv_pi_dashboard_stats
+  getPIStats: async () => {
+    const response = await API.get('/dashboard/stats');
+    return response.data;
+  },
+  // Fetches urgent safety alerts / critical labs
+  getAlerts: async () => {
+    const response = await API.get('/dashboard/alerts');
+    return response.data;
+  },
+  // Fetches today's visits for the schedule column
+  getTodaysSchedule: async () => {
+    const response = await API.get('/dashboard/schedule/today');
+    return response.data;
+  }
+};
+
 export const patientProfileAPI = {
   //this calls from patientProfileRoutes
+  //called from PatientProfile.tsx
   getHeader: async (patientId: number) => {
     const response = await API.get(`/patients/${patientId}/profile`);
     return response.data;
   },
+  //called from PatientProfile.tsx
   getTimeline: async (patientId: number) => {
     const response = await API.get(`/patients/${patientId}/timeline`);
     return response.data;
   },
+  
+  //called from PatientProfile.tsx
   getClinical: async (patientId: number) => {
     const response = await API.get(`/patients/${patientId}/clinical`);
     return response.data;
   },
+  //called from PatientProfile.tsx
   getSafety: async (patientId: number) => {
     const response = await API.get(`/patients/${patientId}/safety`);
     return response.data;
   },
+  //called from PatientProfile.tsx
   getLabs: async (patientId: number) => {
     const response = await API.get(`/patients/${patientId}/labs`);
     return response.data;
   },
+  //called from PatientProfile.tsx
   getDocuments: async (patientId: number) => {
     const response = await API.get(`/patients/${patientId}/documents`);
     return response.data;
@@ -132,10 +159,10 @@ export const screeningAPI = {
   },
 
   saveChecklistDraft: async (patientId: number, payload: any) => {
-    const response = await API.put(`/screening/checklist/${patientId}`, payload);
+    const response = await API.put(`/screening/checklist/${patientId}`, payload); //this one is in screeningRoutes
     return response.data;
   },
-
+  //called from screening.tsx
   submitForPiReview: async (patientId: number, payload: any) => {
     const response = await API.post(`/screening/submit-for-review/${patientId}`, payload);
     return response.data;
@@ -148,34 +175,186 @@ export const screeningAPI = {
 };
 
 export const visitAPI = {
+  // called from VisitManagement.tsx — fetches today's scheduled visits for the site
   getAll: async () => {
     const response = await API.get('/visits');
     return response.data;
   },
 
+  // called from ECRFEntry PatientList / ClinicalForm — visits for a specific patient
   getByPatientId: async (patientId: number) => {
     const response = await API.get(`/patients/${patientId}/visits`);
     return response.data;
   },
 };
 
+export const coordinatorAPI = {
+  // called from VisitManagement.tsx — today's visits for check-in list
+  getTodayVisits: async () => {
+    const response = await API.get('/coordinator/visits/today'); // coordinatorRoutes.ts
+    return response.data;
+  },
+
+  // called from VisitManagement.tsx — check in a patient for a visit
+  checkIn: async (visitInstanceId: number) => {
+    const response = await API.post('/coordinator/visits/checkin', { visit_instance_id: visitInstanceId }); // coordinatorRoutes.ts
+    return response.data;
+  },
+
+  // called from VisitManagement.tsx — complete a visit
+  completeVisit: async (visitInstanceId: number) => {
+    const response = await API.post('/coordinator/visits/complete', { visit_instance_id: visitInstanceId }); // coordinatorRoutes.ts
+    return response.data;
+  },
+
+  // called from VisitManagement.tsx (Schedule Visit modal) — patients list for dropdown
+  getPatients: async () => {
+    const response = await API.get('/coordinator/patients'); // coordinatorRoutes.ts
+    return response.data;
+  },
+
+  // called from VisitManagement.tsx (Schedule Visit modal) — visit template types for dropdown
+  getVisitSchedules: async () => {
+    const response = await API.get('/coordinator/visit-schedules'); // coordinatorRoutes.ts
+    return response.data;
+  },
+
+  // called from ECRFEntry / LabResultsEntry — active/checked-in visits for a patient (data entry gate)
+  getActiveVisits: async (patientId?: number) => {
+    const params = patientId ? { patient_id: patientId } : {};
+    const response = await API.get('/coordinator/visits/active', { params }); // coordinatorRoutes.ts
+    return response.data;
+  },
+
+  // called from VisitManagement.tsx — schedule a new visit for a patient
+  scheduleVisit: async (data: { patient_id: number; visit_id: number; scheduled_date: string }) => {
+    const response = await API.post('/coordinator/visits/schedule', data); // coordinatorRoutes.ts
+    return response.data;
+  },
+
+  // called from LabResultsEntry.tsx — fetch pending labs for coordinator entry
+  getPendingLabs: async () => {
+    const response = await API.get('/coordinator/labs/pending'); // coordinatorRoutes.ts
+    return response.data;
+  },
+
+  // called from LabResultsEntry.tsx — update a lab result value
+  updateLabResult: async (resultId: number, resultValue: number, changeReason?: string) => {
+    const response = await API.post('/coordinator/labs/update', {
+      result_id: resultId,
+      result_value: resultValue,
+      change_reason: changeReason,
+    }); // coordinatorRoutes.ts
+    return response.data;
+  },
+
+  // called from CoordinatorDashboard.tsx — site stats KPIs
+  getStats: async () => {
+    const res = await API.get('/coordinator/stats'); // coordinatorRoutes.ts
+    return res.data;
+  },
+
+  // called from CoordinatorDashboard.tsx — today's visit list (alias for check-in view)
+  getTodaysVisits: async () => {
+    const res = await API.get('/coordinator/visits/today'); // coordinatorRoutes.ts
+    return res.data;
+  },
+
+  // called from LabEntryForm.tsx — all laboratory tests from laboratory_tests table
+  getLabTests: async () => {
+    const response = await API.get('/coordinator/lab-tests'); // coordinatorRoutes.ts
+    return response.data;
+  },
+
+  // called from LabEntryForm.tsx — submit a lab result for a patient visit
+  submitLabResult: async (data: {
+    patient_id: number;
+    visit_instance_id: number;
+    test_id: number;
+    result_value: number;
+  }) => {
+    const response = await API.post('/coordinator/lab-results/submit', data); // coordinatorRoutes.ts
+    return response.data;
+  },
+
+  // called from AEEntryForm.tsx — submit a new adverse event linked to a patient visit
+  submitAdverseEvent: async (data: {
+    patient_id: number;
+    visit_instance_id?: number | null;
+    ae_term: string;
+    ae_start_date: string;
+    ae_end_date?: string;
+    severity_grade: number;
+    causality_relationship: string;
+    treatment_related: boolean;
+    results_in_death: boolean;
+    life_threatening: boolean;
+    requires_hospitalization: boolean;
+    ae_description?: string;
+    ae_status: string;
+  }) => {
+    const response = await API.post('/coordinator/adverse-events/submit', data); // coordinatorRoutes.ts
+    return response.data;
+  },
+};
+
+
+// PI Safety API — called from PI pages
+export const piSafetyAPI = {
+  // called from LabResults.tsx (PI) — all enrolled patients at PI's site for filtering dropdown
+  getPatients: async () => {
+    const response = await API.get('/pi-safety/patients'); // piSafetyRoutes.ts
+    return response.data;
+  },
+
+  // called from ECRFEntry (PI) — active/checked-in visits for a specific patient
+  getActiveVisits: async (patientId: number) => {
+    const response = await API.get(`/pi-safety/active-visits/${patientId}`); // piSafetyRoutes.ts
+    return response.data;
+  },
+
+  // called from PISafetyMonitoring.tsx — full safety dashboard for PI
+  getDashboard: async () => {
+    const response = await API.get('/pi-safety/dashboard'); // piSafetyRoutes.ts
+    return response.data;
+  },
+
+  // called from PISafetyMonitoring.tsx — site overview
+  getSiteOverview: async () => {
+    const response = await API.get('/pi-safety/site-overview'); // piSafetyRoutes.ts
+    return response.data;
+  },
+
+  // called from PISafetyMonitoring.tsx — acknowledge a safety alert
+  acknowledgeAlert: async (alertId: number, reason: string) => {
+    const response = await API.put(`/pi-safety/alerts/${alertId}/acknowledge`, { reason }); // piSafetyRoutes.ts
+    return response.data;
+  },
+};
+
 // Lab API functions
 export const labAPI = {
+  // called from LabResults.tsx (PI) — all labs at caller's site (site_id from JWT on backend)
   getAll: async () => {
     const response = await API.get('/labs'); //this is in labroutes.ts
     return response.data;
   },
 
-  getSiteLabs: async (siteId: number) => {
-    const response = await API.get(`/labs?site_id=${siteId}`); //labroutes.ts
+  // called from LabResults.tsx (PI) — labs at caller's site (site_id from JWT), optionally filtered by patient_id
+  getSiteLabs: async (patientId?: number) => {
+    const params: any = {};
+    if (patientId) params.patient_id = patientId;
+    const response = await API.get('/labs', { params }); //labroutes.ts — uses req.user.site_id
     return response.data;
   },
 
+  // called from LabResults.tsx (PI) — sign off / mark lab result as Completed
   review: async (resultId: number) => {
     const response = await API.post(`/labs/${resultId}/review`); //this is in labroutes.ts
     return response.data;
   },
 
+  // called from PatientProfile — labs for a specific patient
   getByPatientId: async (patientId: number) => {
     const response = await API.get(`/patients/${patientId}/labs`);
     return response.data;
@@ -183,10 +362,17 @@ export const labAPI = {
 };
 
 export const ecrfAPI = {
+  // called from ClinicalForm.tsx — general ECRF submit (auto-picks last visit on backend)
   submit: async (data: any) => {
     const response = await API.post('/ecrf/submit', data);
     return response.data;
-  }
+  },
+
+  // called from ClinicalForm.tsx — ECRF submit with explicit visit_instance_id (visit-gated workflow)
+  submitWithVisit: async (data: { patient_id: number; visit_instance_id: number; [key: string]: any }) => {
+    const response = await API.post('/ecrf/submit', data); // ecrfRoutes.ts accepts visit_instance_id
+    return response.data;
+  },
 };
 
 
@@ -201,10 +387,8 @@ export const safetyAPI = {
     const response = await API.put(`/pi-safety/alerts/${alertId}/acknowledge`, { reason }); 
     return response.data; //from piSafetyRoutes
   },
-
-  
-
 };
+
 
 //this is actually safetyMonitor
 export const safetyManagerAPI ={
@@ -599,7 +783,7 @@ export const statisticsAPI = {
 export const adminAPI = {
   //called from adminDashboard
     getDashboard: async () => {
-        const res = await API.get('admin/admin');
+        const res = await API.get('/admin/admin');
         return res.data;
     },
     //called from adminDashboard
@@ -607,7 +791,7 @@ export const adminAPI = {
         const res = await API.post('/admin/mv/refresh');
         return res.data;
     },
-    // called from trialManagement
+    // called from trialManagement, lockManagement
     getTrials: async () => {
         const res = await API.get('/admin/trials');
         return res.data;
@@ -644,10 +828,10 @@ export const adminAPI = {
     const res = await API.post(`/admin/users/${id}/reset-password`, { new_password: newPassword });
     return res.data;
   },
-//called from user management
+//called from user management, sites_management
   // Sites dropdowns
-  getSites: async () => {
-    const res = await API.get('/admin/sites');
+  getSites: async (params?: Record<string, any>) => {
+    const res = await API.get('/admin/sites', { params });
     return res.data;
   },
   // called from TrialForm (Get Single Trial)
@@ -681,7 +865,73 @@ export const adminAPI = {
   deleteTrialEntity: async (trialId: string | number, path: string, entityId: string | number) => {
     const res = await API.delete(`/admin/trials/${trialId}/${path}/${entityId}`);
     return res.data;
+  },
+
+  //called frm siteDetails
+    getSiteDetails: async (id: string | number) => {
+        const res = await API.get(`/admin/sites/${id}`);
+        return res.data;
+    },
+    //callled from siteDetails
+    suspendSite: async (id: string | number, data: { reason: string }) => {
+        const res = await API.put(`/admin/sites/${id}/suspend`, data);
+        return res.data;
+    },
+
+    //called from siteedit
+    // Inside your existing adminAPI object in api.ts:
+    updateSite: async (id: string | number, data: any) => {
+        const res = await API.put(`/admin/sites/${id}`, data);
+        return res.data;
+    },
+
+    //called from lock management
+    getLocks: async () => {
+        const res = await API.get('/admin/locks');
+        return res.data;
+    },
+    //called from lock management
+    createLock: async (data: { trial_id: number; lock_type: string }) => {
+        const res = await API.post('/admin/locks', data);
+        return res.data;
+    },
+    //called from lock management
+    unlockTrial: async (id: number | string, reason: string) => {
+        const res = await API.put(`/admin/locks/${id}/unlock`, { reason });
+        return res.data;
+    },
+    //called from lock management
+    verifyLock: async (id: number | string) => {
+        const res = await API.get(`/admin/locks/${id}/verify`);
+        return res.data;
+    },
+
+    //called from SystemSettings (NOT USED)
+    getSettings: async () => {
+        const res = await API.get('/admin/settings');
+        return res.data;
+    },
+    //not used either
+    updateSetting: async (key: string, value: any) => {
+        const res = await API.put('/admin/settings', { key, value });
+        return res.data;
+    },
+    refreshMaterializedViews: async () => {
+        const res = await API.post('/admin/mv/refresh');
+        return res.data;
+    },
+    //called from adminAuditTrail
+    getAuditLogs: async (params?: any) => {
+        const res = await API.get('/admin/audit', { params });
+        return res.data;
+    },
+
+    //called from useraccesslog
+    getUserAccessLog: async (userId: string | number) => {
+    const res = await API.get(`/admin/users/${userId}/access-log`);
+    return res.data;
   }
+
 };
 
 

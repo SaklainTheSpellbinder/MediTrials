@@ -34,7 +34,6 @@ export const authMiddleware = (req: Request, res: Response, next: NextFunction):
       site_id?: number;
     };
 
-
     // Inject user data into request object
     req.user = decoded;
     next();

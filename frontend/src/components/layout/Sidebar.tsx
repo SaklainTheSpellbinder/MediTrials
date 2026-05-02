@@ -3,7 +3,9 @@ import {
     LayoutDashboard, Users, ClipboardList, AlertTriangle, TestTube,
     BarChart2, Lock, CalendarCheck, ShieldAlert, Activity, FileWarning,
     Siren, Stethoscope, Microscope, FileText, AlertCircle, Database,
-    Search, TrendingUp, GitBranch, BookOpen, FlaskConical, Settings, Globe, UserCog,
+    Search, TrendingUp, GitBranch, BookOpen, FlaskConical, 
+    //Settings,
+    Globe, UserCog,
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -20,7 +22,7 @@ export const Sidebar: React.FC<SidebarProps> = () => {
     const location = useLocation();
     const { user } = useAuth();
 
-    // Safety Monitor: critical alert badge (using central API)
+    // Safety Monitor: critical alert badge
     const { data: smBadge } = useQuery({
         queryKey: ['sm-badge-count'],
         queryFn: async () => {
@@ -51,11 +53,12 @@ export const Sidebar: React.FC<SidebarProps> = () => {
         { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
         { label: 'Patient Registry', icon: Users, path: '/patients' },
         { label: 'Screening & Consent', icon: ClipboardList, path: '/patients/screening' },
-        { label: 'eCRF Entry', icon: ClipboardList, path: '/ecrf' },
+        { label: 'Visit Management', icon: CalendarCheck, path: '/visits' },
+        { label: 'Visit Data Entry', icon: ClipboardList, path: '/ecrf' },
         { label: 'Safety Monitoring', icon: AlertTriangle, path: '/safety' },
         { label: 'Lab Results', icon: TestTube, path: '/labs' },
-        { label: 'Statistics', icon: BarChart2, path: '/stats' },
-        { label: 'Compliance', icon: Lock, path: '/compliance' },
+        // { label: 'Statistics', icon: BarChart2, path: '/stats' },
+        // { label: 'Compliance', icon: Lock, path: '/compliance' },
     ];
 
     // Study Coordinator nav items
@@ -64,8 +67,8 @@ export const Sidebar: React.FC<SidebarProps> = () => {
         { label: 'Patient Registry', icon: Users, path: '/patients' },
         { label: 'Screening & Consent', icon: ClipboardList, path: '/patients/screening' },
         { label: 'Visit Management', icon: CalendarCheck, path: '/visits' },
-        { label: 'eCRF Entry', icon: ClipboardList, path: '/ecrf' },
-        { label: 'Lab Entry', icon: TestTube, path: '/labs/entry' },
+        { label: 'Visit Data Entry', icon: ClipboardList, path: '/ecrf' },
+        // { label: 'Lab Entry', icon: TestTube, path: '/labs/entry' },
     ];
 
     // Safety Monitor nav items
@@ -112,7 +115,7 @@ export const Sidebar: React.FC<SidebarProps> = () => {
         { label: 'User Management', icon: UserCog, path: '/admin/users' },
         { label: 'Lock Management', icon: Lock, path: '/admin/locks' },
         { label: 'Audit Trail', icon: FileText, path: '/audit' },
-        { label: 'System Settings', icon: Settings, path: '/admin/settings' },
+        // { label: 'System Settings', icon: Settings, path: '/admin/settings' },
     ];
 
     const navItems =
@@ -127,7 +130,7 @@ export const Sidebar: React.FC<SidebarProps> = () => {
         <aside className="sidebar">
             <div className="sidebar-header">
                 <div className="sidebar-logo">
-                    🏥 <span className="logo-text">MediTrials</span>
+                <span className="logo-text">MediTrials</span>
                 </div>
             </div>
 
@@ -151,7 +154,6 @@ export const Sidebar: React.FC<SidebarProps> = () => {
                     );
                 })}
             </nav>
-
             <div className="sidebar-footer">
                 <SidebarUserSection />
             </div>

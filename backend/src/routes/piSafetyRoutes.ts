@@ -131,8 +131,7 @@ router.get('/site-overview', requirePI, async (req: any, res: any) => {
     }
 });
 
-// ── PUT /api/pi-safety/alerts/:alertId/acknowledge ────────────────────────────
-// PI can acknowledge alerts directly from the safety monitoring page.
+// GET /api/pi-safety/alerts/:alertId/acknowledge
 router.put('/alerts/:alertId/acknowledge', requirePI, async (req: any, res: any) => {
     const client = await pool.connect();
     try {
@@ -175,6 +174,54 @@ router.put('/alerts/:alertId/acknowledge', requirePI, async (req: any, res: any)
         console.error('Acknowledge Error:', err);
         res.status(500).json({ error: err.message });
     } finally { client.release(); }
+});
+
+// GET /api/pi-safety/patients — returns all enrolled patients at PI's site for lab result filtering dropdown
+router.get('/patients', requirePI, async (req: any, res: any) => {
+    try {
+        const siteId = req.user?.site_id;
+        if (!siteId) return res.status(400).json({ error: 'Missing site_id' });
+
+        const result = await pool.query(
+            `SELECT p.patient_id, p.trial_patient_id, p.full_name
+             FROM public.patients p
+             WHERE p.site_id = $1
+               AND p.patient_status IN ('Active', 'Enrolled', 'Completed')
+             ORDER BY p.trial_patient_id ASC`,
+            [siteId]
+        );
+        res.json(result.rows);
+    } catch (err: any) {
+        console.error('PI Patients Error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/pi-safety/active-visits/:patientId — returns checked-in or active visits for a patient (for ECRF gate)
+router.get('/active-visits/:patientId', requirePI, async (req: any, res: any) => {
+    try {
+        const siteId = req.user?.site_id;
+        const patientId = parseInt(req.params.patientId);
+        if (!siteId || isNaN(patientId)) return res.status(400).json({ error: 'Invalid parameters' });
+
+        const result = await pool.query(
+            `SELECT pv.visit_instance_id, pv.scheduled_date, pv.actual_visit_date, pv.visit_status,
+                    vs.visit_name, vs.visit_number,
+                    p.trial_patient_id
+             FROM public.patient_visits pv
+             JOIN public.visit_schedules vs ON pv.visit_id = vs.visit_id
+             JOIN public.patients p ON pv.patient_id = p.patient_id
+             WHERE pv.patient_id = $1
+               AND p.site_id = $2
+               AND pv.visit_status IN ('Checked In', 'In Progress', 'Scheduled')
+             ORDER BY pv.scheduled_date DESC`,
+            [patientId, siteId]
+        );
+        res.json(result.rows);
+    } catch (err: any) {
+        console.error('PI Active Visits Error:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 export default router;

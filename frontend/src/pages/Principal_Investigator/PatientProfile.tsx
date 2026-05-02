@@ -1,24 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-    Activity,
-    FileText,
-    Clock,
-    Clipboard,
-    Calendar,
-    AlertCircle,
-    PenTool,
-    AlertTriangle,
-    User,
-    Heart,
-    MapPin,
-    CheckCircle,
-    ChevronRight,
-    RefreshCw,
-    Shield,
-    Lock,
-    X,
-    ClipboardList
+    Activity, FileText, Clock, Clipboard, Calendar, AlertCircle, PenTool,
+    AlertTriangle, User, Heart, MapPin, CheckCircle, ChevronRight,
+    RefreshCw, Shield, Lock, X, ClipboardList
 } from 'lucide-react';
 import { patientProfileAPI, patientAPI, screeningAPI } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -27,70 +13,81 @@ import './PatientProfile.css';
 export const PatientProfile: React.FC = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
+    const qc = useQueryClient();
     const { patient_id } = useParams<{ patient_id: string }>();
-    const [activeTab, setActiveTab] = useState('timeline');
-    const [patient, setPatient] = useState<any>(null);
-    const [timeline, setTimeline] = useState<any[]>([]);
-    const [clinical, setClinical] = useState<any>({ visits: [], vitals: [], history: [] });
-    const [safety, setSafety] = useState<any>({ adverseEvents: [], alerts: [], protocolDeviations: [] });
-    const [labs, setLabs] = useState<any[]>([]);
-    const [documents, setDocuments] = useState<any>({ consent: [], ecrfs: [], auditTrail: [] });
-    const [loading, setLoading] = useState(true);
+    const pid = parseInt(patient_id || '0');
 
-    //Consent modal state
+    const [activeTab, setActiveTab] = useState('timeline');
+    
+    // Consent modal state
     const [showConsentModal, setShowConsentModal] = useState(false);
     const [consentForm, setConsentForm] = useState({ consent_version: '', consent_date: new Date().toISOString().split('T')[0], e_signature_password: '' });
-    const [consentVersions, setConsentVersions] = useState<any[]>([]);
-    const [consentSubmitting, setConsentSubmitting] = useState(false);
     const [consentError, setConsentError] = useState<string | null>(null);
 
-    useEffect(() => {
-        if (patient_id) fetchPatientData();
-    }, [patient_id]);
+    // ─── 1. Aggregated Profile Query 
+    const { data: profileData, isLoading, isFetching, refetch } = useQuery({
+        queryKey: ['patient-profile', pid],
+        queryFn: async () => {
+            // Fetch all 6 profile endpoints in parallel
+            const [header, timeline, clinical, safety, labs, documents] = await Promise.allSettled([
+                patientProfileAPI.getHeader(pid),
+                patientProfileAPI.getTimeline(pid),
+                patientProfileAPI.getClinical(pid),
+                patientProfileAPI.getSafety(pid),
+                patientProfileAPI.getLabs(pid),
+                patientProfileAPI.getDocuments(pid)
+            ]);
 
-    const fetchPatientData = async () => {
-        try {
-            setLoading(true);
-            if (!patient_id) return;
-            const pid = parseInt(patient_id);
+            return {
+                patient: header.status === 'fulfilled' ? header.value.profile : null,
+                timeline: timeline.status === 'fulfilled' ? timeline.value.timeline : [],
+                clinical: clinical.status === 'fulfilled' ? clinical.value.clinical : { visits: [], vitals: [], history: [] },
+                safety: safety.status === 'fulfilled' ? safety.value.safety : { adverseEvents: [], alerts: [], protocolDeviations: [] },
+                labs: labs.status === 'fulfilled' ? labs.value.labs : [],
+                documents: documents.status === 'fulfilled' ? documents.value.documents : { consent: [], ecrfs: [], auditTrail: [] }
+            };
+        },
+        enabled: !!pid
+    });
 
-            try {
-                const headerData = await patientProfileAPI.getHeader(pid);
-                setPatient(headerData.profile || null);
-            } catch {  }
-
-            try {
-                const timelineData = await patientProfileAPI.getTimeline(pid);
-                if (timelineData.timeline) setTimeline(timelineData.timeline);
-            } catch {  }
-
-            try {
-                const clinicalData = await patientProfileAPI.getClinical(pid);
-                if (clinicalData.clinical) setClinical(clinicalData.clinical);
-            } catch {  }
-
-            try {
-                const safetyData = await patientProfileAPI.getSafety(pid);
-                if (safetyData.safety) setSafety(safetyData.safety);
-            } catch {  }
-
-            try {
-                const labsData = await patientProfileAPI.getLabs(pid);
-                if (labsData.labs) setLabs(labsData.labs);
-            } catch {  }
-
-            try {
-                const docsData = await patientProfileAPI.getDocuments(pid);
-                if (docsData.documents) setDocuments(docsData.documents);
-            } catch { }
-
-        } catch (error) {
-            console.error('Error fetching patient data:', error);
-        } finally {
-            setLoading(false);
-        }
+    // Extract data with safe fallbacks
+    const { patient, timeline, clinical, safety, labs, documents } = profileData || { 
+        patient: null, timeline: [], clinical: { visits: [], vitals: [], history: [] }, 
+        safety: { adverseEvents: [], alerts: [], protocolDeviations: [] }, labs: [], 
+        documents: { consent: [], ecrfs: [], auditTrail: [] } 
     };
 
+    // ─── 2. Protocol Versions Query (Lazy load for modal) ────────────────────
+    const { data: protocolData } = useQuery({
+        queryKey: ['protocol-versions', user?.site_id],
+        queryFn: () => screeningAPI.getProtocolVersions(user!.site_id!),
+        enabled: showConsentModal && !!user?.site_id,
+    });
+    const consentVersions = protocolData?.versions || [];
+
+    // Automatically set the first version if available
+    React.useEffect(() => {
+        if (consentVersions.length > 0 && !consentForm.consent_version) {
+            setConsentForm(f => ({ ...f, consent_version: consentVersions[0].version_number }));
+        }
+    }, [consentVersions]);
+
+    //3. Record Consent Mutation 
+    const consentMut = useMutation({
+        mutationFn: (payload: any) => patientAPI.recordConsent(pid, payload),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['patient-profile', pid] });
+            qc.invalidateQueries({ queryKey: ['patients'] }); // Update main registry table
+            setShowConsentModal(false);
+            setConsentForm({ consent_version: '', consent_date: new Date().toISOString().split('T')[0], e_signature_password: '' });
+            setConsentError(null);
+        },
+        onError: (err: any) => {
+            setConsentError(err?.response?.data?.error || 'Failed to record consent.');
+        }
+    });
+
+    //Formatting Helpers
     const calculateAge = (dob: string) => {
         try {
             const d = new Date(dob); const t = new Date();
@@ -139,8 +136,8 @@ export const PatientProfile: React.FC = () => {
         }
     };
 
-    // ── LOADING STATE ──────────────────────────────────────────────
-    if (loading) {
+    //LOADING STATE 
+    if (isLoading) {
         return (
             <div className="profile-container">
                 <div className="patient-header">
@@ -164,11 +161,11 @@ export const PatientProfile: React.FC = () => {
     const patientAge = patient?.date_of_birth ? calculateAge(patient.date_of_birth) : '—';
     const initials = getInitials(patientName);
 
-    // ── MAIN RENDER ────────────────────────────────────────────────
+    //MAIN RENDER
     return (
         <div className="profile-container">
 
-            {/* ── HERO HEADER ───────────────────────────────────────── */}
+            {/*HEADER*/}
             <div className="patient-header">
                 <div className="ph-main">
                     <div className="ph-avatar">{initials}</div>
@@ -209,39 +206,35 @@ export const PatientProfile: React.FC = () => {
                 </div>
 
                 <div className="ph-actions">
-                    <button className="btn-action btn-action-ghost" onClick={fetchPatientData}>
-                        <RefreshCw size={14} /> Refresh
+                    <button className="btn-action btn-action-ghost" onClick={() => refetch()}>
+                        <RefreshCw size={14} className={isFetching ? "animate-spin" : ""} /> Refresh
                     </button>
                     {/* Consent button — visible for coordinators when patient is Screened with no consent */}
                     {patient?.patient_status === 'Screened' && !patient?.enrollment_date && documents.consent?.length === 0 && (
-                        <button className="btn-action btn-action-white" onClick={async () => {
-                            if (user?.site_id) {
-                                try {
-                                    const data = await screeningAPI.getProtocolVersions(user.site_id);
-                                    setConsentVersions(data.versions || []);
-                                    if (data.versions?.length) setConsentForm(f => ({ ...f, consent_version: data.versions[0].version_number }));
-                                } catch { setConsentVersions([]); }
-                            }
-                            setShowConsentModal(true);
-                        }}>
+                        <button className="btn-action btn-action-white" onClick={() => setShowConsentModal(true)}>
                             <Shield size={14} /> Record Consent
                         </button>
                     )}
                     {/* Checklist button — visible when consent is on file but not enrolled */}
-                    {patient?.patient_status === 'Screened' && !patient?.enrollment_date && documents.consent?.length > 0 && (
+                    {patient?.patient_status === 'Screened' && !patient?.enrollment_date && documents.consent?.length > 0 && user?.role !== 'Principal_Investigator' && (
                         <button className="btn-action btn-action-white" onClick={() => navigate(`/patients/screening/${patient_id}`)}>
                             <ClipboardList size={14} /> Eligibility Checklist
                         </button>
                     )}
-                    <button className="btn-action btn-action-ghost" onClick={() => alert("Scheduling system coming soon!")}>
-                        <Calendar size={14} /> Schedule Visit
-                    </button>
+                    {user?.role === 'Study_Coordinator' && (
+    <button 
+        className="btn-action btn-action-ghost" 
+        onClick={() => navigate('/visits', { state: { preselectPatientId: pid } })}
+    >
+        <Calendar size={14} /> Schedule Visit
+    </button>
+)}
                     {user?.role === 'Principal_Investigator' && (
-                        <button className="btn-action btn-action-white" onClick={() => alert("eCRF Signing coming in V2")}>
+                        <button className="btn-action btn-action-white" onClick={() => navigate(`/ecrf`)}>
                             <PenTool size={14} /> Sign eCRF
                         </button>
                     )}
-                    <button className="btn-action btn-action-danger" onClick={() => alert("AE Report Modal coming soon!")}>
+                    <button className="btn-action btn-action-danger" onClick={() => navigate(`/ecrf`)}>
                         <AlertCircle size={14} /> Report AE
                     </button>
                 </div>
@@ -798,23 +791,13 @@ export const PatientProfile: React.FC = () => {
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '12px 20px', borderTop: '1px solid var(--gray-200)', background: 'var(--gray-50)' }}>
                             <button className="btn-secondary" onClick={() => setShowConsentModal(false)}>Cancel</button>
-                            <button className="btn-primary" disabled={!consentForm.consent_version || !consentForm.consent_date || consentForm.e_signature_password.length < 6 || consentSubmitting} onClick={async () => {
-                                setConsentSubmitting(true); setConsentError(null);
-                                try {
-                                    await patientAPI.recordConsent(parseInt(patient_id!), {
-                                        consent_version: consentForm.consent_version,
-                                        consent_date: consentForm.consent_date,
-                                        e_signature_password: consentForm.e_signature_password,
-                                        recorded_by_user_id: user?.user_id ?? 0,
-                                    });
-                                    setShowConsentModal(false);
-                                    setConsentForm({ consent_version: '', consent_date: new Date().toISOString().split('T')[0], e_signature_password: '' });
-                                    fetchPatientData();
-                                } catch (err: any) {
-                                    setConsentError(err?.response?.data?.error || 'Failed to record consent.');
-                                } finally { setConsentSubmitting(false); }
-                            }}>
-                                {consentSubmitting ? 'Signing…' : 'Record Consent'}
+                            <button className="btn-primary" disabled={!consentForm.consent_version || !consentForm.consent_date || consentForm.e_signature_password.length < 6 || consentMut.isPending} 
+                                onClick={() => consentMut.mutate({
+                                    consent_version: consentForm.consent_version,
+                                    consent_date: consentForm.consent_date,
+                                    e_signature_password: consentForm.e_signature_password,
+                                })}>
+                                {consentMut.isPending ? 'Signing…' : 'Record Consent'}
                             </button>
                         </div>
                     </div>

@@ -4,45 +4,57 @@ import { requireRole } from '../middleware/authMiddleware';
 
 const router = Router();
 router.use(requireRole(['Principal_Investigator','Study_Coordinator']));
+
 // POST /api/ecrf/submit
-router.post('/submit', async (req, res) => {
+router.post('/submit', async (req: any, res: any) => {
+    const requestUser = req.user;
+    const {
+        patient_id,
+        visit_instance_id: providedVisitInstanceId,
+        measurement_time,
+        systolic_bp,
+        diastolic_bp,
+        heart_rate,
+        temperature
+    } = req.body;
+
+    if (!patient_id) {
+        return res.status(400).json({ error: 'Missing patient_id' });
+    }
+
+    const client = await pool.connect();
     try {
-        const {
-            patient_id,
-            visitDate,
-            systolicBP,
-            diastolicBP,
-            heartRate,
-            temp
-        } = req.body;
+        await client.query('BEGIN');
 
-        if (!patient_id) {
-            return res.status(400).json({ error: 'Missing patient_id' });
-        }
+        await client.query(`SELECT set_config('app.current_user_id', $1::text, true)`, [requestUser?.user_id]);
+        await client.query(`SELECT set_config('app.change_reason', $1::text, true)`, ['Entered eCRF Vital Signs data']);
 
-        // 1. Get the most recent visit for the patient to attach vitals to
-        const visitQuery = `
-            SELECT visit_instance_id 
-            FROM patient_visits 
-            WHERE patient_id = $1 
-            ORDER BY scheduled_date DESC 
-            LIMIT 1;
-        `;
-        const visitResult = await pool.query(visitQuery, [patient_id]);
+        let visit_instance_id: number;
 
-        let visit_instance_id;
-
-        if (visitResult.rows.length > 0) {
-            visit_instance_id = visitResult.rows[0].visit_instance_id;
+        if (providedVisitInstanceId) {
+            visit_instance_id = parseInt(providedVisitInstanceId);
         } else {
-            return res.status(400).json({ error: 'No visit found for this patient to attach clinical data.' });
+
+            const visitQuery = `
+                SELECT visit_instance_id 
+                FROM public.patient_visits 
+                WHERE patient_id = $1 
+                ORDER BY scheduled_date DESC 
+                LIMIT 1;
+            `;
+            const visitResult = await client.query(visitQuery, [patient_id]);
+
+            if (visitResult.rows.length === 0) {
+                throw new Error('No visit found for this patient. Please schedule and check in a visit first.');
+            }
+            visit_instance_id = visitResult.rows[0].visit_instance_id;
         }
 
-        const timestamp = visitDate ? new Date(visitDate).toISOString() : new Date().toISOString();
+        const timestamp = measurement_time ? new Date(measurement_time).toISOString() : new Date().toISOString();
 
-        // 2. Insert into ecrf_data (The Audit Wrap)
+        
         const ecrfDataQuery = `
-            INSERT INTO ecrf_data (
+            INSERT INTO public.ecrf_data (
                 ecrf_id,
                 patient_id, 
                 visit_instance_id, 
@@ -53,24 +65,24 @@ router.post('/submit', async (req, res) => {
         `;
 
         const rawFormData = JSON.stringify({
-            systolicBP,
-            diastolicBP,
-            heartRate,
-            temp,
-            visitDate
+            systolic_bp,
+            diastolic_bp,
+            heart_rate,
+            temperature,
+            measurement_time
         });
 
-        await pool.query(ecrfDataQuery, [
-            1, // Assuming ecrf_id 1 is 'Vital Signs' based on setup scripts
+        await client.query(ecrfDataQuery, [
+            1, 
             patient_id,
             visit_instance_id,
-            'Locked', // Or 'Signed' depending on protocol
+            'Locked', 
             rawFormData
         ]);
 
-        // 3. Insert into vital_signs (The Extracted Data)
+       
         const insertQuery = `
-            INSERT INTO vital_signs (
+            INSERT INTO public.vital_signs (
                 patient_id, 
                 visit_instance_id, 
                 measurement_time, 
@@ -82,25 +94,30 @@ router.post('/submit', async (req, res) => {
             RETURNING *;
         `;
 
-        const newVitals = await pool.query(insertQuery, [
+        const newVitals = await client.query(insertQuery, [
             patient_id,
             visit_instance_id,
             timestamp,
-            systolicBP ? parseInt(systolicBP) : null,
-            diastolicBP ? parseInt(diastolicBP) : null,
-            heartRate ? parseInt(heartRate) : null,
-            temp ? parseFloat(temp) : null
+            systolic_bp,
+            diastolic_bp,
+            heart_rate,
+            temperature
         ]);
 
+        await client.query('COMMIT');
+        
         res.json({
             success: true,
             message: 'eCRF clinical data saved successfully to both audit and vitals tables',
             data: newVitals.rows[0]
         });
 
-    } catch (error) {
+    } catch (error: any) {
+        await client.query('ROLLBACK');
         console.error('Error submitting eCRF data:', error);
-        res.status(500).json({ error: 'Internal Server Error while saving eCRF data' });
+        res.status(500).json({ error: error.message || 'Internal Server Error while saving eCRF data' });
+    } finally {
+        client.release();
     }
 });
 

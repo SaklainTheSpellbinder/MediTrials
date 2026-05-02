@@ -74,3 +74,47 @@ Invoked via SQL commands (`CALL sp_name(args)`) directly from Node routes to run
 - **`sp_randomize_patient`**: Executed securely when a patient passes screening, mapping them to arms atomically to ensure blind integrity during RNG mappings.
 - **`sp_export_cdisc_sdtm`**: Used heavily by `statisticianRoutes.ts` to perform mass data mapping required for regulatory agency (e.g. FDA/CDISC) data exports.
 - **`sp_detect_safety_signals`**: Executed to search the backend for statistical irregularities or safety signals among adverse events.
+
+---
+
+## 🔐 Roles and Access Control
+
+MediTrials utilizes a strict Role-Based Access Control (RBAC) system managed via JWTs and native React private route components to ensure data security and regulatory compliance:
+
+- **Principal Investigator (PI)**: Oversees site operations, reviews screening data, and monitors patient safety.
+- **Study Coordinator**: Manages day-to-day patient visits, eCRF data entry, and lab tracking.
+- **Safety Monitor**: Investigates adverse events (AEs/SAEs), unblinding requests, and handles DSMB meetings.
+- **Data Manager**: Handles data reviews, data queries, and database locks.
+- **Statistician**: Performs survival analyses, interim analyses, and oversees randomization balances.
+- **System Admin**: Manages overarching trial configurations, site details, and system access logs.
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+- Node.js (v18 or higher)
+- PostgreSQL (v14 or higher)
+
+### Setup Instructions
+
+1. **Database Initialization**: 
+   Setup the PostgreSQL database by running the initializing SQL scripts in `/database/full_version/create_tables.sql` and the associated procedures and view scripts to generate the `meditrials` schema.
+
+2. **Backend Server**: 
+   Navigate to the `/backend` directory, install dependencies, and start the development server:
+   ```bash
+   cd backend
+   npm install
+   npm run dev
+   ```
+   (The server will typically run on `http://localhost:5000`)
+
+3. **Frontend Application**: 
+   Navigate to the `/frontend` directory, install dependencies, and start the React application:
+   ```bash
+   cd frontend
+   npm install
+   npm start
+   ```
+   (The frontend will typically run on `http://localhost:5173`)

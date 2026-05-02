@@ -23,7 +23,7 @@ import { authMiddleware } from './middleware/authMiddleware';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// ── CORS ──────────────────────────────────────────────────────────────────────
+//CORS
 app.use(cors({
   origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
   credentials: true,
@@ -34,12 +34,13 @@ app.options(/.*/, cors());
 app.use(express.json());
 app.use(cookieParser());
 
-// ── Route Mounting ────────────────────────────────────────────────────────────
+//Route Mounting
 app.use('/api/auth', authRoutes);
 
 app.use(authMiddleware);
-app.use('/api/patients', patientRoutes);
 app.use('/api/patients', patientProfileRoutes);
+app.use('/api/patients', patientRoutes);
+
 app.use('/api/screening', screeningRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/coordinator', coordinatorRoutes);
@@ -62,7 +63,7 @@ app.use('/api/statistics', statisticianRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/audit', adminRoutes);
 
-// ── Health Check ──────────────────────────────────────────────────────────────
+// Health Check
 app.get('/', (_req, res) => {
   res.send('MediTrials Backend is Running');
 });

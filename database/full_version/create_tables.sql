@@ -192,7 +192,7 @@ CREATE TABLE patient_visits (
     scheduled_date DATE NOT NULL,
     actual_visit_date DATE,
     visit_status VARCHAR(50) DEFAULT 'Scheduled' 
-        CHECK (visit_status IN ('Scheduled', 'Completed', 'Missed', 'Cancelled')),
+        CHECK (visit_status IN ('Scheduled','Checked In','In Progress','Completed', 'Missed', 'Cancelled')),
     visit_window_status VARCHAR(50) 
         CHECK (visit_window_status IN ('Within Window', 'Early', 'Late', 'Outside Window')),
     data_queries_count INTEGER DEFAULT 0,
@@ -460,7 +460,7 @@ CREATE TABLE user_access_log (
     accessed_table VARCHAR(50) NOT NULL,
     accessed_record_id INTEGER,
     access_type VARCHAR(20) NOT NULL 
-        CHECK (access_type IN ('VIEW', 'EDIT', 'DELETE', 'EXPORT', 'SIGN')),
+        CHECK (access_type IN ('VIEW', 'EDIT', 'DELETE', 'EXPORT', 'SIGN', 'LOGIN', 'LOGIN_FAILED', 'LOGOUT')),
     access_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     ip_address VARCHAR(45),
     user_agent TEXT,

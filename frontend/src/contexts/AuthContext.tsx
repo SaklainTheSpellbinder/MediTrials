@@ -67,7 +67,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         try {
             const response = await fetch('http://localhost:5000/api/auth/login', {
                 method: 'POST',
-                credentials: 'include', // CRITICAL: Include httpOnly cookie in response
+                credentials: 'include',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password, role }),
             });

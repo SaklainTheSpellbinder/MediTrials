@@ -1,6 +1,6 @@
 import React from 'react';
-import { LogOut, Settings } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { LogOut } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
 export const SidebarUserSection: React.FC = () => {
@@ -9,7 +9,7 @@ export const SidebarUserSection: React.FC = () => {
 
     const handleLogout = () => {
         logout();
-        navigate('/login'); // Better than window.location.href for React apps
+        navigate('/login');
     };
 
     if (!user) return null;
@@ -28,12 +28,7 @@ export const SidebarUserSection: React.FC = () => {
             </div> */}
 
             {/* Actions */}
-            <nav className="footer-nav">
-                <Link to="/settings" className="nav-item">
-                    <Settings size={20} />
-                    <span>Settings</span>
-                </Link>
-                
+            <nav className="footer-nav">                
                 <button onClick={handleLogout} className="nav-item logout-button">
                     <LogOut size={20} />
                     <span>Log Out</span>

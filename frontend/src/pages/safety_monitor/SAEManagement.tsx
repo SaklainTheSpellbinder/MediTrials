@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { AEGradeBadge } from '../../components/safety/AEGradeBadge';
 import { Clock, FileWarning, AlertCircle, CheckCircle, ChevronRight, X } from 'lucide-react';
@@ -100,7 +99,6 @@ const SAEDetailModal: React.FC<{ saeId: number; onClose: () => void }> = ({ saeI
         queryFn: () => safetyManagerAPI.getSaeById(saeId),
     });
 
-    // Replace the old onSuccess with a useEffect hook
     useEffect(() => {
         if (sae) {
             setNarrative(sae.narrative_text ?? '');
@@ -110,7 +108,8 @@ const SAEDetailModal: React.FC<{ saeId: number; onClose: () => void }> = ({ saeI
     const updateMut = useMutation({
         mutationFn: async (body: Partial<SAEData> & { reason?: string }) => {
             const vr = await safetyManagerAPI.verifyPassword(password);
-            if (!vr.data?.verified) throw new Error('Password verification failed');
+            // Fixed: api.ts already extracts response.data, so it's vr.verified, not vr.data.verified
+            if (!vr.verified) throw new Error('Password verification failed');
             return safetyManagerAPI.updateSae(saeId, { ...body, reason });
         },
         onSuccess: () => { 
@@ -119,7 +118,7 @@ const SAEDetailModal: React.FC<{ saeId: number; onClose: () => void }> = ({ saeI
             setMsg('Saved ✓'); 
             setTimeout(() => setMsg(''), 3000); 
         },
-        onError: (e: any) => setMsg(e.message),
+        onError: (e: any) => setMsg(e.response?.data?.error ?? e.message),
     });
 
     if (isLoading) return (
@@ -283,7 +282,8 @@ export const SAEManagement: React.FC = () => {
 
     const { data, isLoading } = useQuery<SAEListResponse>({
         queryKey: ['sae-list', activeTab],
-        queryFn: () => safetyManagerAPI.getSaes({ params: { sae_status: activeTab || undefined } }),
+        // Fixed: Pass the object directly so api.ts can wrap it in { params }
+        queryFn: () => safetyManagerAPI.getSaes({ sae_status: activeTab || undefined }),
     });
 
     const saes = data?.saes ?? [];
@@ -360,12 +360,29 @@ export const SAEManagement: React.FC = () => {
                                             <td style={{ fontSize: '0.78rem' }}>{sae.site_name}</td>
                                             <td><AEGradeBadge grade={sae.severity_grade} /></td>
                                             <td>
-                                                <div style={{ display: 'flex', gap: 4 }}>
-                                                    {sae.results_in_death && <span title="Death" style={{ fontSize: '1rem' }}>💀</span>}
-                                                    {sae.life_threatening && <span title="Life-threatening" style={{ fontSize: '1rem' }}>⚠️</span>}
-                                                    {sae.requires_hospitalization && <span title="Hospitalization" style={{ fontSize: '1rem' }}>🏥</span>}
-                                                </div>
-                                            </td>
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {sae.results_in_death ? (
+            /* IF FATAL: Show only the Fatal badge */
+            <span style={{ background: '#111827', color: 'white', padding: '2px 6px', borderRadius: 4, fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.05em' }}>
+                FATAL
+            </span>
+        ) : (
+            /* IF NOT FATAL: Show whichever of the other two apply */
+            <>
+                {sae.life_threatening && (
+                    <span style={{ background: '#DC2626', color: 'white', padding: '2px 6px', borderRadius: 4, fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.05em' }}>
+                        LIFE-THREATENING
+                    </span>
+                )}
+                {sae.requires_hospitalization && (
+                    <span style={{ background: '#F59E0B', color: 'white', padding: '2px 6px', borderRadius: 4, fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.05em' }}>
+                        HOSPITALIZED
+                    </span>
+                )}
+            </>
+        )}
+    </div>
+</td>
                                             <td style={{ fontSize: '0.78rem' }}>{sae.report_deadline_date?.split('T')[0] ?? '—'}</td>
                                             <td><DeadlineBadge days_overdue={daysOver} hours={hoursLeft} /></td>
                                             <td>

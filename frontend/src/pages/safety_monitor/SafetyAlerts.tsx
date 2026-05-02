@@ -206,11 +206,13 @@ export const SafetyAlerts: React.FC = () => {
 
     const { data } = useQuery<AlertsResponse>({
         queryKey: ['alerts-list', severity, alertStatus, siteId, dateFrom, dateTo],
+        // FIXED: Do not nest { params: { ... } } because api.ts handles it!
         queryFn: () => safetyManagerAPI.getAlerts({
-            params: {
-                severity: severity || undefined, status: alertStatus || undefined,
-                site_id: siteId || undefined, date_from: dateFrom || undefined, date_to: dateTo || undefined
-            }
+            severity: severity || undefined, 
+            status: alertStatus || undefined,
+            site_id: siteId || undefined, 
+            date_from: dateFrom || undefined, 
+            date_to: dateTo || undefined
         }),
         refetchInterval: 30000,
     });

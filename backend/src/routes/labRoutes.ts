@@ -1,26 +1,20 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { pool } from '../config/db';
-import {requireRole } from '../middleware/authMiddleware';
+import { requireRole } from '../middleware/authMiddleware';
 
 const router = Router();
-router.use(requireRole(['Principal_Investigator','Study_Coordinator']));
-
-// Middleware to ensure site_id is provided
-const requireSiteId = (req: any, res: any, next: any) => {
-    if (!req.query.site_id) {
-        return res.status(400).json({ error: 'Missing site_id' });
-    }
-    next();
-};
+router.use(requireRole(['Principal_Investigator', 'Study_Coordinator']));
 
 // GET /api/labs
-// Retrieves all lab results at the specified site
-router.get('/', requireSiteId, async (req, res) => {
+router.get('/', async (req: Request, res: Response) => {
     try {
-        const siteId = req.query.site_id;
+        const siteId = req.user?.site_id;
+        if (!siteId) {
+            return res.status(403).json({ error: 'User is not assigned to a site' });
+        }
+        const patientId = req.query.patient_id ? parseInt(req.query.patient_id as string) : null;
 
-        //008_get_site_lab_results.sql
-        const query = `
+        let query = `
             SELECT 
                 lr.result_id,
                 p.trial_patient_id,
@@ -30,9 +24,11 @@ router.get('/', requireSiteId, async (req, res) => {
                 lr.result_date,
                 lr.result_status,
                 (lr.critical_result_flag = 'Y') as critical_result_flag,
+                
                 COALESCE(lt.reference_ranges->>LOWER(p.gender), lt.reference_ranges->>'all') as reference_range_text,
                 lt.unit_of_measure,
                 CASE 
+                    WHEN lr.result_value IS NULL THEN 'Pending'
                     WHEN lr.result_value <= lt.critical_low_value THEN 'Low'
                     WHEN lr.result_value >= lt.critical_high_value THEN 'High'
                     ELSE 'Normal'
@@ -41,10 +37,18 @@ router.get('/', requireSiteId, async (req, res) => {
             JOIN laboratory_tests lt ON lr.test_id = lt.test_id
             JOIN patients p ON lr.patient_id = p.patient_id
             WHERE p.site_id = $1
-            ORDER BY lr.result_date DESC;
         `;
 
-        const result = await pool.query(query, [siteId]);
+        const params: any[] = [siteId];
+        if (patientId !== null && !isNaN(patientId)) {
+            params.push(patientId);
+            query += ` AND p.patient_id = $${params.length}`;
+        }
+
+        query += ` ORDER BY lr.result_date DESC;`;
+
+        const result = await pool.query(query, params);
+
         res.json({ success: true, labs: result.rows });
     } catch (err: any) {
         console.error('Lab Results Error:', err);

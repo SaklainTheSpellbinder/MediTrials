@@ -25,19 +25,20 @@ export const PatientList: React.FC<PatientListProps> = ({ onSelectPatient }) => 
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
 
-  // Reset to page 1 when search term changes
+
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm]);
 
-  // Fetch Patients
+
   useEffect(() => {
     const loadPatients = async () => {
       try {
         setLoading(true);
         const data = await patientAPI.getAll();
-        if (data.success && Array.isArray(data.patients)) {
-          const formattedPatients: Patient[] = data.patients.map((p: any) => ({
+        const rawPatients = Array.isArray(data) ? data : (data.patients || []);
+        
+        const formattedPatients: Patient[] = rawPatients.map((p: any) => ({
             patient_id: p.trial_patient_id,
             db_id: p.patient_id,
             initials: p.full_name ? p.full_name.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() : 'XX',
@@ -45,9 +46,9 @@ export const PatientList: React.FC<PatientListProps> = ({ onSelectPatient }) => 
             status: mapStatus(p.patient_status),
             lastVisit: p.last_visit_date ? new Date(p.last_visit_date).toLocaleDateString() : 'No recorded visits',
             enrollmentDate: p.enrollment_date ? new Date(p.enrollment_date).toLocaleDateString() : 'N/A'
-          }));
-          setPatients(formattedPatients);
-        }
+        }));
+        
+        setPatients(formattedPatients);
       } catch (error) {
         console.error("Failed to load patients", error);
       } finally {
@@ -99,8 +100,8 @@ export const PatientList: React.FC<PatientListProps> = ({ onSelectPatient }) => 
       {/* Header Section */}
       <div className="section-header">
         <div>
-          <h1 className="page-title">eCRF Data Entry</h1>
-          <p className="text-gray-500 text-sm">Select a subject from the list below to enter visit data.</p>
+          <h1 className="page-title">Visit Data Entry</h1>
+          <p className="text-gray-500 text-sm">Select a patient from the list below to enter visit data.</p>
         </div>
       </div>
 
@@ -120,7 +121,7 @@ export const PatientList: React.FC<PatientListProps> = ({ onSelectPatient }) => 
           </div>
 
           <div className="text-sm text-gray-500">
-            Showing <strong>{filteredPatients.length > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0}</strong> to <strong>{Math.min(currentPage * ITEMS_PER_PAGE, filteredPatients.length)}</strong> of <strong>{filteredPatients.length}</strong> subjects
+            Showing <strong>{filteredPatients.length > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0}</strong> to <strong>{Math.min(currentPage * ITEMS_PER_PAGE, filteredPatients.length)}</strong> of <strong>{filteredPatients.length}</strong> patients
           </div>
         </div>
 
